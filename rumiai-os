@@ -8,50 +8,24 @@ RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR=11
 RumiAI_BOOTSTRAP_FATAL_BIN_ERROR=12
 RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR=13
 
-RumiAI_BOOTSTRAP_NL='
-'
-
-RumiAI_bootstrap_capture_line()
-{
-  "$@"
-  RumiAI_bootstrap_capture_status=$?
-  printf -- 'x'
-  return "$RumiAI_bootstrap_capture_status"
-}
-
 case $0 in
   */*)
     RumiAI_BOOTSTRAP_BIN=$0
     ;;
   *)
-    if ! RumiAI_BOOTSTRAP_BIN=$(RumiAI_bootstrap_capture_line command -v -- "$0" 2>/dev/null)
+    if ! RumiAI_BOOTSTRAP_BIN=$(command -v -- "$0" 2>/dev/null)
     then
       printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR' >&2
       exit "$RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR"
     fi
-
-    RumiAI_BOOTSTRAP_BIN=${RumiAI_BOOTSTRAP_BIN%x}
-    RumiAI_BOOTSTRAP_BIN=${RumiAI_BOOTSTRAP_BIN%"$RumiAI_BOOTSTRAP_NL"}
-
-    case $RumiAI_BOOTSTRAP_BIN in
-      /*)
-        ;;
-      *)
-        printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR' >&2
-        exit "$RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR"
-        ;;
-    esac
     ;;
 esac
 
-if ! RumiAI_BOOTSTRAP_BIN=$(RumiAI_bootstrap_capture_line command -p -- realpath -e -- "$RumiAI_BOOTSTRAP_BIN" 2>/dev/null)
+if ! RumiAI_BOOTSTRAP_BIN=$(command -p -- realpath -e -- "$RumiAI_BOOTSTRAP_BIN" 2>/dev/null)
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR"
 fi
-
-RumiAI_BOOTSTRAP_BIN=${RumiAI_BOOTSTRAP_BIN%x}
-RumiAI_BOOTSTRAP_BIN=${RumiAI_BOOTSTRAP_BIN%"$RumiAI_BOOTSTRAP_NL"}
 
 if [ ! -f "$RumiAI_BOOTSTRAP_BIN" ]
 then
@@ -71,9 +45,7 @@ fi
 export -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
 readonly -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
 
-unset -f -- RumiAI_bootstrap_capture_line
 unset -v -- \
-  RumiAI_BOOTSTRAP_NL \
   RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR \
   RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR \
   RumiAI_BOOTSTRAP_FATAL_BIN_ERROR \
