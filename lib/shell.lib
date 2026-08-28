@@ -58,6 +58,9 @@ RumiAI_shell()
       then
         RumiAI_shell_rc=$RumiAI_shell_conf_dir/bashrc
 
+        BASH_SILENCE_DEPRECATION_WARNING=1
+        export BASH_SILENCE_DEPRECATION_WARNING
+
         if [ -f "$RumiAI_shell_rc" ] && [ -r "$RumiAI_shell_rc" ]
         then
           exec bash --noprofile --rcfile "$RumiAI_shell_rc" -i
