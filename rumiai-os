@@ -21,7 +21,7 @@ case $0 in
     ;;
 esac
 
-if ! RumiAI_BOOTSTRAP_BIN=$(command -p -- realpath -e -- "$RumiAI_BOOTSTRAP_BIN" 2>/dev/null)
+if ! RumiAI_BOOTSTRAP_BIN=$(command -p -- realpath -- "$RumiAI_BOOTSTRAP_BIN" 2>/dev/null)
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR"
@@ -266,7 +266,7 @@ fi
 
 RumiAI_COMMAND_ENTRY=$1
 
-if ! RumiAI_COMMAND_BIN=$(command -p -- realpath -e -- "$RumiAI_COMMAND_ENTRY" 2>/dev/null)
+if ! RumiAI_COMMAND_BIN=$(command -p -- realpath -- "$RumiAI_COMMAND_ENTRY" 2>/dev/null)
 then
   log error bootstrap command-entry-resolution-failed path "$RumiAI_COMMAND_ENTRY"
   exit "$RumiAI_COMMAND_ERROR_RESOLUTION"
