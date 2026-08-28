@@ -1,12 +1,12 @@
 #!/bin/sh
 
-# Phase 0 — physical bootstrap discovery.
+# Phase 0 — physical runtime discovery.
 # No user-facing messages or host diagnostics are emitted in this phase.
 
-RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR=10
-RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR=11
-RumiAI_BOOTSTRAP_FATAL_BIN_ERROR=12
-RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR=13
+RumiAI_BOOTSTRAP_FATAL_PATH_RESOLUTION_ERROR=1
+RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR=2
+RumiAI_BOOTSTRAP_FATAL_BIN_ERROR=3
+RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR=4
 
 case $0 in
   */*)
@@ -51,4 +51,251 @@ unset -v -- \
   RumiAI_BOOTSTRAP_FATAL_BIN_ERROR \
   RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR
 
-# Phase 1 starts here: initialize i18n and logger.
+# Phase 1A — semantic roots and command environment.
+
+RumiAI_BIN_DIR=$RumiAI_ROOT/bin
+RumiAI_LIB_DIR=$RumiAI_ROOT/lib
+RumiAI_CONF_DIR=$RumiAI_ROOT/conf
+RumiAI_LANG_DIR=$RumiAI_ROOT/lang
+
+PATH=$RumiAI_BIN_DIR${PATH:+:$PATH}
+
+export -- \
+  RumiAI_BIN_DIR \
+  RumiAI_LIB_DIR \
+  RumiAI_CONF_DIR \
+  RumiAI_LANG_DIR \
+  PATH
+
+# Phase 1B — minimal bootstrap preference reader.
+# Bootstrap preference files are data, never sourced shell code.
+
+RumiAI_bootstrap_read_value()
+(
+  [ "$#" -eq 1 ] || return 3
+
+  RumiAI_bootstrap_file=$1
+  [ -f "$RumiAI_bootstrap_file" ] || return 1
+  [ -r "$RumiAI_bootstrap_file" ] || return 2
+
+  if ! exec 3< "$RumiAI_bootstrap_file"
+  then
+    return 2
+  fi
+
+  RumiAI_bootstrap_value=
+  if ! IFS= read -r RumiAI_bootstrap_value <&3
+  then
+    exec 3<&-
+    return 3
+  fi
+
+  if [ -z "$RumiAI_bootstrap_value" ]
+  then
+    exec 3<&-
+    return 3
+  fi
+
+  RumiAI_bootstrap_extra=
+  if IFS= read -r RumiAI_bootstrap_extra <&3 || [ -n "$RumiAI_bootstrap_extra" ]
+  then
+    exec 3<&-
+    return 3
+  fi
+
+  exec 3<&-
+  printf -- '%s\n' "$RumiAI_bootstrap_value"
+)
+
+RumiAI_BOOTSTRAP_LANGUAGE_FILE=$RumiAI_CONF_DIR/bootstrap/language
+RumiAI_BOOTSTRAP_TEXT_ENCODING_FILE=$RumiAI_CONF_DIR/bootstrap/text-encoding
+
+RumiAI_BOOTSTRAP_LANGUAGE_CONFIG_INVALID=
+RumiAI_BOOTSTRAP_TEXT_ENCODING_CONFIG_INVALID=
+RumiAI_LANGUAGE_REQUESTED=
+
+if [ -f "$RumiAI_BOOTSTRAP_LANGUAGE_FILE" ]
+then
+  if ! RumiAI_LANGUAGE_REQUESTED=$(RumiAI_bootstrap_read_value "$RumiAI_BOOTSTRAP_LANGUAGE_FILE")
+  then
+    RumiAI_BOOTSTRAP_LANGUAGE_CONFIG_INVALID=1
+    RumiAI_LANGUAGE_REQUESTED=
+  fi
+fi
+
+if [ -z "$RumiAI_LANGUAGE_REQUESTED" ]
+then
+  if [ -n "${LC_ALL-}" ]
+  then
+    RumiAI_LANGUAGE_REQUESTED=$LC_ALL
+  elif [ -n "${LC_MESSAGES-}" ]
+  then
+    RumiAI_LANGUAGE_REQUESTED=$LC_MESSAGES
+  elif [ -n "${LANG-}" ]
+  then
+    RumiAI_LANGUAGE_REQUESTED=$LANG
+  else
+    RumiAI_LANGUAGE_REQUESTED=en_US
+  fi
+fi
+
+RumiAI_TEXT_ENCODING_REQUESTED=UTF-8
+
+if [ -f "$RumiAI_BOOTSTRAP_TEXT_ENCODING_FILE" ]
+then
+  if ! RumiAI_TEXT_ENCODING_REQUESTED=$(RumiAI_bootstrap_read_value "$RumiAI_BOOTSTRAP_TEXT_ENCODING_FILE")
+  then
+    RumiAI_BOOTSTRAP_TEXT_ENCODING_CONFIG_INVALID=1
+    RumiAI_TEXT_ENCODING_REQUESTED=UTF-8
+  fi
+fi
+
+# Phase 1C — i18n.
+
+RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR=5
+
+if [ ! -f "$RumiAI_LIB_DIR/i18n.lib" ] || [ ! -r "$RumiAI_LIB_DIR/i18n.lib" ]
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR"
+fi
+
+if ! . "$RumiAI_LIB_DIR/i18n.lib"
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR"
+fi
+
+RumiAI_LANGUAGE_FALLBACK=
+if RumiAI_LANGUAGE=$(RumiAI_i18n_select_language "$RumiAI_LANGUAGE_REQUESTED")
+then
+  :
+else
+  RumiAI_LANGUAGE_FALLBACK=1
+fi
+
+RumiAI_TEXT_ENCODING_FALLBACK=
+if RumiAI_TEXT_ENCODING=$(RumiAI_i18n_select_text_encoding "$RumiAI_TEXT_ENCODING_REQUESTED")
+then
+  :
+else
+  RumiAI_TEXT_ENCODING_FALLBACK=1
+fi
+
+export -- RumiAI_LANGUAGE RumiAI_TEXT_ENCODING
+
+# Phase 1D — logger.
+
+RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR=6
+
+if [ ! -f "$RumiAI_LIB_DIR/log.lib" ] || [ ! -r "$RumiAI_LIB_DIR/log.lib" ]
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR"
+fi
+
+if ! . "$RumiAI_LIB_DIR/log.lib"
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR"
+fi
+
+unset -v -- \
+  RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR \
+  RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR
+
+# LOGGER ACTIVE from here onward.
+
+if [ -n "$RumiAI_BOOTSTRAP_LANGUAGE_CONFIG_INVALID" ]
+then
+  log warn bootstrap language-config-invalid path "$RumiAI_BOOTSTRAP_LANGUAGE_FILE"
+fi
+
+if [ -n "$RumiAI_BOOTSTRAP_TEXT_ENCODING_CONFIG_INVALID" ]
+then
+  log warn bootstrap text-encoding-config-invalid path "$RumiAI_BOOTSTRAP_TEXT_ENCODING_FILE"
+fi
+
+if [ -n "$RumiAI_LANGUAGE_FALLBACK" ]
+then
+  log warn bootstrap language-fallback \
+    requested "$RumiAI_LANGUAGE_REQUESTED" \
+    selected "$RumiAI_LANGUAGE"
+fi
+
+if [ -n "$RumiAI_TEXT_ENCODING_FALLBACK" ]
+then
+  log warn bootstrap text-encoding-fallback \
+    requested "$RumiAI_TEXT_ENCODING_REQUESTED" \
+    selected "$RumiAI_TEXT_ENCODING"
+fi
+
+unset -v -- \
+  RumiAI_BOOTSTRAP_LANGUAGE_CONFIG_INVALID \
+  RumiAI_BOOTSTRAP_TEXT_ENCODING_CONFIG_INVALID \
+  RumiAI_LANGUAGE_FALLBACK \
+  RumiAI_TEXT_ENCODING_FALLBACK
+
+# Phase 1E — CLI.
+
+RumiAI_SHELL_ERROR_LOAD=7
+RumiAI_COMMAND_ERROR_RESOLUTION=8
+RumiAI_COMMAND_ERROR_INVALID_ENTRY=9
+
+if [ "$#" -eq 0 ]
+then
+  RumiAI_SHELL_LIB=$RumiAI_LIB_DIR/shell.lib
+
+  if [ ! -f "$RumiAI_SHELL_LIB" ] || [ ! -r "$RumiAI_SHELL_LIB" ]
+  then
+    log error shell load-failed path "$RumiAI_SHELL_LIB"
+    exit "$RumiAI_SHELL_ERROR_LOAD"
+  fi
+
+  if ! . "$RumiAI_SHELL_LIB"
+  then
+    log error shell load-failed path "$RumiAI_SHELL_LIB"
+    exit "$RumiAI_SHELL_ERROR_LOAD"
+  fi
+
+  unset -v -- RumiAI_SHELL_LIB RumiAI_SHELL_ERROR_LOAD
+
+  RumiAI_shell
+  exit $?
+fi
+
+RumiAI_COMMAND_ENTRY=$1
+
+if ! RumiAI_COMMAND_BIN=$(command -p -- realpath -e -- "$RumiAI_COMMAND_ENTRY" 2>/dev/null)
+then
+  log error bootstrap command-entry-resolution-failed path "$RumiAI_COMMAND_ENTRY"
+  exit "$RumiAI_COMMAND_ERROR_RESOLUTION"
+fi
+
+if [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ]
+then
+  log error bootstrap invalid-command-entry path "$RumiAI_COMMAND_BIN"
+  exit "$RumiAI_COMMAND_ERROR_INVALID_ENTRY"
+fi
+
+if [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
+then
+  log error bootstrap invalid-command-entry path "$RumiAI_COMMAND_BIN"
+  exit "$RumiAI_COMMAND_ERROR_INVALID_ENTRY"
+fi
+
+shift
+
+export -- RumiAI_COMMAND_BIN
+readonly -- RumiAI_COMMAND_BIN
+
+unset -v -- \
+  RumiAI_COMMAND_ENTRY \
+  RumiAI_SHELL_ERROR_LOAD \
+  RumiAI_COMMAND_ERROR_RESOLUTION \
+  RumiAI_COMMAND_ERROR_INVALID_ENTRY
+
+. "$RumiAI_COMMAND_BIN"
+RumiAI_COMMAND_STATUS=$?
+
+exit "$RumiAI_COMMAND_STATUS"

@@ -1,0 +1,3 @@
+unset PROMPT_COMMAND
+PS1='[RumiAI] \u@\h:\w \$ '
+export PS1

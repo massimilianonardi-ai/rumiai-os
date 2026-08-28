@@ -1,0 +1,172 @@
+: "${RumiAI_LOG_LEVEL:=info}"
+
+RumiAI_LOG_ERROR_INVALID_ARGUMENTS=11
+RumiAI_LOG_ERROR_INVALID_SEVERITY=12
+RumiAI_LOG_ERROR_INVALID_DOMAIN=13
+RumiAI_LOG_ERROR_INVALID_MESSAGE_ID=14
+RumiAI_LOG_ERROR_INVALID_FIELDS=15
+RumiAI_LOG_ERROR_INVALID_LEVEL=16
+
+RumiAI_log_level_priority()
+{
+  case $1 in
+    off | none)
+      printf -- '%s\n' 0
+      ;;
+    fatal)
+      printf -- '%s\n' 1
+      ;;
+    error)
+      printf -- '%s\n' 2
+      ;;
+    warn)
+      printf -- '%s\n' 3
+      ;;
+    info)
+      printf -- '%s\n' 4
+      ;;
+    debug)
+      printf -- '%s\n' 5
+      ;;
+    trace)
+      printf -- '%s\n' 6
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+RumiAI_log_field_name_valid()
+{
+  case $1 in
+    [a-z0-9]*)
+      case $1 in
+        *[!a-z0-9._-]* | *[._-])
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+RumiAI_log_fields_valid()
+(
+  [ "$(( $# % 2 ))" -eq 0 ] || return 1
+
+  while [ "$#" -gt 0 ]
+  do
+    RumiAI_log_field_name_valid "$1" || return 1
+    shift 2
+  done
+
+  return 0
+)
+
+RumiAI_log_escape_field_value()
+{
+  command -p -- awk '
+    BEGIN { ORS = "" }
+    {
+      if (NR > 1)
+        printf "\\n"
+
+      gsub(/\\/, "\\\\")
+      gsub(/\"/, "\\\"")
+      gsub(/\r/, "\\r")
+      gsub(/\t/, "\\t")
+      printf "%s", $0
+    }
+  '
+}
+
+log()
+(
+  [ "$#" -ge 3 ] || return "$RumiAI_LOG_ERROR_INVALID_ARGUMENTS"
+
+  RumiAI_log_severity=$1
+  shift
+
+  case $RumiAI_log_severity in
+    fatal)
+      RumiAI_log_priority=1
+      ;;
+    error)
+      RumiAI_log_priority=2
+      ;;
+    warn)
+      RumiAI_log_priority=3
+      ;;
+    info)
+      RumiAI_log_priority=4
+      ;;
+    debug)
+      RumiAI_log_priority=5
+      ;;
+    trace)
+      RumiAI_log_priority=6
+      ;;
+    *)
+      return "$RumiAI_LOG_ERROR_INVALID_SEVERITY"
+      ;;
+  esac
+
+  RumiAI_log_domain=$1
+  RumiAI_log_message_id=$2
+  shift 2
+
+  RumiAI_i18n_identifier_valid "$RumiAI_log_domain" || \
+    return "$RumiAI_LOG_ERROR_INVALID_DOMAIN"
+
+  RumiAI_i18n_identifier_valid "$RumiAI_log_message_id" || \
+    return "$RumiAI_LOG_ERROR_INVALID_MESSAGE_ID"
+
+  RumiAI_log_fields_valid "$@" || return "$RumiAI_LOG_ERROR_INVALID_FIELDS"
+
+  if ! RumiAI_log_threshold=$(RumiAI_log_level_priority "$RumiAI_LOG_LEVEL")
+  then
+    return "$RumiAI_LOG_ERROR_INVALID_LEVEL"
+  fi
+
+  [ "$RumiAI_log_priority" -le "$RumiAI_log_threshold" ] || return 0
+
+  if ! RumiAI_log_message=$(i18n "$RumiAI_log_domain" "$RumiAI_log_message_id")
+  then
+    RumiAI_log_message=$RumiAI_log_domain.$RumiAI_log_message_id
+  fi
+
+  if ! RumiAI_log_timestamp=$(command -p -- date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)
+  then
+    RumiAI_log_timestamp=-
+  fi
+
+  printf -- '[%s] [%s] [%s.%s] %s' \
+    "$RumiAI_log_timestamp" \
+    "$RumiAI_log_severity" \
+    "$RumiAI_log_domain" \
+    "$RumiAI_log_message_id" \
+    "$RumiAI_log_message" >&2
+
+  while [ "$#" -gt 0 ]
+  do
+    RumiAI_log_field_name=$1
+    RumiAI_log_field_value=$2
+    shift 2
+
+    if ! RumiAI_log_field_rendered=$(printf -- '%s' "$RumiAI_log_field_value" | RumiAI_log_escape_field_value)
+    then
+      RumiAI_log_field_rendered='<unrenderable>'
+    fi
+
+    printf -- ' [%s="%s"]' \
+      "$RumiAI_log_field_name" \
+      "$RumiAI_log_field_rendered" >&2
+  done
+
+  printf -- '\n' >&2
+)
