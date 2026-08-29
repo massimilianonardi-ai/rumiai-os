@@ -8,6 +8,30 @@ RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR=2
 RumiAI_BOOTSTRAP_FATAL_BIN_ERROR=3
 RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR=4
 
+# realpath is used only as a canonicalizer for a pathname that has already
+# resolved to an existing directory entry. RumiAI does not depend on the
+# implementation-specific behavior of optionless realpath for missing paths.
+RumiAI_path_canonicalize_existing()
+(
+  [ "$#" -eq 1 ] || return 1
+
+  RumiAI_path_input=$1
+  [ -e "$RumiAI_path_input" ] || return 1
+
+  if ! RumiAI_path_output=$(command -p -- realpath -- "$RumiAI_path_input" 2>/dev/null)
+  then
+    return 1
+  fi
+
+  case $RumiAI_path_output in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+
+  [ -e "$RumiAI_path_output" ] || return 1
+  printf -- '%s\n' "$RumiAI_path_output"
+)
+
 case $0 in
   */*)
     RumiAI_BOOTSTRAP_BIN=$0
@@ -21,7 +45,7 @@ case $0 in
     ;;
 esac
 
-if ! RumiAI_BOOTSTRAP_BIN=$(command -p -- realpath -e -- "$RumiAI_BOOTSTRAP_BIN" 2>/dev/null)
+if ! RumiAI_BOOTSTRAP_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_BOOTSTRAP_BIN")
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR"
@@ -266,7 +290,7 @@ fi
 
 RumiAI_COMMAND_ENTRY=$1
 
-if ! RumiAI_COMMAND_BIN=$(command -p -- realpath -e -- "$RumiAI_COMMAND_ENTRY" 2>/dev/null)
+if ! RumiAI_COMMAND_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_COMMAND_ENTRY")
 then
   log error bootstrap command-entry-resolution-failed path "$RumiAI_COMMAND_ENTRY"
   exit "$RumiAI_COMMAND_ERROR_RESOLUTION"
