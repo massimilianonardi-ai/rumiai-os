@@ -66,7 +66,8 @@ RumiAI_conf_scan()
     BEGIN {
       mode=ENVIRON["RumiAI_DATA_MODE"]
       query=ENVIRON["RumiAI_DATA_QUERY"]
-      if (mode != "validate" && !valid_key(query)) exit 2
+      fatal=0
+      if (mode != "validate" && !valid_key(query)) { fatal=2; exit }
       found=0; bad=0; outn=0
     }
     {
@@ -88,6 +89,7 @@ RumiAI_conf_scan()
       }
     }
     END {
+      if (fatal) exit fatal
       if (bad) exit 2
       if (mode == "validate") exit 0
       if (!found) exit 1
