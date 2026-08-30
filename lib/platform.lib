@@ -41,28 +41,28 @@ RumiAI_platform_detect_architecture()
   esac
 )
 
-rumi_platform()
+RumiAI_platform()
 {
   [ "$#" -eq 0 ] || return 2
   [ -n "${RumiAI_PLATFORM-}" ] || return 3
   printf '%s\n' "$RumiAI_PLATFORM"
 }
 
-rumi_architecture()
+RumiAI_architecture()
 {
   [ "$#" -eq 0 ] || return 2
   [ -n "${RumiAI_ARCHITECTURE-}" ] || return 3
   printf '%s\n' "$RumiAI_ARCHITECTURE"
 }
 
-rumi_execution_platform()
+RumiAI_execution_platform()
 {
   [ "$#" -eq 0 ] || return 2
   [ -n "${RumiAI_EXECUTION_PLATFORM-}" ] || return 3
   printf '%s\n' "$RumiAI_EXECUTION_PLATFORM"
 }
 
-rumi_path_canonicalize_existing()
+RumiAI_path_canonicalize_existing_api()
 {
   [ "$#" -eq 1 ] || return 2
   RumiAI_path_canonicalize_existing "$1" || return 1
@@ -81,7 +81,7 @@ RumiAI_fs_absolute_path()
   esac
 )
 
-rumi_fs_type()
+RumiAI_fs_type()
 (
   [ "$#" -eq 1 ] || return 2
   RumiAI_FS_PATH=$(RumiAI_fs_absolute_path "$1") || return 2
@@ -105,7 +105,7 @@ rumi_fs_type()
   fi
 )
 
-rumi_fs_mode()
+RumiAI_fs_mode()
 (
   [ "$#" -eq 1 ] || return 2
   [ ! -L "$1" ] || return 2
@@ -130,7 +130,7 @@ rumi_fs_mode()
   printf '%04d\n' "$RumiAI_FS_MODE"
 )
 
-rumi_fs_readlink()
+RumiAI_fs_readlink()
 (
   [ "$#" -eq 1 ] || return 2
   RumiAI_FS_PATH=$(RumiAI_fs_absolute_path "$1") || return 2
@@ -191,7 +191,7 @@ RumiAI_digest_sha256_text()
   RumiAI_digest_normalize_sha256 "$RumiAI_DIGEST_OUTPUT"
 )
 
-rumi_digest_file()
+RumiAI_digest_file()
 (
   [ "$#" -eq 2 ] || return 2
   [ "$1" = sha256 ] || return 2
@@ -200,7 +200,7 @@ rumi_digest_file()
   RumiAI_digest_sha256_file "$RumiAI_DIGEST_FILE"
 )
 
-rumi_digest_text()
+RumiAI_digest_text()
 (
   [ "$#" -eq 2 ] || return 2
   [ "$1" = sha256 ] || return 2
@@ -232,7 +232,7 @@ RumiAI_path_name()
   printf '%s\n' "$RumiAI_NAME"
 )
 
-rumi_atomic_replace()
+RumiAI_atomic_replace()
 (
   [ "$#" -eq 2 ] || return 2
 
