@@ -62,12 +62,6 @@ RumiAI_execution_platform()
   printf '%s\n' "$RumiAI_EXECUTION_PLATFORM"
 }
 
-RumiAI_path_canonicalize_existing_api()
-{
-  [ "$#" -eq 1 ] || return 2
-  RumiAI_path_canonicalize_existing "$1" || return 1
-}
-
 RumiAI_fs_absolute_path()
 (
   [ "$#" -eq 1 ] || return 2
