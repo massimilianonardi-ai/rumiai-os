@@ -93,13 +93,9 @@ export -- \
 RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR=11
 RumiAI_PLATFORM_LIB=$RumiAI_LIB_DIR/platform.lib
 
-if [ ! -f "$RumiAI_PLATFORM_LIB" ] || [ ! -r "$RumiAI_PLATFORM_LIB" ]
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
-  exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
-fi
-
-if ! . "$RumiAI_PLATFORM_LIB"
+if [ ! -f "$RumiAI_PLATFORM_LIB" ] || \
+   [ ! -r "$RumiAI_PLATFORM_LIB" ] || \
+   ! . "$RumiAI_PLATFORM_LIB"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
@@ -141,13 +137,9 @@ unset -v -- RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR RumiAI_PLATFORM_LIB
 RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR=10
 RumiAI_DATA_LIB=$RumiAI_LIB_DIR/data.lib
 
-if [ ! -f "$RumiAI_DATA_LIB" ] || [ ! -r "$RumiAI_DATA_LIB" ]
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR' >&2
-  exit "$RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR"
-fi
-
-if ! . "$RumiAI_DATA_LIB"
+if [ ! -f "$RumiAI_DATA_LIB" ] || \
+   [ ! -r "$RumiAI_DATA_LIB" ] || \
+   ! . "$RumiAI_DATA_LIB"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR"
@@ -242,13 +234,9 @@ fi
 
 RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR=5
 
-if [ ! -f "$RumiAI_LIB_DIR/i18n.lib" ] || [ ! -r "$RumiAI_LIB_DIR/i18n.lib" ]
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR' >&2
-  exit "$RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR"
-fi
-
-if ! . "$RumiAI_LIB_DIR/i18n.lib"
+if [ ! -f "$RumiAI_LIB_DIR/i18n.lib" ] || \
+   [ ! -r "$RumiAI_LIB_DIR/i18n.lib" ] || \
+   ! . "$RumiAI_LIB_DIR/i18n.lib"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR"
@@ -276,13 +264,9 @@ export -- RumiAI_LANGUAGE RumiAI_TEXT_ENCODING
 
 RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR=6
 
-if [ ! -f "$RumiAI_LIB_DIR/log.lib" ] || [ ! -r "$RumiAI_LIB_DIR/log.lib" ]
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR' >&2
-  exit "$RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR"
-fi
-
-if ! . "$RumiAI_LIB_DIR/log.lib"
+if [ ! -f "$RumiAI_LIB_DIR/log.lib" ] || \
+   [ ! -r "$RumiAI_LIB_DIR/log.lib" ] || \
+   ! . "$RumiAI_LIB_DIR/log.lib"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR' >&2
   exit "$RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR"
@@ -334,13 +318,9 @@ if [ "$#" -eq 0 ]
 then
   RumiAI_SHELL_LIB=$RumiAI_LIB_DIR/shell.lib
 
-  if [ ! -f "$RumiAI_SHELL_LIB" ] || [ ! -r "$RumiAI_SHELL_LIB" ]
-  then
-    log error shell load-failed path "$RumiAI_SHELL_LIB"
-    exit "$RumiAI_SHELL_ERROR_LOAD"
-  fi
-
-  if ! . "$RumiAI_SHELL_LIB"
+  if [ ! -f "$RumiAI_SHELL_LIB" ] || \
+     [ ! -r "$RumiAI_SHELL_LIB" ] || \
+     ! . "$RumiAI_SHELL_LIB"
   then
     log error shell load-failed path "$RumiAI_SHELL_LIB"
     exit "$RumiAI_SHELL_ERROR_LOAD"
