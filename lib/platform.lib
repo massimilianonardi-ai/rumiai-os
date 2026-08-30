@@ -1,0 +1,259 @@
+# RumiAI bootstrap platform adapter.
+# Public functions use POSIX sh plus host facilities selected centrally here.
+# Status: 0 success, 1 negative/not found, 2 invalid/unsupported input, 3 host/I/O failure.
+
+RumiAI_platform_detect_os()
+(
+  [ "$#" -eq 0 ] || return 2
+  RumiAI_PLATFORM_UNAME=$(command -p uname -s 2>/dev/null) || return 3
+
+  case $RumiAI_PLATFORM_UNAME in
+    Linux)
+      printf '%s\n' linux
+      ;;
+    Darwin)
+      printf '%s\n' macos
+      ;;
+    MINGW*|MSYS*|CYGWIN*)
+      printf '%s\n' windows
+      ;;
+    *)
+      return 3
+      ;;
+  esac
+)
+
+RumiAI_platform_detect_architecture()
+(
+  [ "$#" -eq 0 ] || return 2
+  RumiAI_PLATFORM_UNAME=$(command -p uname -m 2>/dev/null) || return 3
+
+  case $RumiAI_PLATFORM_UNAME in
+    arm64|aarch64)
+      printf '%s\n' arm64
+      ;;
+    x86_64|amd64|AMD64)
+      printf '%s\n' x86_64
+      ;;
+    *)
+      return 3
+      ;;
+  esac
+)
+
+rumi_platform()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "${RumiAI_PLATFORM-}" ] || return 3
+  printf '%s\n' "$RumiAI_PLATFORM"
+}
+
+rumi_architecture()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "${RumiAI_ARCHITECTURE-}" ] || return 3
+  printf '%s\n' "$RumiAI_ARCHITECTURE"
+}
+
+rumi_execution_platform()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "${RumiAI_EXECUTION_PLATFORM-}" ] || return 3
+  printf '%s\n' "$RumiAI_EXECUTION_PLATFORM"
+}
+
+rumi_path_canonicalize_existing()
+{
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_path_canonicalize_existing "$1" || return 1
+}
+
+RumiAI_fs_absolute_path()
+(
+  [ "$#" -eq 1 ] || return 2
+  case $1 in
+    /*)
+      printf '%s\n' "$1"
+      ;;
+    *)
+      printf '%s/%s\n' "$PWD" "$1"
+      ;;
+  esac
+)
+
+rumi_fs_type()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_FS_PATH=$(RumiAI_fs_absolute_path "$1") || return 2
+
+  if [ -L "$RumiAI_FS_PATH" ]
+  then
+    printf '%s\n' link
+    return 0
+  fi
+
+  [ -e "$RumiAI_FS_PATH" ] || return 1
+
+  if [ -f "$RumiAI_FS_PATH" ]
+  then
+    printf '%s\n' file
+  elif [ -d "$RumiAI_FS_PATH" ]
+  then
+    printf '%s\n' directory
+  else
+    printf '%s\n' other
+  fi
+)
+
+rumi_fs_mode()
+(
+  [ "$#" -eq 1 ] || return 2
+  [ ! -L "$1" ] || return 2
+  RumiAI_FS_PATH=$(RumiAI_path_canonicalize_existing "$1") || return 1
+
+  case ${RumiAI_PLATFORM-} in
+    linux)
+      RumiAI_FS_MODE=$(command -p stat -c '%a' "$RumiAI_FS_PATH" 2>/dev/null) || return 3
+      ;;
+    macos)
+      RumiAI_FS_MODE=$(command -p stat -f '%Lp' "$RumiAI_FS_PATH" 2>/dev/null) || return 3
+      ;;
+    *)
+      return 3
+      ;;
+  esac
+
+  case $RumiAI_FS_MODE in
+    ''|*[!0-7]*) return 3 ;;
+  esac
+
+  printf '%04d\n' "$RumiAI_FS_MODE"
+)
+
+rumi_fs_readlink()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_FS_PATH=$(RumiAI_fs_absolute_path "$1") || return 2
+  [ -L "$RumiAI_FS_PATH" ] || return 1
+  command -p readlink "$RumiAI_FS_PATH" || return 3
+)
+
+RumiAI_digest_normalize_sha256()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_DIGEST_VALUE=${1%% *}
+
+  [ "${#RumiAI_DIGEST_VALUE}" -eq 64 ] || return 3
+  case $RumiAI_DIGEST_VALUE in
+    *[!0-9A-Fa-f]*) return 3 ;;
+  esac
+
+  printf '%s\n' "$RumiAI_DIGEST_VALUE" | command -p tr 'A-F' 'a-f'
+)
+
+RumiAI_digest_sha256_file()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_DIGEST_FILE=$1
+
+  case ${RumiAI_PLATFORM-} in
+    linux)
+      command -v sha256sum >/dev/null 2>&1 || return 3
+      RumiAI_DIGEST_OUTPUT=$(sha256sum "$RumiAI_DIGEST_FILE" 2>/dev/null) || return 3
+      ;;
+    macos)
+      command -v shasum >/dev/null 2>&1 || return 3
+      RumiAI_DIGEST_OUTPUT=$(shasum -a 256 "$RumiAI_DIGEST_FILE" 2>/dev/null) || return 3
+      ;;
+    *)
+      return 3
+      ;;
+  esac
+
+  RumiAI_digest_normalize_sha256 "$RumiAI_DIGEST_OUTPUT"
+)
+
+RumiAI_digest_sha256_text()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_DIGEST_TEXT=$1
+
+  case ${RumiAI_PLATFORM-} in
+    linux)
+      command -v sha256sum >/dev/null 2>&1 || return 3
+      RumiAI_DIGEST_OUTPUT=$(printf '%s' "$RumiAI_DIGEST_TEXT" | sha256sum 2>/dev/null) || return 3
+      ;;
+    macos)
+      command -v shasum >/dev/null 2>&1 || return 3
+      RumiAI_DIGEST_OUTPUT=$(printf '%s' "$RumiAI_DIGEST_TEXT" | shasum -a 256 2>/dev/null) || return 3
+      ;;
+    *)
+      return 3
+      ;;
+  esac
+
+  RumiAI_digest_normalize_sha256 "$RumiAI_DIGEST_OUTPUT"
+)
+
+rumi_digest_file()
+(
+  [ "$#" -eq 2 ] || return 2
+  [ "$1" = sha256 ] || return 2
+  [ -f "$2" ] && [ ! -L "$2" ] || return 1
+  RumiAI_DIGEST_FILE=$(RumiAI_path_canonicalize_existing "$2") || return 1
+  RumiAI_digest_sha256_file "$RumiAI_DIGEST_FILE"
+)
+
+rumi_digest_text()
+(
+  [ "$#" -eq 2 ] || return 2
+  [ "$1" = sha256 ] || return 2
+  RumiAI_digest_sha256_text "$2"
+)
+
+RumiAI_path_parent()
+(
+  [ "$#" -eq 1 ] || return 2
+  case $1 in
+    */*)
+      RumiAI_PARENT=${1%/*}
+      [ -n "$RumiAI_PARENT" ] || RumiAI_PARENT=/
+      ;;
+    *)
+      RumiAI_PARENT=.
+      ;;
+  esac
+  printf '%s\n' "$RumiAI_PARENT"
+)
+
+RumiAI_path_name()
+(
+  [ "$#" -eq 1 ] || return 2
+  RumiAI_NAME=${1##*/}
+  case $RumiAI_NAME in
+    ''|.|..) return 2 ;;
+  esac
+  printf '%s\n' "$RumiAI_NAME"
+)
+
+rumi_atomic_replace()
+(
+  [ "$#" -eq 2 ] || return 2
+
+  RumiAI_ATOMIC_SOURCE_PARENT=$(RumiAI_path_parent "$1") || return 2
+  RumiAI_ATOMIC_SOURCE_NAME=$(RumiAI_path_name "$1") || return 2
+  RumiAI_ATOMIC_DEST_PARENT=$(RumiAI_path_parent "$2") || return 2
+  RumiAI_ATOMIC_DEST_NAME=$(RumiAI_path_name "$2") || return 2
+
+  RumiAI_ATOMIC_SOURCE_PARENT=$(RumiAI_path_canonicalize_existing "$RumiAI_ATOMIC_SOURCE_PARENT") || return 1
+  RumiAI_ATOMIC_DEST_PARENT=$(RumiAI_path_canonicalize_existing "$RumiAI_ATOMIC_DEST_PARENT") || return 1
+
+  [ "$RumiAI_ATOMIC_SOURCE_PARENT" = "$RumiAI_ATOMIC_DEST_PARENT" ] || return 2
+
+  RumiAI_ATOMIC_SOURCE=$RumiAI_ATOMIC_SOURCE_PARENT/$RumiAI_ATOMIC_SOURCE_NAME
+  RumiAI_ATOMIC_DEST=$RumiAI_ATOMIC_DEST_PARENT/$RumiAI_ATOMIC_DEST_NAME
+
+  [ -e "$RumiAI_ATOMIC_SOURCE" ] || [ -L "$RumiAI_ATOMIC_SOURCE" ] || return 1
+
+  command -p mv -f "$RumiAI_ATOMIC_SOURCE" "$RumiAI_ATOMIC_DEST" || return 3
+)
