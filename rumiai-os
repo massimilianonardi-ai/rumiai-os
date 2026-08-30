@@ -91,7 +91,26 @@ export -- \
   RumiAI_LANG_DIR \
   PATH
 
-# Phase 1B — minimal bootstrap preference reader.
+# Phase 1B — system configuration and tabular data APIs.
+
+RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR=10
+RumiAI_DATA_LIB=$RumiAI_LIB_DIR/data.lib
+
+if [ ! -f "$RumiAI_DATA_LIB" ] || [ ! -r "$RumiAI_DATA_LIB" ]
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR"
+fi
+
+if ! . "$RumiAI_DATA_LIB"
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR"
+fi
+
+unset -v -- RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR RumiAI_DATA_LIB
+
+# Phase 1C — minimal bootstrap preference reader.
 # Bootstrap preference files are data, never sourced shell code.
 
 RumiAI_bootstrap_read_value()
@@ -174,7 +193,7 @@ then
   fi
 fi
 
-# Phase 1C — i18n.
+# Phase 1D — i18n.
 
 RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR=5
 
@@ -208,7 +227,7 @@ fi
 
 export -- RumiAI_LANGUAGE RumiAI_TEXT_ENCODING
 
-# Phase 1D — logger.
+# Phase 1E — logger.
 
 RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR=6
 
@@ -260,7 +279,7 @@ unset -v -- \
   RumiAI_LANGUAGE_FALLBACK \
   RumiAI_TEXT_ENCODING_FALLBACK
 
-# Phase 1E — CLI.
+# Phase 1F — CLI.
 
 RumiAI_SHELL_ERROR_LOAD=7
 RumiAI_COMMAND_ERROR_RESOLUTION=8
