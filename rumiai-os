@@ -75,23 +75,68 @@ unset -v -- \
   RumiAI_BOOTSTRAP_FATAL_BIN_ERROR \
   RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR
 
-# Phase 1A — semantic roots and command environment.
+# Phase 1A — semantic roots.
 
 RumiAI_BIN_DIR=$RumiAI_ROOT/bin
 RumiAI_LIB_DIR=$RumiAI_ROOT/lib
 RumiAI_CONF_DIR=$RumiAI_ROOT/conf
 RumiAI_LANG_DIR=$RumiAI_ROOT/lang
 
-PATH=$RumiAI_BIN_DIR${PATH:+:$PATH}
-
 export -- \
   RumiAI_BIN_DIR \
   RumiAI_LIB_DIR \
   RumiAI_CONF_DIR \
-  RumiAI_LANG_DIR \
+  RumiAI_LANG_DIR
+
+# Phase 1B — native platform adapter and command environment.
+
+RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR=11
+RumiAI_PLATFORM_LIB=$RumiAI_LIB_DIR/platform.lib
+
+if [ ! -f "$RumiAI_PLATFORM_LIB" ] || [ ! -r "$RumiAI_PLATFORM_LIB" ]
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
+fi
+
+if ! . "$RumiAI_PLATFORM_LIB"
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
+fi
+
+if ! RumiAI_PLATFORM=$(RumiAI_platform_detect_os)
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
+fi
+
+if ! RumiAI_ARCHITECTURE=$(RumiAI_platform_detect_architecture)
+then
+  printf -- '%s\n' 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR' >&2
+  exit "$RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR"
+fi
+
+RumiAI_EXECUTION_PLATFORM=$RumiAI_PLATFORM-$RumiAI_ARCHITECTURE
+RumiAI_PLATFORM_BIN_DIR=$RumiAI_BIN_DIR/@platforms/$RumiAI_EXECUTION_PLATFORM
+PATH=$RumiAI_PLATFORM_BIN_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
+
+export -- \
+  RumiAI_PLATFORM \
+  RumiAI_ARCHITECTURE \
+  RumiAI_EXECUTION_PLATFORM \
+  RumiAI_PLATFORM_BIN_DIR \
   PATH
 
-# Phase 1B — system configuration and tabular data APIs.
+readonly -- \
+  RumiAI_PLATFORM \
+  RumiAI_ARCHITECTURE \
+  RumiAI_EXECUTION_PLATFORM \
+  RumiAI_PLATFORM_BIN_DIR
+
+unset -v -- RumiAI_BOOTSTRAP_FATAL_PLATFORM_LOAD_ERROR RumiAI_PLATFORM_LIB
+
+# Phase 1C — system configuration and tabular data APIs.
 
 RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR=10
 RumiAI_DATA_LIB=$RumiAI_LIB_DIR/data.lib
@@ -110,7 +155,7 @@ fi
 
 unset -v -- RumiAI_BOOTSTRAP_FATAL_DATA_LOAD_ERROR RumiAI_DATA_LIB
 
-# Phase 1C — minimal bootstrap preference reader.
+# Phase 1D — minimal bootstrap preference reader.
 # Bootstrap preference files are data, never sourced shell code.
 
 RumiAI_bootstrap_read_value()
@@ -193,7 +238,7 @@ then
   fi
 fi
 
-# Phase 1D — i18n.
+# Phase 1E — i18n.
 
 RumiAI_BOOTSTRAP_FATAL_I18N_LOAD_ERROR=5
 
@@ -227,7 +272,7 @@ fi
 
 export -- RumiAI_LANGUAGE RumiAI_TEXT_ENCODING
 
-# Phase 1E — logger.
+# Phase 1F — logger.
 
 RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR=6
 
@@ -279,7 +324,7 @@ unset -v -- \
   RumiAI_LANGUAGE_FALLBACK \
   RumiAI_TEXT_ENCODING_FALLBACK
 
-# Phase 1F — CLI.
+# Phase 1G — CLI.
 
 RumiAI_SHELL_ERROR_LOAD=7
 RumiAI_COMMAND_ERROR_RESOLUTION=8
