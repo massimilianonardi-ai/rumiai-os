@@ -99,10 +99,10 @@ RumiAI_conf_scan()
   ' "$RumiAI_DATA_FILE"
 )
 
-rumi_conf_validate() { [ "$#" -eq 1 ] || return 2; RumiAI_conf_scan validate "$1"; }
-rumi_conf_get()      { [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan get "$1" "$2"; }
-rumi_conf_has()      { [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan has "$1" "$2" >/dev/null; }
-rumi_conf_namespace(){ [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan namespace "$1" "$2"; }
+RumiAI_conf_validate() { [ "$#" -eq 1 ] || return 2; RumiAI_conf_scan validate "$1"; }
+RumiAI_conf_get()      { [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan get "$1" "$2"; }
+RumiAI_conf_has()      { [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan has "$1" "$2" >/dev/null; }
+RumiAI_conf_namespace(){ [ "$#" -eq 2 ] || return 2; RumiAI_conf_scan namespace "$1" "$2"; }
 
 RumiAI_data_tempdir()
 (
@@ -122,7 +122,7 @@ RumiAI_data_tempdir()
   return 3
 )
 
-rumi_conf_set()
+RumiAI_conf_set()
 (
   [ "$#" -eq 3 ] || return 2
   RumiAI_DATA_FILE=$1
@@ -134,7 +134,7 @@ rumi_conf_set()
   if [ -e "$RumiAI_DATA_FILE" ]
   then
     [ -f "$RumiAI_DATA_FILE" ] && [ -r "$RumiAI_DATA_FILE" ] || return 3
-    rumi_conf_validate "$RumiAI_DATA_FILE" || return 2
+    RumiAI_conf_validate "$RumiAI_DATA_FILE" || return 2
   fi
 
   RumiAI_DATA_PARENT=${RumiAI_DATA_FILE%/*}
@@ -163,7 +163,7 @@ rumi_conf_set()
     (umask 077; printf -- '%s\t%s\n' "$RumiAI_DATA_KEY" "$RumiAI_DATA_VALUE" > "$RumiAI_DATA_TMP") || return 3
   fi
 
-  rumi_conf_validate "$RumiAI_DATA_TMP" || return 2
+  RumiAI_conf_validate "$RumiAI_DATA_TMP" || return 2
   command -p chmod 600 "$RumiAI_DATA_TMP" 2>/dev/null || return 3
   command -p mv -f "$RumiAI_DATA_TMP" "$RumiAI_DATA_FILE" || return 3
   trap - 0 HUP INT TERM
@@ -171,15 +171,15 @@ rumi_conf_set()
   return 0
 )
 
-rumi_conf_remove()
+RumiAI_conf_remove()
 (
   [ "$#" -eq 2 ] || return 2
   RumiAI_DATA_FILE=$1
   RumiAI_DATA_KEY=$2
   RumiAI_conf_key_valid "$RumiAI_DATA_KEY" || return 2
   [ -f "$RumiAI_DATA_FILE" ] && [ -r "$RumiAI_DATA_FILE" ] || return 3
-  rumi_conf_validate "$RumiAI_DATA_FILE" || return 2
-  rumi_conf_has "$RumiAI_DATA_FILE" "$RumiAI_DATA_KEY" || return $?
+  RumiAI_conf_validate "$RumiAI_DATA_FILE" || return 2
+  RumiAI_conf_has "$RumiAI_DATA_FILE" "$RumiAI_DATA_KEY" || return $?
 
   RumiAI_DATA_PARENT=${RumiAI_DATA_FILE%/*}
   [ "$RumiAI_DATA_PARENT" != "$RumiAI_DATA_FILE" ] || RumiAI_DATA_PARENT=.
@@ -199,7 +199,7 @@ rumi_conf_remove()
     }
   ' "$RumiAI_DATA_FILE" > "$RumiAI_DATA_TMP" || return 3
 
-  rumi_conf_validate "$RumiAI_DATA_TMP" || return 2
+  RumiAI_conf_validate "$RumiAI_DATA_TMP" || return 2
   command -p chmod 600 "$RumiAI_DATA_TMP" 2>/dev/null || return 3
   command -p mv -f "$RumiAI_DATA_TMP" "$RumiAI_DATA_FILE" || return 3
   trap - 0 HUP INT TERM
@@ -279,11 +279,11 @@ RumiAI_table_scan()
   ' "$RumiAI_DATA_FILE"
 )
 
-rumi_table_validate() { [ "$#" -ge 1 ] || return 2; RumiAI_DATA_FILE=$1; shift; RumiAI_table_scan validate "$RumiAI_DATA_FILE" "$@" >/dev/null; }
-rumi_table_header()   { [ "$#" -eq 1 ] || return 2; RumiAI_table_scan header "$1"; }
-rumi_table_rows()     { [ "$#" -eq 1 ] || return 2; RumiAI_table_scan rows "$1"; }
+RumiAI_table_validate() { [ "$#" -ge 1 ] || return 2; RumiAI_DATA_FILE=$1; shift; RumiAI_table_scan validate "$RumiAI_DATA_FILE" "$@" >/dev/null; }
+RumiAI_table_header()   { [ "$#" -eq 1 ] || return 2; RumiAI_table_scan header "$1"; }
+RumiAI_table_rows()     { [ "$#" -eq 1 ] || return 2; RumiAI_table_scan rows "$1"; }
 
-rumi_table_column()
+RumiAI_table_column()
 (
   [ "$#" -eq 2 ] || return 2
   RumiAI_DATA_FIELD=$2
@@ -291,7 +291,7 @@ rumi_table_column()
   RumiAI_table_scan column "$1"
 )
 
-rumi_table_select()
+RumiAI_table_select()
 (
   [ "$#" -eq 3 ] || return 2
   RumiAI_DATA_FIELD=$2
