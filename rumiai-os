@@ -29,10 +29,12 @@ RumiAI_fatal()
 # returns a canonicalized version of <path>, return error if does not exist
 RumiAI_path_canonicalize_existing()
 (
-  if [ ! "$#" -eq 1 ] || [ ! -e "$1" ] || ! RumiAI_path_output=$(command -p -- realpath -- "$1" 2>/dev/null)
+  if [ ! "$#" -eq 1 ] || [ ! -e "$1" ] || ! RumiAI_path_output="$(command -p -- realpath -- "$1" 2>/dev/null)x"
   then
     return 1
   fi
+
+  RumiAI_path_output="${RumiAI_path_output%x}"
 
   [ -e "$RumiAI_path_output" ] || return 1
   printf -- '%s\n' "$RumiAI_path_output"
@@ -59,7 +61,7 @@ esac
 RumiAI_BOOTSTRAP_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_BOOTSTRAP_BIN") || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR'
 
 # check that it is really a file
-[ ! -f "$RumiAI_BOOTSTRAP_BIN" ] || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_BIN_ERROR'
+[ -f "$RumiAI_BOOTSTRAP_BIN" ] || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_BIN_ERROR'
 
 # extract root
 RumiAI_ROOT=${RumiAI_BOOTSTRAP_BIN%/*}
@@ -90,6 +92,12 @@ export -- \
   RumiAI_CONF_DIR \
   RumiAI_LANG_DIR
 
+readonly -- \
+  RumiAI_BIN_DIR \
+  RumiAI_LIB_DIR \
+  RumiAI_CONF_DIR \
+  RumiAI_LANG_DIR
+
 #-------------------------------------------------------------------------------
 # LANG
 #-------------------------------------------------------------------------------
@@ -111,6 +119,16 @@ then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_TEXT_ENCODING_LOAD_ERROR' >&2
   RumiAI_TEXT_ENCODING=UTF-8
 fi
+
+# supported encodings
+case $RumiAI_TEXT_ENCODING in
+  UTF-8)
+    :
+    ;;
+  *)
+    RumiAI_TEXT_ENCODING=UTF-8
+    ;;
+esac
 
 # unset variables
 unset -v -- RumiAI_CONF_FILE_LANG_LANGUAGE RumiAI_CONF_FILE_LANG_TEXT_ENCODING
@@ -147,9 +165,9 @@ case $RumiAI_PLATFORM_OS in
   MINGW*|MSYS*|CYGWIN*)
     RumiAI_PLATFORM_OS="windows"
     ;;
-  *)
-    RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
-    ;;
+  # *)
+  #   RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+  #   ;;
 esac
 
 RumiAI_PLATFORM_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
@@ -161,9 +179,9 @@ case $RumiAI_PLATFORM_ARCH in
   x86_64|amd64|AMD64)
     RumiAI_PLATFORM_ARCH="x86_64"
     ;;
-  *)
-    RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
-    ;;
+  # *)
+  #   RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+  #   ;;
 esac
 
 RumiAI_PLATFORM_NAME=$RumiAI_PLATFORM_OS-$RumiAI_PLATFORM_ARCH
@@ -204,6 +222,9 @@ then
   RumiAI_SHELL=sh
 fi
 
+# unset variables
+unset -v -- RumiAI_CONF_FILE_SHELL_DEFAULT
+
 # export variables
 export -- RumiAI_SHELL
 
@@ -215,7 +236,7 @@ unset -v -- RumiAI_FATAL_EXIT_CODE
 
 if [ "$#" -eq 0 ]
 then
-  $RumiAI_SHELL
+  "$RumiAI_SHELL"
   exit $?
 fi
 
@@ -229,13 +250,13 @@ shift
 if ! RumiAI_COMMAND_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_COMMAND_ENTRY")
 then
   log error bootstrap command-entry-resolution-failed path "$RumiAI_COMMAND_ENTRY"
-  exit "$RumiAI_COMMAND_ERROR_RESOLUTION"
+  exit "$RumiAI_FATAL_EXIT_CODE"
 fi
 
 if [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
 then
   log error bootstrap invalid-command-entry path "$RumiAI_COMMAND_BIN"
-  exit "$RumiAI_COMMAND_ERROR_INVALID_ENTRY"
+  exit "$RumiAI_FATAL_EXIT_CODE"
 fi
 
 # export variables
