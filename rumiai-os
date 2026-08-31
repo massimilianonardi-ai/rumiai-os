@@ -216,7 +216,7 @@ then
   RumiAI_SHELL=sh
 fi
 
-if ! if command -v -- "$RumiAI_SHELL" >/dev/null 2>&1
+if ! command -v -- "$RumiAI_SHELL" >/dev/null 2>&1
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_SHELL_DEFAULT_LOAD_ERROR' >&2
   RumiAI_SHELL=sh

@@ -1,3 +1,161 @@
+RumiAI_I18N_FALLBACK_LANGUAGE=en_US
+RumiAI_I18N_FALLBACK_TEXT_ENCODING=UTF-8
+
+RumiAI_i18n_identifier_valid()
+{
+  case $1 in
+    [a-z0-9]*)
+      case $1 in
+        *[!a-z0-9._-]* | *[._-])
+          return 1
+          ;;
+      esac
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  return 0
+}
+
+RumiAI_i18n_normalize_language()
+(
+  [ "$#" -eq 1 ] || return 2
+
+  RumiAI_i18n_raw=$1
+
+  case $RumiAI_i18n_raw in
+    C | POSIX | C.* | POSIX.*)
+      printf -- '%s\n' "$RumiAI_I18N_FALLBACK_LANGUAGE"
+      return 0
+      ;;
+  esac
+
+  RumiAI_i18n_raw=${RumiAI_i18n_raw%%@*}
+  RumiAI_i18n_raw=${RumiAI_i18n_raw%%.*}
+
+  RumiAI_i18n_language=${RumiAI_i18n_raw%%_*}
+  [ "$RumiAI_i18n_language" != "$RumiAI_i18n_raw" ] || return 1
+  RumiAI_i18n_territory=${RumiAI_i18n_raw#*_}
+
+  case $RumiAI_i18n_language in
+    [a-z][a-z] | [a-z][a-z][a-z])
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  case $RumiAI_i18n_territory in
+    [A-Z][A-Z] | [0-9][0-9][0-9])
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+
+  printf -- '%s_%s\n' "$RumiAI_i18n_language" "$RumiAI_i18n_territory"
+)
+
+RumiAI_i18n_select_language()
+(
+  [ "$#" -eq 1 ] || return 2
+
+  if RumiAI_i18n_language=$(RumiAI_i18n_normalize_language "$1") && \
+     [ -d "$RumiAI_LANG_DIR/$RumiAI_i18n_language" ]
+  then
+    printf -- '%s\n' "$RumiAI_i18n_language"
+    return 0
+  fi
+
+  printf -- '%s\n' "$RumiAI_I18N_FALLBACK_LANGUAGE"
+  return 1
+)
+
+RumiAI_i18n_select_text_encoding()
+(
+  [ "$#" -eq 1 ] || return 2
+
+  case $1 in
+    UTF-8 | UTF8 | utf-8 | utf8)
+      printf -- '%s\n' UTF-8
+      return 0
+      ;;
+    *)
+      printf -- '%s\n' "$RumiAI_I18N_FALLBACK_TEXT_ENCODING"
+      return 1
+      ;;
+  esac
+)
+
+RumiAI_i18n_read_message()
+(
+  [ "$#" -eq 1 ] || return 2
+
+  RumiAI_i18n_file=$1
+  [ -f "$RumiAI_i18n_file" ] || return 1
+  [ -r "$RumiAI_i18n_file" ] || return 1
+
+  if ! exec 3< "$RumiAI_i18n_file"
+  then
+    return 1
+  fi
+
+  RumiAI_i18n_message=
+  if ! IFS= read -r RumiAI_i18n_message <&3
+  then
+    exec 3<&-
+    return 1
+  fi
+
+  RumiAI_i18n_extra=
+  if IFS= read -r RumiAI_i18n_extra <&3 || [ -n "$RumiAI_i18n_extra" ]
+  then
+    exec 3<&-
+    return 1
+  fi
+
+  exec 3<&-
+  printf -- '%s\n' "$RumiAI_i18n_message"
+)
+
+i18n()
+(
+  [ "$#" -eq 2 ] || return 2
+
+  RumiAI_i18n_domain=$1
+  RumiAI_i18n_message_id=$2
+
+  RumiAI_i18n_identifier_valid "$RumiAI_i18n_domain" || return 2
+  RumiAI_i18n_identifier_valid "$RumiAI_i18n_message_id" || return 2
+
+  RumiAI_i18n_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_i18n_domain/$RumiAI_i18n_message_id
+
+  if RumiAI_i18n_read_message "$RumiAI_i18n_file"
+  then
+    return 0
+  fi
+
+  if [ "$RumiAI_LANGUAGE" != "$RumiAI_I18N_FALLBACK_LANGUAGE" ]
+  then
+    RumiAI_i18n_file=$RumiAI_LANG_DIR/$RumiAI_I18N_FALLBACK_LANGUAGE/$RumiAI_i18n_domain/$RumiAI_i18n_message_id
+
+    if RumiAI_i18n_read_message "$RumiAI_i18n_file"
+    then
+      return 0
+    fi
+  fi
+
+  printf -- '%s.%s\n' "$RumiAI_i18n_domain" "$RumiAI_i18n_message_id"
+)
+
+
+
+
+
+
+
 #
 # : "${RumiAI_LOG_LEVEL:=info}"
 #
