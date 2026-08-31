@@ -247,3 +247,116 @@ RumiAI_atomic_replace()
 
   command -p mv -f "$RumiAI_ATOMIC_SOURCE" "$RumiAI_ATOMIC_DEST" || return 3
 )
+
+# The v0 package-manager mutation lock reserves file descriptor 9 while held.
+# The lock pathname is persistent/non-authoritative; ownership is kernel-backed.
+RumiAI_lock_acquire()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -z "${RumiAI_LOCK_HANDLE-}" ] || return 2
+
+  RumiAI_LOCK_PARENT=$(RumiAI_path_parent "$1") || return 2
+  RumiAI_LOCK_NAME=$(RumiAI_path_name "$1") || {
+    unset RumiAI_LOCK_PARENT
+    return 2
+  }
+  RumiAI_LOCK_PARENT=$(RumiAI_path_canonicalize_existing "$RumiAI_LOCK_PARENT") || {
+    unset RumiAI_LOCK_PARENT RumiAI_LOCK_NAME
+    return 1
+  }
+  [ -d "$RumiAI_LOCK_PARENT" ] || {
+    unset RumiAI_LOCK_PARENT RumiAI_LOCK_NAME
+    return 1
+  }
+
+  RumiAI_LOCK_PATH=$RumiAI_LOCK_PARENT/$RumiAI_LOCK_NAME
+  if [ -L "$RumiAI_LOCK_PATH" ] || { [ -e "$RumiAI_LOCK_PATH" ] && [ ! -f "$RumiAI_LOCK_PATH" ]; }
+  then
+    unset RumiAI_LOCK_PARENT RumiAI_LOCK_NAME RumiAI_LOCK_PATH
+    return 2
+  fi
+
+  exec 9>>"$RumiAI_LOCK_PATH"
+
+  case ${RumiAI_PLATFORM-} in
+    linux)
+      command -p -- flock -n -E 75 -- 9 >/dev/null 2>&1
+      RumiAI_LOCK_STATUS=$?
+      ;;
+    macos)
+      command -p -- lockf -s -t 0 9 >/dev/null 2>&1
+      RumiAI_LOCK_STATUS=$?
+      ;;
+    *)
+      RumiAI_LOCK_STATUS=127
+      ;;
+  esac
+
+  if [ "$RumiAI_LOCK_STATUS" -ne 0 ]
+  then
+    exec 9>&-
+    unset RumiAI_LOCK_PARENT RumiAI_LOCK_NAME RumiAI_LOCK_PATH
+    if [ "$RumiAI_LOCK_STATUS" -eq 75 ]
+    then
+      unset RumiAI_LOCK_STATUS
+      return 1
+    fi
+    unset RumiAI_LOCK_STATUS
+    return 3
+  fi
+
+  RumiAI_LOCK_HANDLE=9
+  unset RumiAI_LOCK_PARENT RumiAI_LOCK_NAME RumiAI_LOCK_STATUS
+  return 0
+}
+
+RumiAI_lock_release()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "${RumiAI_LOCK_HANDLE-}" ] || return 1
+  [ "$1" = "$RumiAI_LOCK_HANDLE" ] || return 2
+  [ "$RumiAI_LOCK_HANDLE" = 9 ] || return 3
+
+  exec 9>&-
+  unset RumiAI_LOCK_HANDLE RumiAI_LOCK_PATH
+  return 0
+}
+
+# v0 deliberately uses the host-wide sync barrier. This is broader than a
+# per-path fsync but avoids adding a bootstrap runtime/helper dependency.
+RumiAI_file_sync()
+(
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$1" ] && [ ! -L "$1" ] || return 1
+  command -p -- sync >/dev/null 2>&1 || return 3
+)
+
+RumiAI_directory_sync()
+(
+  [ "$#" -eq 1 ] || return 2
+  [ -d "$1" ] && [ ! -L "$1" ] || return 1
+  command -p -- sync >/dev/null 2>&1 || return 3
+)
+
+RumiAI_atomic_publish()
+(
+  [ "$#" -eq 2 ] || return 2
+  [ "${RumiAI_LOCK_HANDLE-}" = 9 ] || return 2
+
+  RumiAI_PUBLISH_SOURCE_PARENT=$(RumiAI_path_parent "$1") || return 2
+  RumiAI_PUBLISH_SOURCE_NAME=$(RumiAI_path_name "$1") || return 2
+  RumiAI_PUBLISH_DEST_PARENT=$(RumiAI_path_parent "$2") || return 2
+  RumiAI_PUBLISH_DEST_NAME=$(RumiAI_path_name "$2") || return 2
+
+  RumiAI_PUBLISH_SOURCE_PARENT=$(RumiAI_path_canonicalize_existing "$RumiAI_PUBLISH_SOURCE_PARENT") || return 1
+  RumiAI_PUBLISH_DEST_PARENT=$(RumiAI_path_canonicalize_existing "$RumiAI_PUBLISH_DEST_PARENT") || return 1
+  [ "$RumiAI_PUBLISH_SOURCE_PARENT" = "$RumiAI_PUBLISH_DEST_PARENT" ] || return 2
+
+  RumiAI_PUBLISH_SOURCE=$RumiAI_PUBLISH_SOURCE_PARENT/$RumiAI_PUBLISH_SOURCE_NAME
+  RumiAI_PUBLISH_DEST=$RumiAI_PUBLISH_DEST_PARENT/$RumiAI_PUBLISH_DEST_NAME
+
+  [ -d "$RumiAI_PUBLISH_SOURCE" ] && [ ! -L "$RumiAI_PUBLISH_SOURCE" ] || return 1
+  [ ! -e "$RumiAI_PUBLISH_DEST" ] && [ ! -L "$RumiAI_PUBLISH_DEST" ] || return 1
+
+  command -p -- mv "$RumiAI_PUBLISH_SOURCE" "$RumiAI_PUBLISH_DEST" || return 3
+)
