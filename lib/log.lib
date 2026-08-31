@@ -1,3 +1,118 @@
+
+: "${RumiAI_LOG_LEVEL:=info}"
+  case $RumiAI_LOG_LEVEL in
+    fatal)
+      RumiAI_log_priority=1
+      ;;
+    error)
+      RumiAI_log_priority=2
+      ;;
+    warn)
+      RumiAI_log_priority=3
+      ;;
+    info)
+      RumiAI_log_priority=4
+      ;;
+    debug)
+      RumiAI_log_priority=5
+      ;;
+    trace)
+      RumiAI_log_priority=6
+      ;;
+    *)
+      return "$RumiAI_LOG_ERROR_INVALID_SEVERITY"
+      ;;
+  esac
+
+log()
+{
+  log_"$@"
+}
+
+log_fatal()
+{
+  log_filter_level "1" "fatal" "$@"
+}
+
+log_error()
+{
+  log_filter_level "2" "error" "$@"
+}
+
+log_warn()
+{
+  log_filter_level "3" "warn " "$@"
+}
+
+log_info()
+{
+  log_filter_level "4" "info " "$@"
+}
+
+log_debug()
+{
+  log_filter_level "5" "debug" "$@"
+}
+
+log_trace()
+{
+  log_filter_level "6" "trace" "$@"
+}
+
+log_filter_level()
+{
+  if [ $(($1)) -le $(($RumiAI_LOG_LEVEL)) ]
+  then
+    (
+      LOG_MESSAGE_PRI="$1"
+      shift
+      LOG_MESSAGE_LEVEL="$1"
+      shift
+      $LOG_LINE_FUNC_FILTER_LEVEL "$@"
+    )
+  fi
+}
+
+log_echo()
+{
+  printf %s\\n "$*" 1>&2
+}
+
+log_line()
+{
+  log_echo "$(date +"[%Y-%m-%d %H:%M:%S]") [${PPID}>${$}] [$LOG_PROC_NAME] [$LOG_MESSAGE_PRI] [$LOG_MESSAGE_LEVEL]" "$@"
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 : "${RumiAI_LOG_LEVEL:=info}"
 
 RumiAI_LOG_ERROR_INVALID_ARGUMENTS=11
