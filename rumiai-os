@@ -7,16 +7,18 @@
 # exit codes identify the phase where the error occurred, detail of the error is given by the message
 RumiAI_FATAL_EXIT_CODE=1
 RumiAI_FATAL_EXIT_CODE_ROOT_RESOLUTION=1
-RumiAI_FATAL_EXIT_CODE_LANG=2
-RumiAI_FATAL_EXIT_CODE_LOGGER=3
-RumiAI_FATAL_EXIT_CODE_OSARCH=4
-RumiAI_FATAL_EXIT_CODE_EXECUTION=5
+RumiAI_FATAL_EXIT_CODE_TEXT=2
+RumiAI_FATAL_EXIT_CODE_LANG=3
+RumiAI_FATAL_EXIT_CODE_LOGGER=4
+RumiAI_FATAL_EXIT_CODE_OSARCH=5
+RumiAI_FATAL_EXIT_CODE_EXECUTION=6
 
 RumiAI_exit_codes_cleanup()
 {
-  unset - -- \
+  unset -v -- \
     RumiAI_FATAL_EXIT_CODE \
     RumiAI_FATAL_EXIT_CODE_ROOT_RESOLUTION \
+    RumiAI_FATAL_EXIT_CODE_TEXT \
     RumiAI_FATAL_EXIT_CODE_LANG \
     RumiAI_FATAL_EXIT_CODE_LOGGER \
     RumiAI_FATAL_EXIT_CODE_OSARCH \
@@ -122,6 +124,16 @@ readonly -- \
   RumiAI_LANG_DIR
 
 #-------------------------------------------------------------------------------
+# TEXT
+#-------------------------------------------------------------------------------
+
+# error codes
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_TEXT"
+
+# load lib
+command -- . "$RumiAI_LIB_DIR/text.lib" || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_TEXT_LOAD_ERROR'
+
+#-------------------------------------------------------------------------------
 # LANG
 #-------------------------------------------------------------------------------
 
@@ -154,7 +166,7 @@ command -- . "$RumiAI_LIB_DIR/log.lib" || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE"
 # error codes
 RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_OSARCH"
 
-RumiAI_OSARCH_OS=$(command -p uname -s 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+RumiAI_OSARCH_OS=$(command -p uname -s 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_OSARCH_ERROR'
 
 case $RumiAI_OSARCH_OS in
   Linux)
@@ -172,7 +184,7 @@ case $RumiAI_OSARCH_OS in
     ;;
 esac
 
-RumiAI_OSARCH_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+RumiAI_OSARCH_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_OSARCH_ERROR'
 
 case $RumiAI_OSARCH_ARCH in
   arm64|aarch64)
@@ -214,7 +226,7 @@ RumiAI_CONF_FILE_SHELL_DEFAULT=$RumiAI_CONF_DIR/shell/default
 
 # set var - shell
 # if ! IFS= read -r RumiAI_SHELL < "$RumiAI_CONF_FILE_SHELL_DEFAULT"
-if ! RumiAI_SHELL="$(cat "$RumiAI_CONF_FILE_SHELL_DEFAULT")"
+if ! RumiAI_SHELL="$(command -p -- cat "$RumiAI_CONF_FILE_SHELL_DEFAULT")"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_SHELL_DEFAULT_LOAD_ERROR' >&2
   RumiAI_SHELL=sh

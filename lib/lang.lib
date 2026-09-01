@@ -1,3 +1,4 @@
+#!/bin/sh
 
 RumiAI_lang_init()
 {
@@ -6,8 +7,7 @@ RumiAI_lang_init()
   RumiAI_CONF_FILE_LANG_TEXT_ENCODING=$RumiAI_CONF_DIR/lang/text-encoding
 
   # set var - language
-  # if ! IFS= read -r RumiAI_LANGUAGE < "$RumiAI_CONF_FILE_LANG_LANGUAGE"
-  if ! RumiAI_LANGUAGE="$(cat "$RumiAI_CONF_FILE_LANG_LANGUAGE")"
+  if ! RumiAI_LANGUAGE="$(command -p -- cat "$RumiAI_CONF_FILE_LANG_LANGUAGE")"
   then
     printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_LANGUAGE_LOAD_ERROR' >&2
     RumiAI_LANGUAGE=en_US
@@ -16,8 +16,7 @@ RumiAI_lang_init()
   RumiAI_LANGUAGE_FALLBACK=en_US
 
   # set var - text encoding
-  # if ! IFS= read -r RumiAI_TEXT_ENCODING < "$RumiAI_CONF_FILE_LANG_TEXT_ENCODING"
-  if ! RumiAI_TEXT_ENCODING="(cat "$RumiAI_CONF_FILE_LANG_TEXT_ENCODING")"
+  if ! RumiAI_TEXT_ENCODING="$(command -p -- cat "$RumiAI_CONF_FILE_LANG_TEXT_ENCODING")"
   then
     printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_TEXT_ENCODING_LOAD_ERROR' >&2
     RumiAI_TEXT_ENCODING=UTF-8
@@ -37,44 +36,75 @@ RumiAI_lang_init()
   unset -v -- RumiAI_CONF_FILE_LANG_LANGUAGE RumiAI_CONF_FILE_LANG_TEXT_ENCODING
 }
 
-RumiAI_lang_read_message()
-(
-  [ "$#" -eq 1 ] || return 2
+# RumiAI_lang_read_message_2()
+# (
+#   [ "$#" -eq 1 ] || return 2
+#
+#   RumiAI_lang_file=$1
+#
+#   if [ ! -f "$RumiAI_lang_file" ] || [ ! -r "$RumiAI_lang_file" ] || ! RumiAI_lang_message="$(command -p -- cat "$RumiAI_lang_file")"
+#   then
+#     return 1
+#   fi
+#
+#   printf -- '%s\n' "$RumiAI_lang_message"
+# )
+#
+# lang_2()
+# (
+#   [ "$#" -eq 2 ] || return 2
+#
+#   RumiAI_lang_domain=$1
+#   RumiAI_lang_message_id=$2
+#
+#   RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_lang_domain/$RumiAI_lang_message_id
+#
+#   if RumiAI_lang_read_message "$RumiAI_lang_file"
+#   then
+#     return 0
+#   fi
+#
+#   if [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ]
+#   then
+#     RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id
+#
+#     if RumiAI_lang_read_message "$RumiAI_lang_file"
+#     then
+#       return 0
+#     fi
+#   fi
+#
+#   printf -- '%s.%s\n' "$RumiAI_lang_domain" "$RumiAI_lang_message_id"
+# )
+#
+# RumiAI_lang_print_message()
+# {
+#   [ "$#" -eq 1 ] || return 1
+#
+#   if [ ! -f "$1" ] || [ ! -r "$1" ] || ! printf -- '%s\n' "$(command -p -- cat "$1")"
+#   then
+#     return 2
+#   fi
+# }
 
-  RumiAI_lang_file=$1
-
-  # if ! IFS= read -r RumiAI_lang_message < "$RumiAI_lang_file"
-  if [ -f "$RumiAI_lang_file" ] || [ -r "$RumiAI_lang_file" ] || ! RumiAI_lang_message="$(cat "$RumiAI_lang_file")"
-  then
-    return 1
-  fi
-
-  printf -- '%s\n' "$RumiAI_lang_message"
-)
 
 lang()
 (
-  [ "$#" -eq 2 ] || return 2
+  [ "$#" -eq 2 ] || return 1
 
   RumiAI_lang_domain=$1
   RumiAI_lang_message_id=$2
 
+  [ ! RumiAI_text_safe_id "$RumiAI_lang_domain" ] || [ ! RumiAI_text_safe_id "$RumiAI_lang_message_id" ] || return 2
+
   RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_lang_domain/$RumiAI_lang_message_id
 
-  if RumiAI_lang_read_message "$RumiAI_lang_file"
-  then
-    return 0
-  fi
-
-  if [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ]
+  if ! printf -- '%s\n' "$(command -p -- cat "$RumiAI_lang_file")" && [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ]
   then
     RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id
-
-    if RumiAI_lang_read_message "$RumiAI_lang_file"
+    if ! printf -- '%s\n' "$(command -p -- cat "$RumiAI_lang_file")"
     then
-      return 0
+      printf -- '%s.%s\n' "$RumiAI_lang_domain" "$RumiAI_lang_message_id"
     fi
   fi
-
-  printf -- '%s.%s\n' "$RumiAI_lang_domain" "$RumiAI_lang_message_id"
 )

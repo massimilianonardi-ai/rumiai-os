@@ -1,3 +1,5 @@
+#!/bin/sh
+
 : "${RumiAI_LOG_LEVEL:=info}"
 
 RumiAI_LOG_ERROR_INVALID_ARGUMENTS=11
