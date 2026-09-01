@@ -152,7 +152,10 @@ lang()
   RumiAI_lang_domain=$1
   RumiAI_lang_message_id=$2
 
-  RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/@currentE/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
+  RumiAI_text_safe_id "$RumiAI_lang_domain"
+  RumiAI_text_safe_id "$RumiAI_lang_message_id"
+
+  RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/@current/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
   then
     case "$RumiAI_LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
@@ -172,7 +175,9 @@ RumiAI_LANGUAGE_FALLBACK=en_US
 RumiAI_TEXT_ENCODING=UTF-8
 
 # export variables
-export -- RumiAI_LANGUAGE_FALLBACK RumiAI_TEXT_ENCODING
+export -- \
+  RumiAI_LANGUAGE_FALLBACK \
+  RumiAI_TEXT_ENCODING
 
 #-------------------------------------------------------------------------------
 # LOGGER
