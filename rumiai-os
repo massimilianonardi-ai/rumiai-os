@@ -1,6 +1,29 @@
 #!/bin/sh
 
 #-------------------------------------------------------------------------------
+# ERROR CODES
+#-------------------------------------------------------------------------------
+
+# exit codes identify the phase where the error occurred, detail of the error is given by the message
+RumiAI_FATAL_EXIT_CODE=1
+RumiAI_FATAL_EXIT_CODE_ROOT_RESOLUTION=1
+RumiAI_FATAL_EXIT_CODE_LANG=2
+RumiAI_FATAL_EXIT_CODE_LOGGER=3
+RumiAI_FATAL_EXIT_CODE_OSARCH=4
+RumiAI_FATAL_EXIT_CODE_EXECUTION=5
+
+RumiAI_exit_codes_cleanup()
+{
+  unset - -- \
+    RumiAI_FATAL_EXIT_CODE \
+    RumiAI_FATAL_EXIT_CODE_ROOT_RESOLUTION \
+    RumiAI_FATAL_EXIT_CODE_LANG \
+    RumiAI_FATAL_EXIT_CODE_LOGGER \
+    RumiAI_FATAL_EXIT_CODE_OSARCH \
+    RumiAI_FATAL_EXIT_CODE_EXECUTION
+}
+
+#-------------------------------------------------------------------------------
 # FATAL ERROR FUNCTION
 #-------------------------------------------------------------------------------
 
@@ -16,7 +39,7 @@ RumiAI_fatal()
       exit 1
       ;;
     *)
-      exit $1
+      exit "$1"
       ;;
   esac
 }
@@ -45,7 +68,7 @@ RumiAI_path_canonicalize_existing()
 #-------------------------------------------------------------------------------
 
 # error codes
-RumiAI_FATAL_EXIT_CODE=1
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_ROOT_RESOLUTION"
 
 # if invoked by PATH search, then acquire path used
 case $0 in
@@ -102,105 +125,85 @@ readonly -- \
 # LANG
 #-------------------------------------------------------------------------------
 
-# conf files
-RumiAI_CONF_FILE_LANG_LANGUAGE=$RumiAI_CONF_DIR/lang/language
-RumiAI_CONF_FILE_LANG_TEXT_ENCODING=$RumiAI_CONF_DIR/lang/text-encoding
+# error codes
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_LANG"
 
-# set var - language
-if ! IFS= read -r RumiAI_LANGUAGE < "$RumiAI_CONF_FILE_LANG_LANGUAGE"
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_LANGUAGE_LOAD_ERROR' >&2
-  RumiAI_LANGUAGE=en_US
-fi
+# load lib
+command -- . "$RumiAI_LIB_DIR/lang.lib" || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_LANG_LOAD_ERROR'
 
-# set var - text encoding
-if ! IFS= read -r RumiAI_TEXT_ENCODING < "$RumiAI_CONF_FILE_LANG_TEXT_ENCODING"
-then
-  printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_TEXT_ENCODING_LOAD_ERROR' >&2
-  RumiAI_TEXT_ENCODING=UTF-8
-fi
-
-# supported encodings
-case $RumiAI_TEXT_ENCODING in
-  UTF-8)
-    :
-    ;;
-  *)
-    RumiAI_TEXT_ENCODING=UTF-8
-    ;;
-esac
-
-# unset variables
-unset -v -- RumiAI_CONF_FILE_LANG_LANGUAGE RumiAI_CONF_FILE_LANG_TEXT_ENCODING
+# init
+RumiAI_lang_init
 
 # export variables
-export -- RumiAI_LANGUAGE RumiAI_TEXT_ENCODING
+export -- RumiAI_LANGUAGE RumiAI_LANGUAGE_FALLBACK RumiAI_TEXT_ENCODING
 
 #-------------------------------------------------------------------------------
 # LOGGER
 #-------------------------------------------------------------------------------
 
 # error codes
-RumiAI_FATAL_EXIT_CODE=2
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_LOGGER"
 
 # load lib
 command -- . "$RumiAI_LIB_DIR/log.lib" || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_LOG_LOAD_ERROR'
 
 #-------------------------------------------------------------------------------
-# PLATFORM DETECTION
+# OSARCH DETECTION
 #-------------------------------------------------------------------------------
 
 # error codes
-RumiAI_FATAL_EXIT_CODE=3
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_OSARCH"
 
-RumiAI_PLATFORM_OS=$(command -p uname -s 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+RumiAI_OSARCH_OS=$(command -p uname -s 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
 
-case $RumiAI_PLATFORM_OS in
+case $RumiAI_OSARCH_OS in
   Linux)
-    RumiAI_PLATFORM_OS="linux"
+    RumiAI_OSARCH_OS="linux"
     ;;
   Darwin)
-    RumiAI_PLATFORM_OS="macos"
+    RumiAI_OSARCH_OS="macos"
     ;;
   MINGW*|MSYS*|CYGWIN*)
-    RumiAI_PLATFORM_OS="windows"
+    RumiAI_OSARCH_OS="windows"
     ;;
-  # *)
-  #   RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
-  #   ;;
+  *)
+    # replace with message from logger
+    printf -- '%s\n' 'RumiAI_BOOTSTRAP_OSARCH_UNKNOWN_OS_WARNING' >&2
+    ;;
 esac
 
-RumiAI_PLATFORM_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
+RumiAI_OSARCH_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
 
-case $RumiAI_PLATFORM_ARCH in
+case $RumiAI_OSARCH_ARCH in
   arm64|aarch64)
-    RumiAI_PLATFORM_ARCH="arm64"
+    RumiAI_OSARCH_ARCH="arm64"
     ;;
   x86_64|amd64|AMD64)
-    RumiAI_PLATFORM_ARCH="x86_64"
+    RumiAI_OSARCH_ARCH="x86_64"
     ;;
-  # *)
-  #   RumiAI_fatal "$RumiAI_FATAL_EXIT_CODE" 'RumiAI_BOOTSTRAP_FATAL_PLATFORM_ERROR'
-  #   ;;
+  *)
+    # replace with message from logger
+    printf -- '%s\n' 'RumiAI_BOOTSTRAP_OSARCH_UNKNOWN_ARCH_WARNING' >&2
+    ;;
 esac
 
-RumiAI_PLATFORM_NAME=$RumiAI_PLATFORM_OS-$RumiAI_PLATFORM_ARCH
-RumiAI_PLATFORM_BIN_DIR=$RumiAI_BIN_DIR/@platforms/$RumiAI_PLATFORM_NAME
+RumiAI_OSARCH=$RumiAI_OSARCH_OS-$RumiAI_OSARCH_ARCH
+RumiAI_OSARCH_BIN_DIR=$RumiAI_BIN_DIR/@osarch/$RumiAI_OSARCH
 
-PATH=$RumiAI_PLATFORM_BIN_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
+PATH=$RumiAI_OSARCH_BIN_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
 
 export -- \
-  RumiAI_PLATFORM_OS \
-  RumiAI_PLATFORM_ARCH \
-  RumiAI_PLATFORM_NAME \
-  RumiAI_PLATFORM_BIN_DIR \
+  RumiAI_OSARCH_OS \
+  RumiAI_OSARCH_ARCH \
+  RumiAI_OSARCH \
+  RumiAI_OSARCH_BIN_DIR \
   PATH
 
 readonly -- \
-  RumiAI_PLATFORM_OS \
-  RumiAI_PLATFORM_ARCH \
-  RumiAI_PLATFORM_NAME \
-  RumiAI_PLATFORM_BIN_DIR
+  RumiAI_OSARCH_OS \
+  RumiAI_OSARCH_ARCH \
+  RumiAI_OSARCH \
+  RumiAI_OSARCH_BIN_DIR
 
 #-------------------------------------------------------------------------------
 # SHELL
@@ -210,7 +213,8 @@ readonly -- \
 RumiAI_CONF_FILE_SHELL_DEFAULT=$RumiAI_CONF_DIR/shell/default
 
 # set var - shell
-if ! IFS= read -r RumiAI_SHELL < "$RumiAI_CONF_FILE_SHELL_DEFAULT"
+# if ! IFS= read -r RumiAI_SHELL < "$RumiAI_CONF_FILE_SHELL_DEFAULT"
+if ! RumiAI_SHELL="$(cat "$RumiAI_CONF_FILE_SHELL_DEFAULT")"
 then
   printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_SHELL_DEFAULT_LOAD_ERROR' >&2
   RumiAI_SHELL=sh
@@ -228,25 +232,27 @@ unset -v -- RumiAI_CONF_FILE_SHELL_DEFAULT
 # export variables
 export -- RumiAI_SHELL
 
+readonly -- RumiAI_SHELL
+
 #-------------------------------------------------------------------------------
 # EXECUTE
 #-------------------------------------------------------------------------------
 
-unset -v -- RumiAI_FATAL_EXIT_CODE
+# error codes
+RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_EXECUTION"
 
+# execute shell
 if [ "$#" -eq 0 ]
 then
+  RumiAI_exit_codes_cleanup
   "$RumiAI_SHELL"
   exit $?
 fi
 
-# error codes
-RumiAI_FATAL_EXIT_CODE=4
-
+# execute command
 RumiAI_COMMAND_ENTRY=$1
 shift
 
-# set var - command
 if ! RumiAI_COMMAND_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_COMMAND_ENTRY")
 then
   log error bootstrap command-entry-resolution-failed path "$RumiAI_COMMAND_ENTRY"
@@ -259,12 +265,15 @@ then
   exit "$RumiAI_FATAL_EXIT_CODE"
 fi
 
+# error codes - unset variables
+unset -v -- RumiAI_COMMAND_ENTRY
+RumiAI_exit_codes_cleanup
+
 # export variables
 export -- RumiAI_COMMAND_BIN
+
 readonly -- RumiAI_COMMAND_BIN
 
-# error codes - unset variables
-unset -v -- RumiAI_FATAL_EXIT_CODE
-
+# execute command
 . "$RumiAI_COMMAND_BIN"
 exit $?
