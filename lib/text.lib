@@ -2,6 +2,8 @@
 
 RumiAI_text_safe_id()
 {
+  [ "$#" -eq 1 ] || return 1
+
   case "$1" in
     # first character match
     [a-z0-9]*)
@@ -22,6 +24,8 @@ RumiAI_text_safe_id()
 
 RumiAI_text_safe_id_case()
 {
+  [ "$#" -eq 1 ] || return 1
+
   case "$1" in
     # first character match
     [A-Za-z0-9]*)

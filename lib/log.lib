@@ -1,6 +1,7 @@
 #!/bin/sh
 
 : "${RumiAI_LOG_LEVEL:=info}"
+: "${RumiAI_LOG_LEVEL_VALUE:=4}"
 
 RumiAI_LOG_ERROR_INVALID_ARGUMENTS=11
 RumiAI_LOG_ERROR_INVALID_SEVERITY=12
@@ -9,27 +10,43 @@ RumiAI_LOG_ERROR_INVALID_MESSAGE_ID=14
 RumiAI_LOG_ERROR_INVALID_FIELDS=15
 RumiAI_LOG_ERROR_INVALID_LEVEL=16
 
-RumiAI_log_field_name_valid()
+log_level()
 {
+  [ "$#" -eq 1 ] || return 1
+
   case $1 in
-    [a-z0-9]*)
-      case $1 in
-        *[!a-z0-9._-]* | *[._-])
-          return 1
-          ;;
-      esac
+    fatal)
+      RumiAI_LOG_LEVEL_VALUE=1
+      ;;
+    error)
+      RumiAI_LOG_LEVEL_VALUE=2
+      ;;
+    warn)
+      RumiAI_LOG_LEVEL_VALUE=3
+      ;;
+    info)
+      RumiAI_LOG_LEVEL_VALUE=4
+      ;;
+    debug)
+      RumiAI_LOG_LEVEL_VALUE=5
+      ;;
+    trace)
+      RumiAI_LOG_LEVEL_VALUE=6
+      ;;
+    all)
+      RumiAI_LOG_LEVEL_VALUE=6
       ;;
     *)
-      return 1
+      return 2
       ;;
   esac
 
-  return 0
+  RumiAI_LOG_LEVEL="$1"
 }
 
 log()
 (
-  [ "$#" -ge 3 ] || return "$RumiAI_LOG_ERROR_INVALID_ARGUMENTS"
+  [ "$#" -ge 3 ] || return 1
 
   RumiAI_log_severity=$1
   shift
@@ -54,7 +71,7 @@ log()
       RumiAI_log_priority=6
       ;;
     *)
-      return "$RumiAI_LOG_ERROR_INVALID_SEVERITY"
+      return 2
       ;;
   esac
 
@@ -62,12 +79,9 @@ log()
   RumiAI_log_message_id=$2
   shift 2
 
-  [ "$RumiAI_log_priority" -le "$RumiAI_log_threshold" ] || return 0
+  [ "$RumiAI_log_priority" -le "$RumiAI_LOG_LEVEL_VALUE" ] || return 0
 
-  if ! RumiAI_log_message=$(lang "$RumiAI_log_domain" "$RumiAI_log_message_id")
-  then
-    RumiAI_log_message=$RumiAI_log_domain.$RumiAI_log_message_id
-  fi
+  RumiAI_log_message=$(lang "$RumiAI_log_domain" "$RumiAI_log_message_id")
 
   if ! RumiAI_log_timestamp=$(command -p -- date '+%Y-%m-%d %H:%M:%S' 2>/dev/null)
   then
