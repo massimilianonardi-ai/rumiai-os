@@ -2,36 +2,6 @@
 
 : "${RumiAI_LOG_LEVEL:=info}"
 
-RumiAI_log_level_priority()
-{
-  case $1 in
-    off | none)
-      printf -- '%s\n' 0
-      ;;
-    fatal)
-      printf -- '%s\n' 1
-      ;;
-    error)
-      printf -- '%s\n' 2
-      ;;
-    warn)
-      printf -- '%s\n' 3
-      ;;
-    info)
-      printf -- '%s\n' 4
-      ;;
-    debug)
-      printf -- '%s\n' 5
-      ;;
-    trace | all)
-      printf -- '%s\n' 6
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-}
-
 RumiAI_log_fields_valid()
 (
   [ "$(( $# % 2 ))" -eq 0 ] || return 1
@@ -85,10 +55,10 @@ log()
 (
   [ "$#" -ge 3 ] || return 1
 
-  RumiAI_log_severity=$1
+  RumiAI_log_severity="$1"
   shift
 
-  case $RumiAI_log_severity in
+  case "$RumiAI_log_severity" in
     fatal)
       RumiAI_log_priority=1
       ;;
@@ -112,10 +82,32 @@ log()
       ;;
   esac
 
-  if ! RumiAI_log_threshold=$(RumiAI_log_level_priority "$RumiAI_LOG_LEVEL")
-  then
-    return 6
-  fi
+  case "$RumiAI_LOG_LEVEL" in
+    off | none)
+      RumiAI_log_threshold="0"
+      ;;
+    fatal)
+      RumiAI_log_threshold="1"
+      ;;
+    error)
+      RumiAI_log_threshold="2"
+      ;;
+    warn)
+      RumiAI_log_threshold="3"
+      ;;
+    info)
+      RumiAI_log_threshold="4"
+      ;;
+    debug)
+      RumiAI_log_threshold="5"
+      ;;
+    trace | all)
+      RumiAI_log_threshold="6"
+      ;;
+    *)
+      return 6
+      ;;
+  esac
 
   [ "$RumiAI_log_priority" -le "$RumiAI_log_threshold" ] || return 0
 
