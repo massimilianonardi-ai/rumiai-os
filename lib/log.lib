@@ -23,7 +23,7 @@ RumiAI_log_level_priority()
     debug)
       printf -- '%s\n' 5
       ;;
-    trace)
+    trace | all)
       printf -- '%s\n' 6
       ;;
     *)
@@ -45,22 +45,22 @@ RumiAI_log_fields_valid()
   return 0
 )
 
-RumiAI_log_escape_field_value()
-{
-  command -p -- awk '
-    BEGIN { ORS = "" }
-    {
-      if (NR > 1)
-        printf "\\n"
-
-      gsub(/\\/, "\\\\")
-      gsub(/\"/, "\\\"")
-      gsub(/\r/, "\\r")
-      gsub(/\t/, "\\t")
-      printf "%s", $0
-    }
-  '
-}
+# RumiAI_log_escape_field_value()
+# {
+#   command -p -- awk '
+#     BEGIN { ORS = "" }
+#     {
+#       if (NR > 1)
+#         printf "\\n"
+#
+#       gsub(/\\/, "\\\\")
+#       gsub(/\"/, "\\\"")
+#       gsub(/\r/, "\\r")
+#       gsub(/\t/, "\\t")
+#       printf "%s", $0
+#     }
+#   '
+# }
 
 log()
 (
@@ -97,10 +97,10 @@ log()
   RumiAI_log_message_id=$2
   shift 2
 
-  RumiAI_i18n_identifier_valid "$RumiAI_log_domain" || \
+  RumiAI_text_safe_id "$RumiAI_log_domain" || \
     return 3
 
-  RumiAI_i18n_identifier_valid "$RumiAI_log_message_id" || \
+  RumiAI_text_safe_id "$RumiAI_log_message_id" || \
     return 4
 
   RumiAI_log_fields_valid "$@" || return 5
@@ -135,7 +135,8 @@ log()
     RumiAI_log_field_value=$2
     shift 2
 
-    if ! RumiAI_log_field_rendered=$(printf -- '%s' "$RumiAI_log_field_value" | RumiAI_log_escape_field_value)
+    # if ! RumiAI_log_field_rendered=$(printf -- '%s' "$RumiAI_log_field_value" | RumiAI_log_escape_field_value)
+    if ! RumiAI_log_field_rendered=$(printf -- '%s' "$RumiAI_log_field_value")
     then
       RumiAI_log_field_rendered='<unrenderable>'
     fi
