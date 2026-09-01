@@ -11,6 +11,9 @@ RumiAI_lang_normalize()
 {
   [ "$#" -eq 1 ] || return 1
 
+  set -- "${1%%.*}"
+  set -- "${1%%@*}"
+
   [ "$1" != "${1%%_*}" ] && printf '%s' "$(printf '%s' "${1%%_*}" | tr 'A-Z' 'a-z')_$(printf '%s' "${1#*_}" | tr 'a-z' 'A-Z')"
 }
 

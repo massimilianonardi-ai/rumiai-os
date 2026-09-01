@@ -106,6 +106,7 @@ readonly -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
 
 # set values
 RumiAI_BIN_DIR=$RumiAI_ROOT/bin
+RumiAI_BIN_SYS_DIR=$RumiAI_BIN_DIR/@sys
 RumiAI_LIB_DIR=$RumiAI_ROOT/lib
 RumiAI_CONF_DIR=$RumiAI_ROOT/conf
 RumiAI_LANG_DIR=$RumiAI_ROOT/lang
@@ -113,12 +114,14 @@ RumiAI_LANG_DIR=$RumiAI_ROOT/lang
 # export vars
 export -- \
   RumiAI_BIN_DIR \
+  RumiAI_BIN_SYS_DIR \
   RumiAI_LIB_DIR \
   RumiAI_CONF_DIR \
   RumiAI_LANG_DIR
 
 readonly -- \
   RumiAI_BIN_DIR \
+  RumiAI_BIN_SYS_DIR \
   RumiAI_LIB_DIR \
   RumiAI_CONF_DIR \
   RumiAI_LANG_DIR
@@ -201,8 +204,9 @@ esac
 
 RumiAI_OSARCH=$RumiAI_OSARCH_OS-$RumiAI_OSARCH_ARCH
 RumiAI_OSARCH_BIN_DIR=$RumiAI_BIN_DIR/@osarch/$RumiAI_OSARCH
+RumiAI_OSARCH_BIN_SYS_DIR=$RumiAI_OSARCH_BIN_DIR/@sys
 
-PATH=$RumiAI_OSARCH_BIN_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
+PATH=$RumiAI_OSARCH_BIN_SYS_DIR:$RumiAI_OSARCH_BIN_DIR:$RumiAI_BIN_SYS_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
 
 export -- \
   RumiAI_OSARCH_OS \
