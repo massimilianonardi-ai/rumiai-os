@@ -131,8 +131,14 @@ lang()
   # fi
 
   RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
-  [ "$?" != 0 ] && [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ] && RumiAI_text_safe_id_case "$RumiAI_LANGUAGE_FALLBACK" && RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
-  [ "$?" != 0 ] && RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
+  if [ "$?" != 0 ]
+  then
+    [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ] && RumiAI_text_safe_id_case "$RumiAI_LANGUAGE_FALLBACK" && RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
+    if [ "$?" != 0 ]
+    then
+      RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
+    fi
+  fi
 
   printf -- '%s\n' "$RumiAI_lang_message"
 )
