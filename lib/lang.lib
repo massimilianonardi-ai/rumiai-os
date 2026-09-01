@@ -86,7 +86,29 @@ RumiAI_lang_init()
 #     return 2
 #   fi
 # }
-
+#
+# lang()
+# (
+#   [ "$#" -eq 2 ] || return 1
+#
+#   RumiAI_lang_domain=$1
+#   RumiAI_lang_message_id=$2
+#
+#   ! RumiAI_text_safe_id "$RumiAI_lang_domain" || ! RumiAI_text_safe_id "$RumiAI_lang_message_id" || return 2
+#
+#   RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_lang_domain/$RumiAI_lang_message_id
+#
+#   if ! RumiAI_lang_message="$(command -p -- cat "$RumiAI_lang_file")" && [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ]
+#   then
+#     RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id
+#     if ! RumiAI_lang_message="$(command -p -- cat "$RumiAI_lang_file")"
+#     then
+#       RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
+#     fi
+#   fi
+#
+#   printf -- '%s\n' "$RumiAI_lang_message"
+# )
 
 lang()
 (
@@ -95,16 +117,17 @@ lang()
   RumiAI_lang_domain=$1
   RumiAI_lang_message_id=$2
 
-  ! RumiAI_text_safe_id "$RumiAI_lang_domain" || ! RumiAI_text_safe_id "$RumiAI_lang_message_id" || return 2
+  ! RumiAI_text_safe_id "$RumiAI_lang_domain" && ! RumiAI_text_safe_id "$RumiAI_lang_message_id" || return 2
 
   RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE/$RumiAI_lang_domain/$RumiAI_lang_message_id
 
+  RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
   if ! RumiAI_lang_message="$(command -p -- cat "$RumiAI_lang_file")" && [ "$RumiAI_LANGUAGE" != "$RumiAI_LANGUAGE_FALLBACK" ]
   then
     RumiAI_lang_file=$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id
     if ! RumiAI_lang_message="$(command -p -- cat "$RumiAI_lang_file")"
     then
-      RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
+      :
     fi
   fi
 
