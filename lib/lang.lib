@@ -9,34 +9,20 @@ RumiAI_lang_init()
   # set var - language
   RumiAI_LANGUAGE_FALLBACK=en_US
 
-  if ! RumiAI_LANGUAGE="$(command -p -- cat "$RumiAI_CONF_FILE_LANG_LANGUAGE")" || [ -z "$RumiAI_LANGUAGE" ]
+  if ! RumiAI_LANGUAGE="$(command -p -- cat "$RumiAI_CONF_FILE_LANG_LANGUAGE")" || [ -z "$RumiAI_LANGUAGE" ] || [ ! -d "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE" ]
   then
     printf -- '%s\n' 'RumiAI_BOOTSTRAP_ERROR_LANG_LANGUAGE_LOAD_ERROR' >&2
 
-    RumiAI_LANGUAGE="${LC_ALL%%.*}"
-    case "$RumiAI_LANGUAGE" in
-      [a-z][a-z]_[A-Z][A-Z]) : ;;
-      C|POSIX|*)
-        RumiAI_LANGUAGE="${LC_MESSAGES%%.*}"
-        case "$RumiAI_LANGUAGE" in
-          [a-z][a-z]_[A-Z][A-Z]) : ;;
-          C|POSIX|*)
-            RumiAI_LANGUAGE="${LANG%%.*}"
-            case "$RumiAI_LANGUAGE" in
-              [a-z][a-z]_[A-Z][A-Z]) : ;;
-              C|POSIX|*)
-                RumiAI_LANGUAGE="$RumiAI_LANGUAGE_FALLBACK"
-                ;;
-            esac
-            ;;
-        esac
-        ;;
-    esac
-  fi
-
-  if [ ! -d "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE" ]
-  then
-    RumiAI_LANGUAGE="$RumiAI_LANGUAGE_FALLBACK"
+    RumiAI_LANGUAGE="${LC_ALL%%.*}" && case "$RumiAI_LANGUAGE" in [a-z][a-z]_[A-Z][A-Z]) : ;; *) false;; esac && [ -d "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE" ]
+    if [ "$?" != 0 ]
+    then
+      RumiAI_LANGUAGE="${LC_MESSAGES%%.*}" && case "$RumiAI_LANGUAGE" in [a-z][a-z]_[A-Z][A-Z]) : ;; *) false;; esac && [ -d "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE" ]
+      if [ "$?" != 0 ]
+      then
+        RumiAI_LANGUAGE="${LANG%%.*}" && case "$RumiAI_LANGUAGE" in [a-z][a-z]_[A-Z][A-Z]) : ;; *) false;; esac && [ -d "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE" ]
+        [ "$?" != 0 ] && RumiAI_LANGUAGE="$RumiAI_LANGUAGE_FALLBACK"
+      fi
+    fi
   fi
 
   # set var - text encoding
