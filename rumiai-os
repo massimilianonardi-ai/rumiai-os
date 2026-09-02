@@ -104,6 +104,7 @@ m_BIN_EXT_OSARCH_DIR="$m_ROOT/bin/ext-osarch"
 m_LIB_DIR="$m_ROOT/lib"
 m_CONF_DIR="$m_ROOT/conf"
 m_LANG_DIR="$m_ROOT/lang"
+m_SRC_DIR="$m_ROOT/src"
 
 # export vars
 export -- \
@@ -114,7 +115,8 @@ export -- \
   m_BIN_EXT_OSARCH_DIR \
   m_LIB_DIR \
   m_CONF_DIR \
-  m_LANG_DIR
+  m_LANG_DIR \
+  m_SRC_DIR
 
 readonly -- \
   m_BIN_DIR \
@@ -124,7 +126,8 @@ readonly -- \
   m_BIN_EXT_OSARCH_DIR \
   m_LIB_DIR \
   m_CONF_DIR \
-  m_LANG_DIR
+  m_LANG_DIR \
+  m_SRC_DIR
 
 # set path
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
