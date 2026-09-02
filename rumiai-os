@@ -133,14 +133,14 @@ readonly -- m_BOOTSTRAP_BIN m_ROOT
 #-------------------------------------------------------------------------------
 
 # set values
-m_BIN_DIR=$m_ROOT/bin
-m_BIN_SYS_DIR=$m_BIN_DIR/sys
-m_BIN_SYS_OSARCH_DIR=$m_BIN_DIR/sys-osarch
-m_BIN_EXT_DIR=$m_ROOT/bin/ext
-m_BIN_EXT_OSARCH_DIR=$m_ROOT/bin/ext-osarch
-m_LIB_DIR=$m_ROOT/lib
-m_CONF_DIR=$m_ROOT/conf
-m_LANG_DIR=$m_ROOT/lang
+m_BIN_DIR="$m_ROOT/bin"
+m_BIN_SYS_DIR="$m_BIN_DIR/sys"
+m_BIN_SYS_OSARCH_DIR="$m_BIN_DIR/sys-osarch"
+m_BIN_EXT_DIR="$m_ROOT/bin/ext"
+m_BIN_EXT_OSARCH_DIR="$m_ROOT/bin/ext-osarch"
+m_LIB_DIR="$m_ROOT/lib"
+m_CONF_DIR="$m_ROOT/conf"
+m_LANG_DIR="$m_ROOT/lang"
 
 # export vars
 export -- \
@@ -163,13 +163,31 @@ readonly -- \
   m_CONF_DIR \
   m_LANG_DIR
 
-m_LANG_CURRENT_DIR=$m_ROOT/lang/current
-
 # set path
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 
 # export path
 export -- PATH
+
+# lang
+m_LANGUAGE_FALLBACK="en_US"
+m_TEXT_ENCODING="UTF-8"
+
+m_LANG_CURRENT_DIR="$m_ROOT/lang/current"
+m_LANG_FALLBACK_DIR="$m_ROOT/lang/$m_LANGUAGE_FALLBACK"
+
+# export variables
+export -- \
+  m_LANGUAGE_FALLBACK \
+  m_TEXT_ENCODING \
+  m_LANG_CURRENT_DIR \
+  m_LANG_FALLBACK_DIR
+
+readonly -- \
+  m_LANGUAGE_FALLBACK \
+  m_TEXT_ENCODING \
+  m_LANG_CURRENT_DIR \
+  m_LANG_FALLBACK_DIR
 
 #-------------------------------------------------------------------------------
 # LANG
@@ -183,10 +201,10 @@ lang()
   lang_domain=$1
   lang_message_id=$2
 
-  lang_message="$(command -p -- cat "$m_LANG_DIR/@current/$lang_domain/$lang_message_id" 2>/dev/null)"
+  lang_message="$(command -p -- cat "$m_LANG_CURRENT_DIR/$lang_domain/$lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
   then
-    case "$m_LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && lang_message="$(command -p -- cat "$m_LANG_DIR/$m_LANGUAGE_FALLBACK/$lang_domain/$lang_message_id" 2>/dev/null)"
+    case "$m_LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && lang_message="$(command -p -- cat "$m_LANG_FALLBACK_DIR/$lang_domain/$lang_message_id" 2>/dev/null)"
     if [ "$?" != 0 ]
     then
       lang_message="${lang_domain}.${lang_message_id}"
@@ -195,17 +213,6 @@ lang()
 
   printf -- '%s\n' "$lang_message"
 )
-
-# set var - language
-m_LANGUAGE_FALLBACK=en_US
-
-# set var - text encoding
-m_TEXT_ENCODING=UTF-8
-
-# export variables
-export -- \
-  m_LANGUAGE_FALLBACK \
-  m_TEXT_ENCODING
 
 #-------------------------------------------------------------------------------
 # LOGGER
