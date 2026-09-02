@@ -104,8 +104,8 @@ x}"
     printf -- '%s' "${cmd}x"
 )"
 
-  set -- "$1" "${2%
-x}"
+  # safeguard here has no additional newlines, only the last character
+  set -- "$1" "${2%x}"
 
   # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
   [ -n "$2" ] || return 3
