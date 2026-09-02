@@ -15,71 +15,21 @@ RumiAI_fatal()
 # CANONICALIZE EXISTING PATH FUNCTION
 #-------------------------------------------------------------------------------
 
-# RumiAI_path_canonicalize_existing <path>
-# returns a canonicalized version of <path>, return error if does not exist
-RumiAI_path_canonicalize_existing()
-(
-  if [ ! "$#" -eq 1 ] || [ ! -e "$1" ] || ! rp="$(command -p -- realpath -- "$1" 2>/dev/null)x"
-  then
-    return 1
-  fi
-
-  rp="${rp%x}"
-
-  [ -e "$rp" ] || return 1
-  printf -- '%s\n' "$rp"
-)
-
 m_readpathce_nnl()
 {
-  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+  [ -n "$1" ] || return 1
 
-  read -r "$1" <<EOF
-$(
-  set -eu
-  shift
-  # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline is automated by command -v
-  case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null)";; esac
-  [ -e "$cmd" ] || exit 1
-  # resolve and canonicalize an existing path portably
-  cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null)"
-  [ -e "$cmd" ] || exit 1
-  printf -- '%s' "$cmd"
-)
-EOF
-
-  # safeguard against invalid variable name: read will only fail when passing an invalid variable name
-  [ "$?" = 0 ] || return 2
-  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
-  eval "[ -n \"\$$1\" ] || return 3"
-}
-
-m_readpathce_2()
-{
-  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
-
-  # safeguard against invalid variable name: read will make entire script fail when passing an invalid variable name
-  case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
-
-  read -r "$1" <<EOF
-$(
-  set -eu
-  shift
-  # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
-  case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}";; esac
-  [ -e "$cmd" ] || exit 1
-  # resolve and canonicalize an existing path portably
-  cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
-  cmd="${cmd%
-x}"
-  [ -e "$cmd" ] || exit 1
-  printf -- '%s' "$cmd"
-)
-EOF
-
-  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
-  eval "[ -n \"\$$1\" ] || return 3"
+  printf -- '%s' "$(
+    set -eu
+    shift
+    # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline is automated by command -v
+    case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null)";; esac
+    [ -e "$cmd" ] || exit 1
+    # resolve and canonicalize an existing path portably
+    cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null)"
+    [ -e "$cmd" ] || exit 1
+    printf -- '%s' "$cmd"
+  )"
 }
 
 m_readpathce()
@@ -221,12 +171,10 @@ RumiAI_text_safe_id_case()
 # functions
 lang()
 (
-  [ "$#" -eq 2 ] || return 1
+  [ "$#" -eq 2 ] && case "${1}${2}" in [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) false;; esac || return 1
 
   RumiAI_lang_domain=$1
   RumiAI_lang_message_id=$2
-
-  RumiAI_text_safe_id "$RumiAI_lang_domain" && RumiAI_text_safe_id "$RumiAI_lang_message_id" || return 2
 
   RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/@current/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
