@@ -22,6 +22,8 @@ readpathce()
   # safeguard against invalid variable name: read will make entire script fail when passing an invalid variable name
   case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
 
+  eval $1=''
+
   set -- "$1" "$(
     set -eu
     shift
@@ -51,57 +53,57 @@ x}"
 #-------------------------------------------------------------------------------
 
 # canonicalize the path of this script and check that it is really a file
-readpathce "BOOTSTRAP_BIN" "$0" && [ -f "$BOOTSTRAP_BIN" ] || fatal 'BOOTSTRAP_BIN_RESOLUTION_ERROR'
+readpathce "m_BOOTSTRAP_BIN" "$0" && [ -f "$m_BOOTSTRAP_BIN" ] || fatal 'bootstrap bin resolution error'
 
 # extract root
-ROOT=${BOOTSTRAP_BIN%/*}
-[ -n "$ROOT" ] || ROOT=/
+m_ROOT=${m_BOOTSTRAP_BIN%/*}
+[ -n "$m_ROOT" ] || m_ROOT=/
 
 # check can cd into it
-(cd -- "$ROOT" 2>/dev/null) || fatal 'BOOTSTRAP_FATAL_ROOT_ERROR'
+(cd -- "$m_ROOT" 2>/dev/null) || fatal 'bootstrap dir error'
 
 # export root
-export -- BOOTSTRAP_BIN ROOT
+export -- m_BOOTSTRAP_BIN m_ROOT
 
-readonly -- BOOTSTRAP_BIN ROOT
+readonly -- m_BOOTSTRAP_BIN m_ROOT
 
 #-------------------------------------------------------------------------------
 # FUNDAMENTAL SYSTEM DIRECTORIES
 #-------------------------------------------------------------------------------
 
 # set values
-BIN_DIR=$ROOT/bin
-BIN_SYS_DIR=$BIN_DIR/sys
-BIN_SYS_OSARCH_DIR=$BIN_DIR/sys-osarch
-BIN_EXT_DIR=$ROOT/bin/ext
-BIN_EXT_OSARCH_DIR=$ROOT/bin/ext-osarch
-LIB_DIR=$ROOT/lib
-CONF_DIR=$ROOT/conf
-LANG_DIR=$ROOT/lang
+m_BIN_DIR=$m_ROOT/bin
+m_BIN_SYS_DIR=$m_BIN_DIR/sys
+m_BIN_SYS_OSARCH_DIR=$m_BIN_DIR/sys-osarch
+m_BIN_EXT_DIR=$m_ROOT/bin/ext
+m_BIN_EXT_OSARCH_DIR=$m_ROOT/bin/ext-osarch
+m_LIB_DIR=$m_ROOT/lib
+m_CONF_DIR=$m_ROOT/conf
+m_LANG_DIR=$m_ROOT/lang
 
 # export vars
 export -- \
-  BIN_DIR \
-  BIN_SYS_DIR \
-  BIN_SYS_OSARCH_DIR \
-  BIN_EXT_DIR \
-  BIN_EXT_OSARCH_DIR \
-  LIB_DIR \
-  CONF_DIR \
-  LANG_DIR
+  m_BIN_DIR \
+  m_BIN_SYS_DIR \
+  m_BIN_SYS_OSARCH_DIR \
+  m_BIN_EXT_DIR \
+  m_BIN_EXT_OSARCH_DIR \
+  m_LIB_DIR \
+  m_CONF_DIR \
+  m_LANG_DIR
 
 readonly -- \
-  BIN_DIR \
-  BIN_SYS_DIR \
-  BIN_SYS_OSARCH_DIR \
-  BIN_EXT_DIR \
-  BIN_EXT_OSARCH_DIR \
-  LIB_DIR \
-  CONF_DIR \
-  LANG_DIR
+  m_BIN_DIR \
+  m_BIN_SYS_DIR \
+  m_BIN_SYS_OSARCH_DIR \
+  m_BIN_EXT_DIR \
+  m_BIN_EXT_OSARCH_DIR \
+  m_LIB_DIR \
+  m_CONF_DIR \
+  m_LANG_DIR
 
 # set path
-PATH=$BIN_SYS_OSARCH_DIR:$BIN_SYS_DIR:$BIN_EXT_OSARCH_DIR:$BIN_EXT_DIR${PATH:+:$PATH}
+PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 
 # export path
 export -- PATH
@@ -174,10 +176,10 @@ lang()
   lang_domain=$1
   lang_message_id=$2
 
-  lang_message="$(command -p -- cat "$LANG_DIR/@current/$lang_domain/$lang_message_id" 2>/dev/null)"
+  lang_message="$(command -p -- cat "$m_LANG_DIR/@current/$lang_domain/$lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
   then
-    case "$LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && lang_message="$(command -p -- cat "$LANG_DIR/$LANGUAGE_FALLBACK/$lang_domain/$lang_message_id" 2>/dev/null)"
+    case "$m_LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && lang_message="$(command -p -- cat "$m_LANG_DIR/$m_LANGUAGE_FALLBACK/$lang_domain/$lang_message_id" 2>/dev/null)"
     if [ "$?" != 0 ]
     then
       lang_message="${lang_domain}.${lang_message_id}"
@@ -188,21 +190,21 @@ lang()
 )
 
 # set var - language
-LANGUAGE_FALLBACK=en_US
+m_LANGUAGE_FALLBACK=en_US
 
 # set var - text encoding
-TEXT_ENCODING=UTF-8
+m_TEXT_ENCODING=UTF-8
 
 # export variables
 export -- \
-  LANGUAGE_FALLBACK \
-  TEXT_ENCODING
+  m_LANGUAGE_FALLBACK \
+  m_TEXT_ENCODING
 
 #-------------------------------------------------------------------------------
 # LOGGER
 #-------------------------------------------------------------------------------
 
-: "${LOG_LEVEL:=info}"
+: "${m_LOG_LEVEL:=info}"
 
 log_fields_valid()
 (
@@ -248,7 +250,7 @@ log()
       ;;
   esac
 
-  case "$LOG_LEVEL" in
+  case "$m_LOG_LEVEL" in
     off | none)
       log_threshold="0"
       ;;
@@ -320,6 +322,16 @@ log()
   printf -- '\n' >&2
 )
 
+
+fatal()
+{
+  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; *) EXIT_CODE="$1"; shift;; esac
+
+  log fatal "$@"
+
+  exit "$EXIT_CODE"
+}
+
 #-------------------------------------------------------------------------------
 # EXECUTE
 #-------------------------------------------------------------------------------
@@ -333,18 +345,18 @@ then
 fi
 
 # execute command
-if ! readpathce "COMMAND_BIN" "$1" || [ ! -f "$COMMAND_BIN" ] || [ ! -r "$COMMAND_BIN" ] || [ "$COMMAND_BIN" = "$BOOTSTRAP_BIN" ]
+if ! readpathce "COMMAND_BIN" "$1" || [ ! -f "$m_COMMAND_BIN" ] || [ ! -r "$m_COMMAND_BIN" ] || [ "$m_COMMAND_BIN" = "$m_BOOTSTRAP_BIN" ]
 then
-  log fatal filesystem path-invalid command-original "$1" command-resolved "$COMMAND_BIN"
+  log fatal filesystem path-invalid command-original "$1" command-resolved "$m_COMMAND_BIN"
   exit 1
 fi
 shift
 
 # export variables
-export -- COMMAND_BIN
+export -- m_COMMAND_BIN
 
-readonly -- COMMAND_BIN
+readonly -- m_COMMAND_BIN
 
 # execute command
-. "$COMMAND_BIN"
+. "$m_COMMAND_BIN"
 exit $?
