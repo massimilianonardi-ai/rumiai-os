@@ -252,14 +252,14 @@ log()
         "error" \
         "log" >&2
       case "$exit_code" in
-        "1") printf -- '%s' "invalid number of arguments: $@" >&2;;
-        "2") printf -- '%s' "invalid log severity: $@" >&2;;
-        "3") printf -- '%s' "invalid m_LOG_LEVEL: $@" >&2;;
-        "4") printf -- '%s' "invalid log domain: $@" >&2;;
-        "5") printf -- '%s' "invalid log message id: $@" >&2;;
-        "6") printf -- '%s' "invalid parity check of <field, value> pairs: $@" >&2;;
-        "7") printf -- '%s' "invalid field name: $@" >&2;;
-        *) printf -- '%s' "unknown error: $@" >&2;;
+        "1") printf -- '%s ' "invalid number of arguments: $@" >&2;;
+        "2") printf -- '%s ' "invalid log severity: $@" >&2;;
+        "3") printf -- '%s ' "invalid m_LOG_LEVEL: $@" >&2;;
+        "4") printf -- '%s ' "invalid log domain: $@" >&2;;
+        "5") printf -- '%s ' "invalid log message id: $@" >&2;;
+        "6") printf -- '%s ' "invalid parity check of <field, value> pairs: $@" >&2;;
+        "7") printf -- '%s ' "invalid field name: $@" >&2;;
+        *) printf -- '%s ' "unknown error: $@" >&2;;
       esac
       printf -- '\n' >&2
 
