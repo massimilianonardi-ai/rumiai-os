@@ -6,7 +6,10 @@
 
 fatal()
 {
-  [ -n "$1" ] && printf -- '%s\n' "$1" >&2
+  printf -- '%s' "$1" >&2
+  shift
+  printf -- '.%s' "$@" >&2
+  printf -- '\n' >&2
 
   exit 1
 }
@@ -345,7 +348,7 @@ then
 fi
 
 # execute command
-if ! readpathce "COMMAND_BIN" "$1" || [ ! -f "$m_COMMAND_BIN" ] || [ ! -r "$m_COMMAND_BIN" ] || [ "$m_COMMAND_BIN" = "$m_BOOTSTRAP_BIN" ]
+if ! readpathce "m_COMMAND_BIN" "$1" || [ ! -f "$m_COMMAND_BIN" ] || [ ! -r "$m_COMMAND_BIN" ] || [ "$m_COMMAND_BIN" = "$m_BOOTSTRAP_BIN" ]
 then
   log fatal filesystem path-invalid command-original "$1" command-resolved "$m_COMMAND_BIN"
   exit 1
