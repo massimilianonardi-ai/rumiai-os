@@ -71,29 +71,6 @@ x}"
 
   eval $1='$2'
 }
-#-------------------------------------------------------------------------------
-
-text_safe_id()
-{
-  [ "$#" -eq 1 ] || return 1
-
-  case "$1" in
-    # first character match
-    [a-z0-9]*)
-      # middle characters and final character exclusions
-      case $1 in
-        *[!a-z0-9._-]* | *[._-])
-          return 1
-          ;;
-      esac
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-
-  return 0
-}
 
 #-------------------------------------------------------------------------------
 # ROOT RESOLUTION
@@ -197,19 +174,6 @@ lang()
 
 : "${m_LOG_LEVEL:=info}"
 
-log_fields_valid()
-(
-  [ "$(( $# % 2 ))" -eq 0 ] || return 1
-
-  while [ "$#" -gt 0 ]
-  do
-    text_safe_id "$1" || return 1
-    shift 2
-  done
-
-  return 0
-)
-
 log()
 (
   [ "$#" -ge 3 ] || return 1
@@ -218,79 +182,36 @@ log()
   shift
 
   case "$log_severity" in
-    fatal)
-      log_priority=1
-      ;;
-    error)
-      log_priority=2
-      ;;
-    warn)
-      log_priority=3
-      ;;
-    info)
-      log_priority=4
-      ;;
-    debug)
-      log_priority=5
-      ;;
-    trace)
-      log_priority=6
-      ;;
-    *)
-      return 2
-      ;;
+    fatal) log_priority=1;;
+    error) log_priority=2;;
+    warn) log_priority=3;;
+    info) log_priority=4;;
+    debug) log_priority=5;;
+    trace) log_priority=6;;
+    *) return 2;;
   esac
 
   case "$m_LOG_LEVEL" in
-    off | none)
-      log_threshold="0"
-      ;;
-    fatal)
-      log_threshold="1"
-      ;;
-    error)
-      log_threshold="2"
-      ;;
-    warn)
-      log_threshold="3"
-      ;;
-    info)
-      log_threshold="4"
-      ;;
-    debug)
-      log_threshold="5"
-      ;;
-    trace | all)
-      log_threshold="6"
-      ;;
-    *)
-      return 6
-      ;;
+    off | none) log_threshold="0";;
+    fatal) log_threshold="1";;
+    error) log_threshold="2";;
+    warn) log_threshold="3";;
+    info) log_threshold="4";;
+    debug) log_threshold="5";;
+    trace | all) log_threshold="6";;
+    *) return 6;;
   esac
 
   [ "$log_priority" -le "$log_threshold" ] || return 0
+
+  case "${1}${2}" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
 
   log_domain=$1
   log_message_id=$2
   shift 2
 
-  text_safe_id "$log_domain" || \
-    return 3
-
-  text_safe_id "$log_message_id" || \
-    return 4
-
-  log_fields_valid "$@" || return 5
-
-  if ! log_message=$(lang "$log_domain" "$log_message_id")
-  then
-    log_message=$log_domain.$log_message_id
-  fi
-
-  if ! log_timestamp=$(command -p -- date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)
-  then
-    log_timestamp=-
-  fi
+  log_message=$(lang "$log_domain" "$log_message_id") || log_message=$log_domain.$log_message_id
+  log_timestamp=$(command -p -- date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null) || log_timestamp=-
 
   printf -- '[%s] [%s] [%s.%s] %s' \
     "$log_timestamp" \
@@ -299,8 +220,10 @@ log()
     "$log_message_id" \
     "$log_message" >&2
 
+  [ "$(( $# % 2 ))" -eq 0 ] || return 3
   while [ "$#" -gt 0 ]
   do
+    case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) printf -- '\n' >&2; return 4 ;; esac
     log_field_name=$1
     log_field_value=$2
     shift 2
