@@ -222,7 +222,11 @@ log()
       "$log_message_id" \
       "$log_message" >&2
 
-    [ "$(( $# % 2 ))" -eq 0 ] || printf -- '\n' >&2; exit 6
+    if [ ! "$(( $# % 2 ))" -eq 0 ]
+    then
+      printf -- '\n' >&2
+      exit 6
+    fi
 
     while [ "$#" -gt 0 ]
     do
@@ -239,38 +243,29 @@ log()
     printf -- '\n' >&2
   )
 
-  # case "$?" in
-  #   "0") :;;
-  #   "1") printf -- '%s ' "[log] invalid number of arguments: $@" >&2; printf -- '\n' >&2;;
-  #   "2") printf -- '%s ' "[log] invalid log severity: $@" >&2; printf -- '\n' >&2;;
-  #   "3") printf -- '%s ' "[log] invalid m_LOG_LEVEL: $@" >&2; printf -- '\n' >&2;;
-  #   "4") printf -- '%s ' "[log] invalid log domain: $@" >&2; printf -- '\n' >&2;;
-  #   "5") printf -- '%s ' "[log] invalid log message id: $@" >&2; printf -- '\n' >&2;;
-  #   "6") printf -- '%s ' "[log] invalid parity check of <field, value> pairs: $@" >&2; printf -- '\n' >&2;;
-  #   "7") printf -- '%s ' "[log] invalid field name: $@" >&2; printf -- '\n' >&2;;
-  #   *) :;;
-  # esac
+  (
+    exit_code="$?"
+    if [ "$exit_code" != "0" ]
+    then
+      printf -- '[%s] [%s] [%s] ' \
+        "$(command -p -- date '+%Y-%m-%d|%H:%M:%S' 2>/dev/null)" \
+        "error" \
+        "log" >&2
+      case "$exit_code" in
+        "1") printf -- '%s' "invalid number of arguments: $@" >&2;;
+        "2") printf -- '%s' "invalid log severity: $@" >&2;;
+        "3") printf -- '%s' "invalid m_LOG_LEVEL: $@" >&2;;
+        "4") printf -- '%s' "invalid log domain: $@" >&2;;
+        "5") printf -- '%s' "invalid log message id: $@" >&2;;
+        "6") printf -- '%s' "invalid parity check of <field, value> pairs: $@" >&2;;
+        "7") printf -- '%s' "invalid field name: $@" >&2;;
+        *) printf -- '%s' "unknown error: $@" >&2;;
+      esac
+      printf -- '\n' >&2
 
-  if [ "$?" != "0" ]
-  then
-    printf -- '[%s] [%s] [%s] ' \
-      "$(command -p -- date '+%Y-%m-%d|%H:%M:%S' 2>/dev/null)" \
-      "error" \
-      "log" >&2
-    case "$?" in
-      "1") printf -- '%s' "invalid number of arguments: $@" >&2;;
-      "2") printf -- '%s' "invalid log severity: $@" >&2;;
-      "3") printf -- '%s' "invalid m_LOG_LEVEL: $@" >&2;;
-      "4") printf -- '%s' "invalid log domain: $@" >&2;;
-      "5") printf -- '%s' "invalid log message id: $@" >&2;;
-      "6") printf -- '%s' "invalid parity check of <field, value> pairs: $@" >&2;;
-      "7") printf -- '%s' "invalid field name: $@" >&2;;
-      *) :;;
-    esac
-    printf -- '\n' >&2
-
-    return 1
-  fi
+      exit "$exit_code"
+    fi
+  )
 }
 
 #-------------------------------------------------------------------------------
