@@ -26,7 +26,7 @@ m_readpathce()
     set -eu
     shift
     # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
-    case $1 in */*) cmd="$1";; *) if [ -e "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+    case $1 in */*) cmd="$1";; *) if [ -e "./$1" ] || [ -L "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
 x}"; fi;; esac
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
@@ -71,7 +71,10 @@ readonly -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
 
 # set values
 RumiAI_BIN_DIR=$RumiAI_ROOT/bin
-RumiAI_BIN_SYS_DIR=$RumiAI_BIN_DIR/@sys
+RumiAI_BIN_SYS_DIR=$RumiAI_BIN_DIR/sys
+RumiAI_BIN_SYS_OSARCH_DIR=$RumiAI_BIN_DIR/sys-osarch
+RumiAI_BIN_EXT_DIR=$RumiAI_ROOT/bin/ext
+RumiAI_BIN_EXT_OSARCH_DIR=$RumiAI_ROOT/bin/ext-osarch
 RumiAI_LIB_DIR=$RumiAI_ROOT/lib
 RumiAI_CONF_DIR=$RumiAI_ROOT/conf
 RumiAI_LANG_DIR=$RumiAI_ROOT/lang
@@ -80,6 +83,9 @@ RumiAI_LANG_DIR=$RumiAI_ROOT/lang
 export -- \
   RumiAI_BIN_DIR \
   RumiAI_BIN_SYS_DIR \
+  RumiAI_BIN_SYS_OSARCH_DIR \
+  RumiAI_BIN_EXT_DIR \
+  RumiAI_BIN_EXT_OSARCH_DIR \
   RumiAI_LIB_DIR \
   RumiAI_CONF_DIR \
   RumiAI_LANG_DIR
@@ -87,9 +93,18 @@ export -- \
 readonly -- \
   RumiAI_BIN_DIR \
   RumiAI_BIN_SYS_DIR \
+  RumiAI_BIN_SYS_OSARCH_DIR \
+  RumiAI_BIN_EXT_DIR \
+  RumiAI_BIN_EXT_OSARCH_DIR \
   RumiAI_LIB_DIR \
   RumiAI_CONF_DIR \
   RumiAI_LANG_DIR
+
+# set path
+PATH=$RumiAI_BIN_SYS_OSARCH_DIR:$RumiAI_BIN_SYS_DIR:$RumiAI_BIN_EXT_OSARCH_DIR:$RumiAI_BIN_EXT_DIR${PATH:+:$PATH}
+
+# export path
+export -- PATH
 
 #-------------------------------------------------------------------------------
 # TEXT
@@ -304,56 +319,6 @@ log()
 
   printf -- '\n' >&2
 )
-
-#-------------------------------------------------------------------------------
-# OSARCH DETECTION
-#-------------------------------------------------------------------------------
-
-RumiAI_OSARCH_OS=$(command -p uname -s 2>/dev/null) || RumiAI_fatal 'RumiAI_BOOTSTRAP_FATAL_OSARCH_ERROR'
-
-# normalize known operative systems, leave intact others
-case $RumiAI_OSARCH_OS in
-  Linux)
-    RumiAI_OSARCH_OS="linux"
-    ;;
-  Darwin)
-    RumiAI_OSARCH_OS="macos"
-    ;;
-  MINGW*|MSYS*|CYGWIN*)
-    RumiAI_OSARCH_OS="windows"
-    ;;
-esac
-
-RumiAI_OSARCH_ARCH=$(command -p uname -m 2>/dev/null) || RumiAI_fatal 'RumiAI_BOOTSTRAP_FATAL_OSARCH_ERROR'
-
-# normalize known architectures, leave intact others
-case $RumiAI_OSARCH_ARCH in
-  arm64|aarch64)
-    RumiAI_OSARCH_ARCH="arm64"
-    ;;
-  x86_64|amd64|AMD64)
-    RumiAI_OSARCH_ARCH="x86_64"
-    ;;
-esac
-
-RumiAI_OSARCH=$RumiAI_OSARCH_OS-$RumiAI_OSARCH_ARCH
-RumiAI_OSARCH_BIN_DIR=$RumiAI_BIN_DIR/@osarch/$RumiAI_OSARCH
-RumiAI_OSARCH_BIN_SYS_DIR=$RumiAI_OSARCH_BIN_DIR/@sys
-
-PATH=$RumiAI_OSARCH_BIN_SYS_DIR:$RumiAI_OSARCH_BIN_DIR:$RumiAI_BIN_SYS_DIR:$RumiAI_BIN_DIR${PATH:+:$PATH}
-
-export -- \
-  RumiAI_OSARCH_OS \
-  RumiAI_OSARCH_ARCH \
-  RumiAI_OSARCH \
-  RumiAI_OSARCH_BIN_DIR \
-  PATH
-
-readonly -- \
-  RumiAI_OSARCH_OS \
-  RumiAI_OSARCH_ARCH \
-  RumiAI_OSARCH \
-  RumiAI_OSARCH_BIN_DIR
 
 #-------------------------------------------------------------------------------
 # EXECUTE
