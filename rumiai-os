@@ -6,12 +6,20 @@
 
 fatal()
 {
-  printf -- '%s' "$1" >&2
-  shift
-  printf -- '.%s' "$@" >&2
-  printf -- '\n' >&2
+  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; *) EXIT_CODE="$1"; shift;; esac
 
-  exit 1
+  if [ "$#" -gt "0" ]
+  then
+    printf -- '%s' "$1" >&2
+    shift
+    if [ "$#" -gt "0" ]
+    then
+      printf -- '.%s' "$@" >&2
+    fi
+    printf -- '\n' >&2
+  fi
+
+  exit "$EXIT_CODE"
 }
 
 #-------------------------------------------------------------------------------
