@@ -22,6 +22,29 @@ fatal()
   exit "$EXIT_CODE"
 }
 
+log()
+{
+  if [ "$#" -gt "0" ]
+  then
+    printf -- '%s' "$1" >&2
+    shift
+    if [ "$#" -gt "0" ]
+    then
+      printf -- '.%s' "$@" >&2
+    fi
+    printf -- '\n' >&2
+  fi
+}
+
+fatal()
+{
+  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+
+  log fatal "$@"
+
+  exit "$EXIT_CODE"
+}
+
 #-------------------------------------------------------------------------------
 
 readpathce()
@@ -337,14 +360,14 @@ log()
 )
 
 
-fatal()
-{
-  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
-
-  log fatal "$@"
-
-  exit "$EXIT_CODE"
-}
+# fatal()
+# {
+#   case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+#
+#   log fatal "$@"
+#
+#   exit "$EXIT_CODE"
+# }
 
 #-------------------------------------------------------------------------------
 # EXECUTE
