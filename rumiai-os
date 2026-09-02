@@ -4,7 +4,7 @@
 # FATAL ERROR FUNCTION
 #-------------------------------------------------------------------------------
 
-RumiAI_fatal()
+fatal()
 {
   [ -n "$1" ] && printf -- '%s\n' "$1" >&2
 
@@ -15,7 +15,7 @@ RumiAI_fatal()
 # CANONICALIZE EXISTING PATH FUNCTION
 #-------------------------------------------------------------------------------
 
-m_readpathce()
+readpathce()
 {
   [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
 
@@ -51,57 +51,57 @@ x}"
 #-------------------------------------------------------------------------------
 
 # canonicalize the path of this script and check that it is really a file
-m_readpathce "RumiAI_BOOTSTRAP_BIN" "$0" && [ -f "$RumiAI_BOOTSTRAP_BIN" ] || RumiAI_fatal 'RumiAI_BOOTSTRAP_BIN_RESOLUTION_ERROR'
+readpathce "BOOTSTRAP_BIN" "$0" && [ -f "$BOOTSTRAP_BIN" ] || fatal 'BOOTSTRAP_BIN_RESOLUTION_ERROR'
 
 # extract root
-RumiAI_ROOT=${RumiAI_BOOTSTRAP_BIN%/*}
-[ -n "$RumiAI_ROOT" ] || RumiAI_ROOT=/
+ROOT=${BOOTSTRAP_BIN%/*}
+[ -n "$ROOT" ] || ROOT=/
 
 # check can cd into it
-(cd -- "$RumiAI_ROOT" 2>/dev/null) || RumiAI_fatal 'RumiAI_BOOTSTRAP_FATAL_ROOT_ERROR'
+(cd -- "$ROOT" 2>/dev/null) || fatal 'BOOTSTRAP_FATAL_ROOT_ERROR'
 
 # export root
-export -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
+export -- BOOTSTRAP_BIN ROOT
 
-readonly -- RumiAI_BOOTSTRAP_BIN RumiAI_ROOT
+readonly -- BOOTSTRAP_BIN ROOT
 
 #-------------------------------------------------------------------------------
 # FUNDAMENTAL SYSTEM DIRECTORIES
 #-------------------------------------------------------------------------------
 
 # set values
-RumiAI_BIN_DIR=$RumiAI_ROOT/bin
-RumiAI_BIN_SYS_DIR=$RumiAI_BIN_DIR/sys
-RumiAI_BIN_SYS_OSARCH_DIR=$RumiAI_BIN_DIR/sys-osarch
-RumiAI_BIN_EXT_DIR=$RumiAI_ROOT/bin/ext
-RumiAI_BIN_EXT_OSARCH_DIR=$RumiAI_ROOT/bin/ext-osarch
-RumiAI_LIB_DIR=$RumiAI_ROOT/lib
-RumiAI_CONF_DIR=$RumiAI_ROOT/conf
-RumiAI_LANG_DIR=$RumiAI_ROOT/lang
+BIN_DIR=$ROOT/bin
+BIN_SYS_DIR=$BIN_DIR/sys
+BIN_SYS_OSARCH_DIR=$BIN_DIR/sys-osarch
+BIN_EXT_DIR=$ROOT/bin/ext
+BIN_EXT_OSARCH_DIR=$ROOT/bin/ext-osarch
+LIB_DIR=$ROOT/lib
+CONF_DIR=$ROOT/conf
+LANG_DIR=$ROOT/lang
 
 # export vars
 export -- \
-  RumiAI_BIN_DIR \
-  RumiAI_BIN_SYS_DIR \
-  RumiAI_BIN_SYS_OSARCH_DIR \
-  RumiAI_BIN_EXT_DIR \
-  RumiAI_BIN_EXT_OSARCH_DIR \
-  RumiAI_LIB_DIR \
-  RumiAI_CONF_DIR \
-  RumiAI_LANG_DIR
+  BIN_DIR \
+  BIN_SYS_DIR \
+  BIN_SYS_OSARCH_DIR \
+  BIN_EXT_DIR \
+  BIN_EXT_OSARCH_DIR \
+  LIB_DIR \
+  CONF_DIR \
+  LANG_DIR
 
 readonly -- \
-  RumiAI_BIN_DIR \
-  RumiAI_BIN_SYS_DIR \
-  RumiAI_BIN_SYS_OSARCH_DIR \
-  RumiAI_BIN_EXT_DIR \
-  RumiAI_BIN_EXT_OSARCH_DIR \
-  RumiAI_LIB_DIR \
-  RumiAI_CONF_DIR \
-  RumiAI_LANG_DIR
+  BIN_DIR \
+  BIN_SYS_DIR \
+  BIN_SYS_OSARCH_DIR \
+  BIN_EXT_DIR \
+  BIN_EXT_OSARCH_DIR \
+  LIB_DIR \
+  CONF_DIR \
+  LANG_DIR
 
 # set path
-PATH=$RumiAI_BIN_SYS_OSARCH_DIR:$RumiAI_BIN_SYS_DIR:$RumiAI_BIN_EXT_OSARCH_DIR:$RumiAI_BIN_EXT_DIR${PATH:+:$PATH}
+PATH=$BIN_SYS_OSARCH_DIR:$BIN_SYS_DIR:$BIN_EXT_OSARCH_DIR:$BIN_EXT_DIR${PATH:+:$PATH}
 
 # export path
 export -- PATH
@@ -111,14 +111,14 @@ export -- PATH
 #-------------------------------------------------------------------------------
 
 # functions
-RumiAI_is_integer()
+is_integer()
 {
   [ "$#" -eq 1 ] || return 1
 
   case "$1" in *[!0-9]* | "") return 2;; *) return 0;; esac
 }
 
-RumiAI_text_safe_id()
+text_safe_id()
 {
   [ "$#" -eq 1 ] || return 1
 
@@ -140,7 +140,7 @@ RumiAI_text_safe_id()
   return 0
 }
 
-RumiAI_text_safe_id_case()
+text_safe_id_case()
 {
   [ "$#" -eq 1 ] || return 1
 
@@ -171,46 +171,46 @@ lang()
 (
   [ "$#" -eq 2 ] && case "${1}${2}" in [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) false;; esac || return 1
 
-  RumiAI_lang_domain=$1
-  RumiAI_lang_message_id=$2
+  lang_domain=$1
+  lang_message_id=$2
 
-  RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/@current/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
+  lang_message="$(command -p -- cat "$LANG_DIR/@current/$lang_domain/$lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
   then
-    case "$RumiAI_LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/$RumiAI_LANGUAGE_FALLBACK/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
+    case "$LANGUAGE_FALLBACK" in [a-z][a-z]_[A-Z][A-Z]) true;; *) false;; esac && lang_message="$(command -p -- cat "$LANG_DIR/$LANGUAGE_FALLBACK/$lang_domain/$lang_message_id" 2>/dev/null)"
     if [ "$?" != 0 ]
     then
-      RumiAI_lang_message="${RumiAI_lang_domain}.${RumiAI_lang_message_id}"
+      lang_message="${lang_domain}.${lang_message_id}"
     fi
   fi
 
-  printf -- '%s\n' "$RumiAI_lang_message"
+  printf -- '%s\n' "$lang_message"
 )
 
 # set var - language
-RumiAI_LANGUAGE_FALLBACK=en_US
+LANGUAGE_FALLBACK=en_US
 
 # set var - text encoding
-RumiAI_TEXT_ENCODING=UTF-8
+TEXT_ENCODING=UTF-8
 
 # export variables
 export -- \
-  RumiAI_LANGUAGE_FALLBACK \
-  RumiAI_TEXT_ENCODING
+  LANGUAGE_FALLBACK \
+  TEXT_ENCODING
 
 #-------------------------------------------------------------------------------
 # LOGGER
 #-------------------------------------------------------------------------------
 
-: "${RumiAI_LOG_LEVEL:=info}"
+: "${LOG_LEVEL:=info}"
 
-RumiAI_log_fields_valid()
+log_fields_valid()
 (
   [ "$(( $# % 2 ))" -eq 0 ] || return 1
 
   while [ "$#" -gt 0 ]
   do
-    RumiAI_text_safe_id "$1" || return 1
+    text_safe_id "$1" || return 1
     shift 2
   done
 
@@ -221,100 +221,100 @@ log()
 (
   [ "$#" -ge 3 ] || return 1
 
-  RumiAI_log_severity="$1"
+  log_severity="$1"
   shift
 
-  case "$RumiAI_log_severity" in
+  case "$log_severity" in
     fatal)
-      RumiAI_log_priority=1
+      log_priority=1
       ;;
     error)
-      RumiAI_log_priority=2
+      log_priority=2
       ;;
     warn)
-      RumiAI_log_priority=3
+      log_priority=3
       ;;
     info)
-      RumiAI_log_priority=4
+      log_priority=4
       ;;
     debug)
-      RumiAI_log_priority=5
+      log_priority=5
       ;;
     trace)
-      RumiAI_log_priority=6
+      log_priority=6
       ;;
     *)
       return 2
       ;;
   esac
 
-  case "$RumiAI_LOG_LEVEL" in
+  case "$LOG_LEVEL" in
     off | none)
-      RumiAI_log_threshold="0"
+      log_threshold="0"
       ;;
     fatal)
-      RumiAI_log_threshold="1"
+      log_threshold="1"
       ;;
     error)
-      RumiAI_log_threshold="2"
+      log_threshold="2"
       ;;
     warn)
-      RumiAI_log_threshold="3"
+      log_threshold="3"
       ;;
     info)
-      RumiAI_log_threshold="4"
+      log_threshold="4"
       ;;
     debug)
-      RumiAI_log_threshold="5"
+      log_threshold="5"
       ;;
     trace | all)
-      RumiAI_log_threshold="6"
+      log_threshold="6"
       ;;
     *)
       return 6
       ;;
   esac
 
-  [ "$RumiAI_log_priority" -le "$RumiAI_log_threshold" ] || return 0
+  [ "$log_priority" -le "$log_threshold" ] || return 0
 
-  RumiAI_log_domain=$1
-  RumiAI_log_message_id=$2
+  log_domain=$1
+  log_message_id=$2
   shift 2
 
-  RumiAI_text_safe_id "$RumiAI_log_domain" || \
+  text_safe_id "$log_domain" || \
     return 3
 
-  RumiAI_text_safe_id "$RumiAI_log_message_id" || \
+  text_safe_id "$log_message_id" || \
     return 4
 
-  RumiAI_log_fields_valid "$@" || return 5
+  log_fields_valid "$@" || return 5
 
-  if ! RumiAI_log_message=$(lang "$RumiAI_log_domain" "$RumiAI_log_message_id")
+  if ! log_message=$(lang "$log_domain" "$log_message_id")
   then
-    RumiAI_log_message=$RumiAI_log_domain.$RumiAI_log_message_id
+    log_message=$log_domain.$log_message_id
   fi
 
-  if ! RumiAI_log_timestamp=$(command -p -- date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)
+  if ! log_timestamp=$(command -p -- date '+%Y-%m-%dT%H:%M:%S' 2>/dev/null)
   then
-    RumiAI_log_timestamp=-
+    log_timestamp=-
   fi
 
   printf -- '[%s] [%s] [%s.%s] %s' \
-    "$RumiAI_log_timestamp" \
-    "$RumiAI_log_severity" \
-    "$RumiAI_log_domain" \
-    "$RumiAI_log_message_id" \
-    "$RumiAI_log_message" >&2
+    "$log_timestamp" \
+    "$log_severity" \
+    "$log_domain" \
+    "$log_message_id" \
+    "$log_message" >&2
 
   while [ "$#" -gt 0 ]
   do
-    RumiAI_log_field_name=$1
-    RumiAI_log_field_value=$2
+    log_field_name=$1
+    log_field_value=$2
     shift 2
 
     printf -- ' [%s="%s"]' \
-      "$RumiAI_log_field_name" \
-      "$RumiAI_log_field_value" >&2
+      "$log_field_name" \
+      "$log_field_value" >&2
   done
 
   printf -- '\n' >&2
@@ -333,18 +333,18 @@ then
 fi
 
 # execute command
-if ! m_readpathce "RumiAI_COMMAND_BIN" "$1" || [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
+if ! readpathce "COMMAND_BIN" "$1" || [ ! -f "$COMMAND_BIN" ] || [ ! -r "$COMMAND_BIN" ] || [ "$COMMAND_BIN" = "$BOOTSTRAP_BIN" ]
 then
-  log fatal filesystem path-invalid command-original "$1" command-resolved "$RumiAI_COMMAND_BIN"
+  log fatal filesystem path-invalid command-original "$1" command-resolved "$COMMAND_BIN"
   exit 1
 fi
 shift
 
 # export variables
-export -- RumiAI_COMMAND_BIN
+export -- COMMAND_BIN
 
-readonly -- RumiAI_COMMAND_BIN
+readonly -- COMMAND_BIN
 
 # execute command
-. "$RumiAI_COMMAND_BIN"
+. "$COMMAND_BIN"
 exit $?
