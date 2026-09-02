@@ -6,7 +6,7 @@
 
 fatal()
 {
-  case "$1" in *[!0-9]* | "" | "0" | ????*) EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
 
   if [ "$#" -gt "0" ]
   then
@@ -162,6 +162,8 @@ readonly -- \
   m_LIB_DIR \
   m_CONF_DIR \
   m_LANG_DIR
+
+m_LANG_CURRENT_DIR=$m_ROOT/lang/current
 
 # set path
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
@@ -330,7 +332,7 @@ log()
 
 fatal()
 {
-  case "$1" in *[!0-9]* | "" | "0" | ????*) EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
 
   log fatal "$@"
 
