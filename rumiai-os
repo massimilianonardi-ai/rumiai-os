@@ -204,7 +204,29 @@ log()
 
   [ "$log_priority" -le "$log_threshold" ] || return 0
 
-  case "${1}${2}" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
+# text_safe_id()
+# {
+#   [ "$#" -eq 1 ] || return 1
+#
+#   case "$1" in
+#     # first character match
+#     [a-z0-9]*)
+#       # middle characters and final character exclusions
+#       case $1 in
+#         *[!a-z0-9._-]* | *[._-])
+#           return 1
+#           ;;
+#       esac
+#       ;;
+#     *)
+#       return 1
+#       ;;
+#   esac
+#
+#   return 0
+# }
+  case "$1" in "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) return 2 ;; esac
+  case "$2" in "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) return 2 ;; esac
 
   log_domain=$1
   log_message_id=$2
