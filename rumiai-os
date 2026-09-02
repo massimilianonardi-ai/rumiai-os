@@ -30,21 +30,64 @@ RumiAI_path_canonicalize_existing()
   printf -- '%s\n' "$rp"
 )
 
+m_readpathce_nnl()
+{
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+
+  read -r "$1" <<EOF
+$(
+  set -eu
+  shift
+  # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline is automated by command -v
+  case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null)";; esac
+  [ -e "$cmd" ] || exit 1
+  # resolve and canonicalize an existing path portably
+  cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null)"
+  [ -e "$cmd" ] || exit 1
+  printf -- '%s' "$cmd"
+)
+EOF
+
+  # safeguard against invalid variable name: read will only fail when passing an invalid variable name
+  [ "$?" = 0 ] || return 2
+  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
+  eval "[ -n \"\$$1\" ] || return 3"
+}
+
+m_readpathce()
+{
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+
+  # safeguard against invalid variable name: read will make entire script fail when passing an invalid variable name
+  case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
+
+  read -r "$1" <<EOF
+$(
+  set -eu
+  shift
+  # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
+  case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}";; esac
+  [ -e "$cmd" ] || exit 1
+  # resolve and canonicalize an existing path portably
+  cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
+  cmd="${cmd%
+x}"
+  [ -e "$cmd" ] || exit 1
+  printf -- '%s' "$cmd"
+)
+EOF
+
+  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
+  eval "[ -n \"\$$1\" ] || return 3"
+}
+
 #-------------------------------------------------------------------------------
 # ROOT RESOLUTION
 #-------------------------------------------------------------------------------
 
-# if invoked by PATH search, then acquire path used
-case $0 in
-  */*) RumiAI_BOOTSTRAP_BIN=$0;;
-  *) RumiAI_BOOTSTRAP_BIN=$(command -v -- "$0" 2>/dev/null) || RumiAI_fatal 'RumiAI_BOOTSTRAP_BIN_RESOLUTION_ERROR';;
-esac
-
-# canonicalize the path of this script
-RumiAI_BOOTSTRAP_BIN=$(RumiAI_path_canonicalize_existing "$RumiAI_BOOTSTRAP_BIN") || RumiAI_fatal 'RumiAI_BOOTSTRAP_FATAL_REALPATH_ERROR'
-
-# check that it is really a file
-[ -f "$RumiAI_BOOTSTRAP_BIN" ] || RumiAI_fatal 'RumiAI_BOOTSTRAP_FATAL_BIN_ERROR'
+# canonicalize the path of this script and check that it is really a file
+m_readpathce "RumiAI_BOOTSTRAP_BIN" "$0" && [ -f "$RumiAI_BOOTSTRAP_BIN" ] || RumiAI_fatal 'RumiAI_BOOTSTRAP_BIN_RESOLUTION_ERROR'
 
 # extract root
 RumiAI_ROOT=${RumiAI_BOOTSTRAP_BIN%/*}
@@ -354,9 +397,6 @@ readonly -- \
 #-------------------------------------------------------------------------------
 # EXECUTE
 #-------------------------------------------------------------------------------
-
-# error codes
-RumiAI_FATAL_EXIT_CODE="$RumiAI_FATAL_EXIT_CODE_EXECUTION"
 
 # execute shell
 if [ "$#" -eq 0 ]
