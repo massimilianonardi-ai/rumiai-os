@@ -26,8 +26,8 @@ m_readpathce()
     set -eu
     shift
     # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
-    case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}";; esac
+    case $1 in */*) cmd="$1";; *) if [ -e "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}"; fi;; esac
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
@@ -370,7 +370,7 @@ fi
 # execute command
 if ! m_readpathce "RumiAI_COMMAND_BIN" "$1" || [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
 then
-  log fatal filesystem path-invalid command-invalid "$RumiAI_COMMAND_BIN"
+  log fatal filesystem path-invalid command-original "$1" command-resolved "$RumiAI_COMMAND_BIN"
   exit 1
 fi
 shift
