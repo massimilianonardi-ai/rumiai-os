@@ -181,13 +181,15 @@ readonly -- \
 
 # functions
 lang()
-{
+(
   [ "$#" -eq 2 ] && case "${1}${2}" in [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) false;; esac || return 1
 
-  printf -- '%s\n' "$(command -p -- cat "$m_LANG_CURRENT_DIR/$1/$2" 2>/dev/null)" || \
-  printf -- '%s\n' "$(command -p -- cat "$m_LANG_FALLBACK_DIR/$1/$2" 2>/dev/null)" || \
-  printf -- '%s\n' "${lang_domain}.${lang_message_id}"
-}
+  lang_message="$(command -p -- cat "$m_LANG_CURRENT_DIR/$1/$2" 2>/dev/null)" || \
+  lang_message="$(command -p -- cat "$m_LANG_FALLBACK_DIR/$1/$2" 2>/dev/null)" || \
+  lang_message="${1}.${2}"
+
+  printf -- '%s\n' "$lang_message"
+)
 
 #-------------------------------------------------------------------------------
 # LOGGER
