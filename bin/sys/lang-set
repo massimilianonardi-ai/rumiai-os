@@ -1,0 +1,97 @@
+#!/usr/bin/env rumiai-os
+
+(
+  lang_set_count()
+  {
+    lang_set_total=0
+    for lang_set_domain_dir in "$1"/*
+    do
+      [ -d "$lang_set_domain_dir" ] || continue
+      for lang_set_message_file in "$lang_set_domain_dir"/*
+      do
+        [ -f "$lang_set_message_file" ] && [ -s "$lang_set_message_file" ] || continue
+        lang_set_total=$((lang_set_total + 1))
+      done
+    done
+    printf -- '%s\n' "$lang_set_total"
+  }
+
+  [ "$#" -le 1 ] || {
+    log error execution invalid-arguments
+    exit 1
+  }
+
+  lang_set_requested=${1-}
+  lang_set_selected_dir=
+
+  for lang_set_dir in "$m_LANG_DIR"/*
+  do
+    [ -d "$lang_set_dir" ] || continue
+    lang_set_name=${lang_set_dir##*/}
+    [ "$lang_set_name" != current ] || continue
+    if [ "$#" -eq 1 ] && [ "$lang_set_name" = "$lang_set_requested" ]
+    then
+      lang_set_selected_dir=$lang_set_dir
+    fi
+  done
+
+  if [ "$#" -eq 0 ]
+  then
+    lang_set_current=$m_LANGUAGE_FALLBACK
+    if readpathce lang_set_current_path "$m_LANG_CURRENT_DIR" 2>/dev/null
+    then
+      for lang_set_dir in "$m_LANG_DIR"/*
+      do
+        [ -d "$lang_set_dir" ] || continue
+        lang_set_name=${lang_set_dir##*/}
+        [ "$lang_set_name" != current ] || continue
+        if [ "$lang_set_current_path" = "$lang_set_dir" ]
+        then
+          lang_set_current=$lang_set_name
+          break
+        fi
+      done
+    fi
+
+    printf -- 'current\t%s\n' "$lang_set_current"
+    for lang_set_dir in "$m_LANG_DIR"/*
+    do
+      [ -d "$lang_set_dir" ] || continue
+      lang_set_name=${lang_set_dir##*/}
+      [ "$lang_set_name" != current ] || continue
+      printf -- '%s\t%s\n' "$lang_set_name" "$(lang_set_count "$lang_set_dir")"
+    done
+    exit 0
+  fi
+
+  [ -n "$lang_set_selected_dir" ] || {
+    log error execution invalid-arguments language "$lang_set_requested"
+    exit 1
+  }
+
+  if [ -e "$m_LANG_CURRENT_DIR" ] && [ ! -L "$m_LANG_CURRENT_DIR" ]
+  then
+    log error filesystem path-invalid path "$m_LANG_CURRENT_DIR"
+    exit 1
+  fi
+
+  lang_set_tmp=$m_LANG_DIR/.current.$$
+  command -p -- rm -f "$lang_set_tmp" || {
+    log error execution execution-failed operation lang-set
+    exit 1
+  }
+  command -p -- ln -s "$lang_set_requested" "$lang_set_tmp" || {
+    log error execution execution-failed operation lang-set
+    exit 1
+  }
+  command -p -- rm -f "$m_LANG_CURRENT_DIR" || {
+    command -p -- rm -f "$lang_set_tmp" 2>/dev/null || :
+    log error execution execution-failed operation lang-set
+    exit 1
+  }
+  command -p -- mv "$lang_set_tmp" "$m_LANG_CURRENT_DIR" || {
+    command -p -- rm -f "$lang_set_tmp" 2>/dev/null || :
+    log error execution execution-failed operation lang-set
+    exit 1
+  }
+)

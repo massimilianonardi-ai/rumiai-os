@@ -1,0 +1,80 @@
+#!/usr/bin/env rumiai-os
+
+(
+  osarch_update_link()
+  {
+    osarch_link=$1
+    osarch_target=$2
+
+    if [ -e "$osarch_link" ] && [ ! -L "$osarch_link" ]
+    then
+      return 2
+    fi
+
+    osarch_tmp=${osarch_link}.tmp.$$
+    command -p -- rm -f "$osarch_tmp" || return 1
+    command -p -- ln -s "$osarch_target" "$osarch_tmp" || return 1
+    command -p -- rm -f "$osarch_link" || {
+      command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
+      return 1
+    }
+    command -p -- mv "$osarch_tmp" "$osarch_link" || {
+      command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
+      return 1
+    }
+  }
+
+  osarch_system=$(command -p -- uname -s 2>/dev/null) || {
+    log error execution execution-failed operation osarch-detection
+    exit 1
+  }
+  case $osarch_system in
+    Linux) osarch_platform=linux ;;
+    Darwin) osarch_platform=macos ;;
+    CYGWIN*|MSYS*|MINGW*) osarch_platform=windows ;;
+    *)
+      log error execution execution-failed operation osarch-detection system "$osarch_system"
+      exit 1
+      ;;
+  esac
+
+  osarch_machine=$(command -p -- uname -m 2>/dev/null) || {
+    log error execution execution-failed operation osarch-detection
+    exit 1
+  }
+  case $osarch_machine in
+    arm64|ARM64|aarch64|AARCH64) osarch_architecture=arm64 ;;
+    x86_64|X86_64|amd64|AMD64|x64|X64) osarch_architecture=x86_64 ;;
+    *)
+      log error execution execution-failed operation osarch-detection architecture "$osarch_machine"
+      exit 1
+      ;;
+  esac
+
+  osarch=$osarch_platform-$osarch_architecture
+  osarch_sys_target=sys-$osarch
+  osarch_ext_target=ext-$osarch
+  osarch_sys_dir=$m_BIN_DIR/$osarch_sys_target
+  osarch_ext_dir=$m_BIN_DIR/$osarch_ext_target
+
+  command -p -- mkdir -p "$osarch_sys_dir" "$osarch_ext_dir" || {
+    log error execution execution-failed operation osarch-directory-create
+    exit 1
+  }
+
+  osarch_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_sys_target"
+  osarch_status=$?
+  case $osarch_status in
+    0) : ;;
+    2) log error filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR"; exit 1 ;;
+    *) log error execution execution-failed operation osarch-link-update; exit 1 ;;
+  esac
+
+  osarch_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_ext_target"
+  osarch_status=$?
+  case $osarch_status in
+    0) : ;;
+    2) log error filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR"; exit 1 ;;
+    *) log error execution execution-failed operation osarch-link-update; exit 1 ;;
+  esac
+)
