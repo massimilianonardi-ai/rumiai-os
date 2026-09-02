@@ -6,7 +6,7 @@
 
 fatal()
 {
-  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+  case "$1" in *[!0-9]* | "" | "0" | ????*) EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
 
   if [ "$#" -gt "0" ]
   then
@@ -330,7 +330,7 @@ log()
 
 fatal()
 {
-  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+  case "$1" in *[!0-9]* | "" | "0" | ????*) EXIT_CODE="1";; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
 
   log fatal "$@"
 
