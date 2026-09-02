@@ -54,7 +54,7 @@ EOF
   eval "[ -n \"\$$1\" ] || return 3"
 }
 
-m_readpathce()
+m_readpathce_2()
 {
   [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
 
@@ -80,6 +80,37 @@ EOF
 
   # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
   eval "[ -n \"\$$1\" ] || return 3"
+}
+
+m_readpathce()
+{
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+
+  # safeguard against invalid variable name: read will make entire script fail when passing an invalid variable name
+  case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
+
+  set -- "$1" "$(
+    set -eu
+    shift
+    # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
+    case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}";; esac
+    [ -e "$cmd" ] || exit 1
+    # resolve and canonicalize an existing path portably
+    cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
+    cmd="${cmd%
+x}"
+    [ -e "$cmd" ] || exit 1
+    printf -- '%s' "${cmd}x"
+)"
+
+  set -- "$1" "${2%
+x}"
+
+  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
+  [ -n "$2" ] || return 3
+
+  eval $1='$2'
 }
 
 #-------------------------------------------------------------------------------
@@ -195,8 +226,7 @@ lang()
   RumiAI_lang_domain=$1
   RumiAI_lang_message_id=$2
 
-  RumiAI_text_safe_id "$RumiAI_lang_domain"
-  RumiAI_text_safe_id "$RumiAI_lang_message_id"
+  RumiAI_text_safe_id "$RumiAI_lang_domain" && RumiAI_text_safe_id "$RumiAI_lang_message_id" || return 2
 
   RumiAI_lang_message="$(command -p -- cat "$RumiAI_LANG_DIR/@current/$RumiAI_lang_domain/$RumiAI_lang_message_id" 2>/dev/null)"
   if [ "$?" != 0 ]
