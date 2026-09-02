@@ -368,7 +368,7 @@ then
 fi
 
 # execute command
-if ! m_readpathce "RumiAI_COMMAND_BIN" "$1" || [ ! -f "$RumiAI_BOOTSTRAP_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
+if ! m_readpathce "RumiAI_COMMAND_BIN" "$1" || [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
 then
   log fatal filesystem path-invalid command-invalid "$RumiAI_COMMAND_BIN"
   exit 1
