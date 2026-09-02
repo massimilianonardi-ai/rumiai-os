@@ -15,23 +15,6 @@ RumiAI_fatal()
 # CANONICALIZE EXISTING PATH FUNCTION
 #-------------------------------------------------------------------------------
 
-m_readpathce_nnl()
-{
-  [ -n "$1" ] || return 1
-
-  printf -- '%s' "$(
-    set -eu
-    shift
-    # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline is automated by command -v
-    case $1 in */*) cmd="$1";; *) cmd="$(command -v -- "$1" 2>/dev/null)";; esac
-    [ -e "$cmd" ] || exit 1
-    # resolve and canonicalize an existing path portably
-    cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null)"
-    [ -e "$cmd" ] || exit 1
-    printf -- '%s' "$cmd"
-  )"
-}
-
 m_readpathce()
 {
   [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
@@ -385,18 +368,12 @@ then
 fi
 
 # execute command
-if ! RumiAI_COMMAND_BIN=$(RumiAI_path_canonicalize_existing "$1")
-then
-  log fatal filesystem path-resolution-failed path "$1"
-  exit 1
-fi
-shift
-
-if [ ! -f "$RumiAI_COMMAND_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
+if ! m_readpathce "RumiAI_COMMAND_BIN" "$1" || [ ! -f "$RumiAI_BOOTSTRAP_BIN" ] || [ ! -r "$RumiAI_COMMAND_BIN" ] || [ "$RumiAI_COMMAND_BIN" = "$RumiAI_BOOTSTRAP_BIN" ]
 then
   log fatal filesystem path-invalid command-invalid "$RumiAI_COMMAND_BIN"
   exit 1
 fi
+shift
 
 # export variables
 export -- RumiAI_COMMAND_BIN
