@@ -2,98 +2,57 @@
 
 . "$m_LIB_DIR/sh/osarch.lib.sh"
 
-(
-  osarch_update_link()
-  {
-    osarch_link="$1"
-    osarch_target="$2"
+osarch_update_link()
+{
+  osarch_link="$1"
+  osarch_target="$2"
 
-    if [ -e "$osarch_link" ] && [ ! -L "$osarch_link" ]
-    then
-      return "2"
-    fi
+  if [ -e "$osarch_link" ] && [ ! -L "$osarch_link" ]
+  then
+    return "2"
+  fi
 
-    osarch_tmp="${osarch_link}.tmp.$$"
-    command -p -- rm -f "$osarch_tmp" || return "1"
-    command -p -- ln -s "$osarch_target" "$osarch_tmp" || return "1"
-    command -p -- rm -f "$osarch_link" || {
-      command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
-      return "1"
-    }
-    command -p -- mv "$osarch_tmp" "$osarch_link" || {
-      command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
-      return "1"
-    }
+  osarch_tmp="${osarch_link}.tmp.$$"
+  command -p -- rm -f "$osarch_tmp" || return "1"
+  command -p -- ln -s "$osarch_target" "$osarch_tmp" || return "1"
+  command -p -- rm -f "$osarch_link" || {
+    command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
+    return "1"
   }
+  command -p -- mv "$osarch_tmp" "$osarch_link" || {
+    command -p -- rm -f "$osarch_tmp" 2>/dev/null || :
+    return "1"
+  }
+}
 
-  case "$m_OSARCH_OS" in
-    "linux"|"macos"|"windows")
-      :
-      ;;
-    *)
-      log error execution execution-failed operation "osarch-detection" system "$m_OSARCH_OS"
-      exit "1"
-      ;;
-  esac
+osarch_sys_target="sys-$m_OSARCH"
+osarch_ext_target="ext-$m_OSARCH"
+osarch_sys_dir="$m_BIN_DIR/$osarch_sys_target"
+osarch_ext_dir="$m_BIN_DIR/$osarch_ext_target"
 
-  case "$m_OSARCH_ARCH" in
-    "arm64"|"x86_64")
-      :
-      ;;
-    *)
-      log error execution execution-failed operation "osarch-detection" architecture "$m_OSARCH_ARCH"
-      exit "1"
-      ;;
-  esac
-
-  osarch_sys_target="sys-$m_OSARCH"
-  osarch_ext_target="ext-$m_OSARCH"
-  osarch_sys_dir="$m_BIN_DIR/$osarch_sys_target"
-  osarch_ext_dir="$m_BIN_DIR/$osarch_ext_target"
-
-  for osarch_link in "$m_BIN_SYS_OSARCH_DIR" "$m_BIN_EXT_OSARCH_DIR"
-  do
-    if [ -e "$osarch_link" ] && [ ! -L "$osarch_link" ]
-    then
-      log error filesystem path-invalid path "$osarch_link"
-      exit "1"
-    fi
-  done
-
-  command -p -- mkdir -p "$osarch_sys_dir" "$osarch_ext_dir" || {
-    log error execution execution-failed operation "osarch-directory-create"
+for osarch_link in "$m_BIN_SYS_OSARCH_DIR" "$m_BIN_EXT_OSARCH_DIR"
+do
+  if [ -e "$osarch_link" ] && [ ! -L "$osarch_link" ]
+  then
+    log error filesystem path-invalid path "$osarch_link"
     exit "1"
-  }
+  fi
+done
 
-  osarch_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_sys_target"
-  osarch_status="$?"
-  case "$osarch_status" in
-    "0")
-      :
-      ;;
-    "2")
-      log error filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR"
-      exit "1"
-      ;;
-    *)
-      log error execution execution-failed operation "osarch-link-update"
-      exit "1"
-      ;;
-  esac
+command -p -- mkdir -p "$osarch_sys_dir" "$osarch_ext_dir" || fatal execution execution-failed operation "osarch-directory-create"
 
-  osarch_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_ext_target"
-  osarch_status="$?"
-  case "$osarch_status" in
-    "0")
-      :
-      ;;
-    "2")
-      log error filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR"
-      exit "1"
-      ;;
-    *)
-      log error execution execution-failed operation "osarch-link-update"
-      exit "1"
-      ;;
-  esac
-)
+osarch_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_sys_target"
+osarch_status="$?"
+case "$osarch_status" in
+  "0") :;;
+  "2") fatal filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR";;
+  *) fatal execution execution-failed operation "osarch-link-update";;
+esac
+
+osarch_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_ext_target"
+osarch_status="$?"
+case "$osarch_status" in
+  "0") :;;
+  "2") fatal filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR";;
+  *) fatal execution execution-failed operation "osarch-link-update";;
+esac
