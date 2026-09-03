@@ -25,6 +25,16 @@ osarch_update_link()
   }
 }
 
+case "$m_OSARCH_OS" in
+  linux|macos|windows) :;;
+  *) fatal system osarch-update-failure os "$m_OSARCH_OS";;
+esac
+
+case "$m_OSARCH_ARCH" in
+  x86_64|arm64) :;;
+  *) fatal system osarch-update-failure arch "$m_OSARCH_ARCH";;
+esac
+
 osarch_sys_target="sys-$m_OSARCH"
 osarch_ext_target="ext-$m_OSARCH"
 osarch_sys_dir="$m_BIN_DIR/$osarch_sys_target"
