@@ -54,15 +54,15 @@ command -p -- mkdir -p "$osarch_sys_dir" "$osarch_ext_dir" || fatal execution ex
 osarch_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_sys_target"
 osarch_status="$?"
 case "$osarch_status" in
-  "0") :;;
-  "2") fatal filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR";;
+  0) :;;
+  2) fatal filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR";;
   *) fatal execution execution-failed operation "osarch-link-update";;
 esac
 
 osarch_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_ext_target"
 osarch_status="$?"
 case "$osarch_status" in
-  "0") :;;
-  "2") fatal filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR";;
+  0) :;;
+  2) fatal filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR";;
   *) fatal execution execution-failed operation "osarch-link-update";;
 esac
