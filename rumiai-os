@@ -4,41 +4,6 @@
 # FUNCTIONS
 #-------------------------------------------------------------------------------
 
-log_base_print()
-{
-  if [ "$#" -gt "0" ]
-  then
-    printf -- '%s' "$1" >&2
-    shift
-    if [ "$#" -gt "0" ]
-    then
-      printf -- ' %s' "$1" >&2
-      shift
-    fi
-    if [ "$#" -gt "0" ]
-    then
-      printf -- '.%s' "$@" >&2
-    fi
-    printf -- '\n' >&2
-  fi
-}
-
-log()
-{
-  log_base_print "$@"
-}
-
-fatal()
-{
-  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
-
-  log fatal "$@" || log_base_print "$@"
-
-  exit "$EXIT_CODE"
-}
-
-#-------------------------------------------------------------------------------
-
 readpathce()
 {
   [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
@@ -72,24 +37,32 @@ x}"
   eval $1='$2'
 }
 
+export_readonly()
+{
+  while [ "$#" -gt "0" ]
+  do
+    export -- "$1"
+    readonly -- "$1"
+    shift
+  done
+}
+
 #-------------------------------------------------------------------------------
 # ROOT RESOLUTION
 #-------------------------------------------------------------------------------
 
 # canonicalize the path of this script and check that it is really a file
-readpathce "m_BOOTSTRAP_BIN" "$0" && [ -f "$m_BOOTSTRAP_BIN" ] || fatal 'bootstrap bin resolution error'
+readpathce "m_BOOTSTRAP_BIN" "$0" && [ -f "$m_BOOTSTRAP_BIN" ] || {printf -- '%s' 'bootstrap bin resolution error' >&2; exit 1}
 
 # extract root
 m_ROOT=${m_BOOTSTRAP_BIN%/*}
 [ -n "$m_ROOT" ] || m_ROOT=/
 
 # check can cd into it
-(cd -- "$m_ROOT" 2>/dev/null) || fatal 'bootstrap dir error'
+(cd -- "$m_ROOT" 2>/dev/null) || {printf -- '%s' 'bootstrap dir error' >&2; exit 1}
 
 # export root
-export -- m_BOOTSTRAP_BIN m_ROOT
-
-readonly -- m_BOOTSTRAP_BIN m_ROOT
+export_readonly m_BOOTSTRAP_BIN m_ROOT
 
 #-------------------------------------------------------------------------------
 # SYSTEM DIRECTORIES AND PATH
@@ -107,18 +80,7 @@ m_LANG_DIR="$m_ROOT/lang"
 m_SRC_DIR="$m_ROOT/src"
 
 # export vars
-export -- \
-  m_BIN_DIR \
-  m_BIN_SYS_DIR \
-  m_BIN_SYS_OSARCH_DIR \
-  m_BIN_EXT_DIR \
-  m_BIN_EXT_OSARCH_DIR \
-  m_LIB_DIR \
-  m_CONF_DIR \
-  m_LANG_DIR \
-  m_SRC_DIR
-
-readonly -- \
+export_readonly \
   m_BIN_DIR \
   m_BIN_SYS_DIR \
   m_BIN_SYS_OSARCH_DIR \
@@ -143,33 +105,17 @@ m_LANG_CURRENT_DIR="$m_ROOT/lang/current"
 m_LANG_FALLBACK_DIR="$m_ROOT/lang/$m_LANGUAGE_FALLBACK"
 
 # export variables
-export -- \
-  m_LANGUAGE_FALLBACK \
-  m_TEXT_ENCODING \
-  m_LANG_CURRENT_DIR \
-  m_LANG_FALLBACK_DIR
-
-readonly -- \
+export_readonly \
   m_LANGUAGE_FALLBACK \
   m_TEXT_ENCODING \
   m_LANG_CURRENT_DIR \
   m_LANG_FALLBACK_DIR
 
 #-------------------------------------------------------------------------------
-# LANG
+# LOAD CORE LIB
 #-------------------------------------------------------------------------------
 
-# functions
-lang()
-(
-  [ "$#" -eq 2 ] && case "${1}${2}" in [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) false;; esac || return 1
-
-  lang_message="$(command -p -- cat "$m_LANG_CURRENT_DIR/$1/$2" 2>/dev/null)" || \
-  lang_message="$(command -p -- cat "$m_LANG_FALLBACK_DIR/$1/$2" 2>/dev/null)" || \
-  lang_message="${1}.${2}"
-
-  printf -- '%s\n' "$lang_message"
-)
+. "$m_LIB_DIR/sh/core.lib.sh" || {printf -- '%s' "bootstrap cannot load '$m_LIB_DIR/sh/core.lib.sh'" >&2; exit 1}
 
 #-------------------------------------------------------------------------------
 # LOGGER
@@ -177,99 +123,8 @@ lang()
 
 : "${m_LOG_LEVEL:=info}"
 
-log()
-{
-  (
-    [ "$#" -ge 3 ] || exit 1
-
-    log_severity="$1"
-    shift
-
-    case "$log_severity" in
-      fatal) log_priority=1;;
-      error) log_priority=2;;
-      warn) log_priority=3;;
-      info) log_priority=4;;
-      debug) log_priority=5;;
-      trace) log_priority=6;;
-      *) exit 2;;
-    esac
-
-    case "$m_LOG_LEVEL" in
-      off | none) log_threshold="0";;
-      fatal) log_threshold="1";;
-      error) log_threshold="2";;
-      warn) log_threshold="3";;
-      info) log_threshold="4";;
-      debug) log_threshold="5";;
-      trace | all) log_threshold="6";;
-      *) exit 3;;
-    esac
-
-    [ "$log_priority" -le "$log_threshold" ] || exit 0
-
-    case "$1" in "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) exit 4 ;; esac
-    case "$2" in "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) exit 5 ;; esac
-
-    log_domain=$1
-    log_message_id=$2
-    shift 2
-
-    log_message=$(lang "$log_domain" "$log_message_id") || log_message=$log_domain.$log_message_id
-    log_timestamp=$(command -p -- date '+%Y-%m-%d|%H:%M:%S' 2>/dev/null) || log_timestamp=-
-
-    printf -- '[%s] [%s] [%s.%s] %s' \
-      "$log_timestamp" \
-      "$log_severity" \
-      "$log_domain" \
-      "$log_message_id" \
-      "$log_message" >&2
-
-    if [ ! "$(( $# % 2 ))" -eq 0 ]
-    then
-      printf -- '\n' >&2
-      exit 6
-    fi
-
-    while [ "$#" -gt 0 ]
-    do
-      case "$1" in "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) printf -- '\n' >&2; exit 7 ;; esac
-      log_field_name=$1
-      log_field_value=$2
-      shift 2
-
-      printf -- ' [%s="%s"]' \
-        "$log_field_name" \
-        "$log_field_value" >&2
-    done
-
-    printf -- '\n' >&2
-  )
-
-  (
-    exit_code="$?"
-    if [ "$exit_code" != "0" ]
-    then
-      printf -- '[%s] [%s] [%s] ' \
-        "$(command -p -- date '+%Y-%m-%d|%H:%M:%S' 2>/dev/null)" \
-        "error" \
-        "log" >&2
-      case "$exit_code" in
-        "1") printf -- '%s ' "invalid number of arguments: $@" >&2;;
-        "2") printf -- '%s ' "invalid log severity: $@" >&2;;
-        "3") printf -- '%s ' "invalid m_LOG_LEVEL: $@" >&2;;
-        "4") printf -- '%s ' "invalid log domain: $@" >&2;;
-        "5") printf -- '%s ' "invalid log message id: $@" >&2;;
-        "6") printf -- '%s ' "invalid parity check of <field, value> pairs: $@" >&2;;
-        "7") printf -- '%s ' "invalid field name: $@" >&2;;
-        *) printf -- '%s ' "unknown error: $@" >&2;;
-      esac
-      printf -- '\n' >&2
-
-      exit "$exit_code"
-    fi
-  )
-}
+# export variables
+export -- m_LOG_LEVEL
 
 #-------------------------------------------------------------------------------
 # EXECUTE
