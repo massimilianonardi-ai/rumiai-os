@@ -1,0 +1,8 @@
+if [ -r "$HOME/.bashrc" ]
+then
+  . "$HOME/.bashrc"
+fi
+
+rumiai_shell_load_only="1"
+. "$m_BOOTSTRAP_BIN"
+unset rumiai_shell_load_only
