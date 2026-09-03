@@ -52,14 +52,14 @@ export_readonly()
 #-------------------------------------------------------------------------------
 
 # canonicalize the path of this script and check that it is really a file
-readpathce "m_BOOTSTRAP_BIN" "$0" && [ -f "$m_BOOTSTRAP_BIN" ] || {printf -- '%s' 'bootstrap bin resolution error' >&2; exit 1}
+readpathce "m_BOOTSTRAP_BIN" "$0" && [ -f "$m_BOOTSTRAP_BIN" ] || { printf -- '%s' 'bootstrap bin resolution error' >&2; exit 1; }
 
 # extract root
 m_ROOT=${m_BOOTSTRAP_BIN%/*}
 [ -n "$m_ROOT" ] || m_ROOT=/
 
 # check can cd into it
-(cd -- "$m_ROOT" 2>/dev/null) || {printf -- '%s' 'bootstrap dir error' >&2; exit 1}
+(cd -- "$m_ROOT" 2>/dev/null) || { printf -- '%s' 'bootstrap dir error' >&2; exit 1; }
 
 # export root
 export_readonly m_BOOTSTRAP_BIN m_ROOT
@@ -115,7 +115,7 @@ export_readonly \
 # LOAD CORE LIB
 #-------------------------------------------------------------------------------
 
-. "$m_LIB_DIR/sh/core.lib.sh" || {printf -- '%s' "bootstrap cannot load '$m_LIB_DIR/sh/core.lib.sh'" >&2; exit 1}
+. "$m_LIB_DIR/sh/core.lib.sh" || { printf -- '%s' "bootstrap cannot load '$m_LIB_DIR/sh/core.lib.sh'" >&2; exit 1; }
 
 #-------------------------------------------------------------------------------
 # LOGGER
