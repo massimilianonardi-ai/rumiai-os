@@ -1,0 +1,10 @@
+if [ -n "${m_SHELL_ENV-}" ] && [ -r "$m_SHELL_ENV" ]
+then
+  . "$m_SHELL_ENV"
+fi
+
+unset m_SHELL_ENV
+
+rumiai_shell_load_only="1"
+. "$m_BOOTSTRAP_BIN"
+unset rumiai_shell_load_only
