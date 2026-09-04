@@ -130,7 +130,36 @@ if [ "$#" -eq 0 ]
 then
   : "${SHELL:=sh}"
   printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${SHELL} $(tput setaf 7)RumiAI$(tput sgr0)" >&2
-  exec "${SHELL}"
+
+  case "${SHELL##*/}" in
+    bash)
+      exec "$SHELL" --rcfile "$m_CONF_DIR/shell/bash/bashrc"
+      ;;
+
+    zsh)
+      m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
+      export -- m_SHELL_ZDOTDIR
+
+      ZDOTDIR="$m_CONF_DIR/shell/zsh"
+      export -- ZDOTDIR
+
+      exec "$SHELL"
+      ;;
+
+    sh | dash | ash | ksh | mksh)
+      m_SHELL_ENV="${ENV-}"
+      export -- m_SHELL_ENV
+
+      ENV="$m_CONF_DIR/shell/sh/env"
+      export -- ENV
+
+      exec "$SHELL"
+      ;;
+
+    *)
+      exec "$SHELL"
+      ;;
+  esac
 fi
 
 # execute command

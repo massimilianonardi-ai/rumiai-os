@@ -83,6 +83,8 @@ lang()
 
 : "${m_LOG_LEVEL:=info}"
 
+export -- m_LOG_LEVEL
+
 log()
 {
   (
