@@ -181,14 +181,21 @@ log()
 
 #-------------------------------------------------------------------------------
 
+[ -n "$m_SHELL_PS1" ] && export PS1="$m_SHELL_PS1"
+
 shell()
 {
   : "${SHELL:=sh}"
-  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${SHELL} $(tput setaf 7)RumiAI$(tput sgr0)" >&2
+  [ -z "$m_SHELL_NAME" ] || m_SHELL_NAME="${SHELL##*/}"
+  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${m_SHELL_NAME} $(tput setaf 7)RumiAI$(tput sgr0)" >&2
+  export m_SHELL_PS1='$(tput setaf 7)$(tput bold)'"${m_SHELL_NAME}"'$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \$$(tput sgr0) '
+
+  : "${m_SHELL_EXT:=}"
+  export m_SHELL_EXT
 
   case "${SHELL##*/}" in
     bash)
-      exec "$SHELL" --rcfile "$m_CONF_DIR/shell/bash/bashrc"
+      exec "$SHELL" --rcfile "$m_CONF_DIR/shell/bash/bashrc" "$@"
       ;;
 
     zsh)
@@ -201,7 +208,7 @@ shell()
       ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
       export -- ZDOTDIR
 
-      exec "$SHELL"
+      exec "$SHELL" "$@"
       ;;
 
     sh | dash | ash | ksh | mksh)
@@ -211,11 +218,11 @@ shell()
       ENV="$m_CONF_DIR/shell/sh/env"
       export -- ENV
 
-      exec "$SHELL"
+      exec "$SHELL" "$@"
       ;;
 
     *)
-      exec "$SHELL"
+      exec "$SHELL" "$@"
       ;;
   esac
 }
