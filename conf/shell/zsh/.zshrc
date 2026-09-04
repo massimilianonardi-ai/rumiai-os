@@ -12,9 +12,7 @@ ZDOTDIR="$rumiai_shell_zdotdir"
 export m_SHELL_ZDOTDIR ZDOTDIR
 unset rumiai_shell_zdotdir
 
-rumiai_shell_load_only="1"
-. "$m_BOOTSTRAP_BIN"
-unset rumiai_shell_load_only
+. "$m_LIB_DIR/sh/core.lib.sh"
 
 ZDOTDIR="$m_SHELL_ZDOTDIR"
 export ZDOTDIR
