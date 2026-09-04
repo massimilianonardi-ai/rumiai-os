@@ -181,14 +181,15 @@ log()
 
 #-------------------------------------------------------------------------------
 
-[ -n "$m_SHELL_PS1" ] && export PS1="$m_SHELL_PS1"
+[ -n "${m_SHELL_PS1:=}" ] && export PS1="$m_SHELL_PS1"
 
 shell()
 {
   : "${SHELL:=sh}"
-  [ -z "$m_SHELL_NAME" ] || m_SHELL_NAME="${SHELL##*/}"
-  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${m_SHELL_NAME} $(tput setaf 7)RumiAI$(tput sgr0)" >&2
-  export m_SHELL_PS1='$(tput setaf 7)$(tput bold)'"${m_SHELL_NAME}"'$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \$$(tput sgr0) '
+
+  : "${m_SHELL_NAME:=${SHELL##*/}}"
+  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${m_SHELL_NAME} $(tput setaf 7)${m_OS_NAME}$(tput sgr0)" >&2
+  export m_SHELL_PS1="$(tput setaf 7)$(tput bold)${m_OS_NAME}:${m_SHELL_NAME}$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \$$(tput sgr0) "
 
   : "${m_SHELL_EXT:=}"
   export m_SHELL_EXT

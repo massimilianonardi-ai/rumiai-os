@@ -68,6 +68,9 @@ export_readonly m_BOOTSTRAP_BIN m_ROOT
 # SYSTEM VARIABLES
 #-------------------------------------------------------------------------------
 
+m_OS_NAME="RumiAI"
+export_readonly m_OS_NAME
+
 # set values
 m_BIN_DIR="$m_ROOT/bin"
 m_BIN_SYS_DIR="$m_BIN_DIR/sys"
