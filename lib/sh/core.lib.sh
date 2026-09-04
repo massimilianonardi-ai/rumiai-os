@@ -188,6 +188,7 @@ shell()
   : "${SHELL:=sh}"
 
   : "${m_SHELL_NAME:=${SHELL##*/}}"
+  export -- "${m_SHELL_NAME}"
   printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${m_SHELL_NAME} $(tput setaf 7)${m_OS_NAME}$(tput sgr0)" >&2
 
   : "${m_SHELL_EXT:=}"

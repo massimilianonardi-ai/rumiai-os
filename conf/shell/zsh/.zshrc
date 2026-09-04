@@ -16,8 +16,7 @@ unset m_SHELL_ZDOTDIR_INIT
 ZDOTDIR="$m_SHELL_ZDOTDIR"
 export ZDOTDIR
 
-export PS1="$(tput setaf 7)$(tput bold)${m_OS_NAME}:${m_SHELL_NAME}$(tput sgr0) $(tput setaf 2)%n$(tput setaf 7)@$(tput setaf 2)%m$(tput setaf 7):$(tput setaf 2)%~$(tput setaf 4) %#$(tput sgr0) "
-export PROMPT="$PS1"
+PS1="$(tput setaf 7)$(tput bold)${m_OS_NAME}:${m_SHELL_NAME}$(tput sgr0) $(tput setaf 2)%n$(tput setaf 7)@$(tput setaf 2)%m$(tput setaf 7):$(tput setaf 2)%~$(tput setaf 4) %#$(tput sgr0) "
 
 if [ -f "$m_SHELL_EXT" ] && [ -r "$m_SHELL_EXT" ]
 then
