@@ -5,6 +5,4 @@ fi
 
 unset m_SHELL_ENV
 
-rumiai_shell_load_only="1"
-. "$m_BOOTSTRAP_BIN"
-unset rumiai_shell_load_only
+. "$m_LIB_DIR/sh/core.lib.sh"
