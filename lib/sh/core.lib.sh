@@ -180,3 +180,44 @@ log()
 }
 
 #-------------------------------------------------------------------------------
+
+shell()
+{
+  : "${SHELL:=sh}"
+  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${SHELL} $(tput setaf 7)RumiAI$(tput sgr0)" >&2
+
+  case "${SHELL##*/}" in
+    bash)
+      exec "$SHELL" --rcfile "$m_CONF_DIR/shell/bash/bashrc"
+      ;;
+
+    zsh)
+      m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
+      export -- m_SHELL_ZDOTDIR
+
+      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/shell/zsh"
+      export -- m_SHELL_ZDOTDIR_INIT
+
+      ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
+      export -- ZDOTDIR
+
+      exec "$SHELL"
+      ;;
+
+    sh | dash | ash | ksh | mksh)
+      m_SHELL_ENV="${ENV-}"
+      export -- m_SHELL_ENV
+
+      ENV="$m_CONF_DIR/shell/sh/env"
+      export -- ENV
+
+      exec "$SHELL"
+      ;;
+
+    *)
+      exec "$SHELL"
+      ;;
+  esac
+}
+
+#-------------------------------------------------------------------------------

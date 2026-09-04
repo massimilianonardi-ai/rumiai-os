@@ -1,4 +1,3 @@
-rumiai_shell_zdotdir="$ZDOTDIR"
 ZDOTDIR="$m_SHELL_ZDOTDIR"
 
 if [ -r "$ZDOTDIR/.zprofile" ]
@@ -7,7 +6,6 @@ then
 fi
 
 m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-ZDOTDIR="$rumiai_shell_zdotdir"
+ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
 
 export m_SHELL_ZDOTDIR ZDOTDIR
-unset rumiai_shell_zdotdir

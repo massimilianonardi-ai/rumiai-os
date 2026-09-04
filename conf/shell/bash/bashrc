@@ -4,3 +4,8 @@ then
 fi
 
 . "$m_LIB_DIR/sh/core.lib.sh"
+
+if [ -f "$m_SHELL_EXT" ] && [ -r "$m_SHELL_EXT" ]
+then
+  . "$m_SHELL_EXT"
+fi
