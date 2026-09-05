@@ -19,7 +19,7 @@ fi
 unset m_SHELL_ZDOTDIR
 unset m_SHELL_ZDOTDIR_INIT
 
-if [[ -o aliases ]]
+if [ -o aliases ]
 then
   \builtin unsetopt aliases
   . "$m_LIB_DIR/sh/core.lib.sh"
@@ -27,9 +27,6 @@ then
 else
   . "$m_LIB_DIR/sh/core.lib.sh"
 fi
-
-ZDOTDIR="$m_SHELL_ZDOTDIR"
-export ZDOTDIR
 
 # PS1="$(tput setaf 7)$(tput bold)${m_OS_NAME}:${m_SHELL_NAME}$(tput sgr0) $(tput setaf 2)%n$(tput setaf 7)@$(tput setaf 2)%m$(tput setaf 7):$(tput setaf 2)%~$(tput setaf 4) %#$(tput sgr0) "
 # PS1="%{$(tput setaf 7)$(tput bold)%}${m_OS_NAME}:${m_SHELL_NAME}%{$(tput sgr0)%} %{$(tput setaf 2)%}%n%{$(tput setaf 7)%}@%{$(tput setaf 2)%}%m%{$(tput setaf 7)%}:%{$(tput setaf 2)%}%~%{$(tput setaf 4)%}%#%{$(tput sgr0)%} "
