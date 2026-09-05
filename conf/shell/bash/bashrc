@@ -5,7 +5,7 @@ fi
 
 . "$m_LIB_DIR/sh/core.lib.sh"
 
-PS1="$(tput setaf 7)$(tput bold)${m_OS_NAME}:${m_SHELL_NAME}$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \\\$$(tput sgr0) "
+PS1="\[$(tput setaf 7)$(tput bold)\]${m_OS_NAME}:${m_SHELL_NAME}\[$(tput sgr0) $(tput setaf 2)\]\u\[$(tput setaf 7)\]@\[$(tput setaf 2)\]\h\[$(tput setaf 7)\]:\[$(tput setaf 2)\]\w\[$(tput setaf 4)\] \\\$\[$(tput sgr0)\] "
 
 if [ -f "$m_SHELL_EXT" ] && [ -r "$m_SHELL_EXT" ]
 then
