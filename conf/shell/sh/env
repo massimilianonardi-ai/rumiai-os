@@ -5,6 +5,8 @@ fi
 
 unset m_SHELL_ENV
 
+\unalias -a
+
 . "$m_LIB_DIR/sh/core.lib.sh"
 
 PS1="${m_OS_NAME}:${m_SHELL_NAME} $(uname -n):\${PWD}\$ "

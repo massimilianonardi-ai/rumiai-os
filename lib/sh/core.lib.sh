@@ -212,12 +212,6 @@ shell()
       ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
       export -- ZDOTDIR
 
-      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/shell/zsh"
-      export -- m_SHELL_ZDOTDIR_INIT
-
-      ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
-      export -- ZDOTDIR
-
       exec "$SHELL" "$@"
       ;;
 
