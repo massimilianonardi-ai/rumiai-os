@@ -15,3 +15,6 @@ else
     . "$HOME/.zprofile"
   fi
 fi
+
+unset m_SHELL_ZDOTDIR
+unset m_SHELL_ZDOTDIR_INIT
