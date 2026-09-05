@@ -19,7 +19,7 @@ fi
 unset m_SHELL_ZDOTDIR
 unset m_SHELL_ZDOTDIR_INIT
 
-if [ -o aliases ]
+if [[ -o aliases ]]
 then
   \builtin unsetopt aliases
   . "$m_LIB_DIR/sh/core.lib.sh"
