@@ -1,17 +1,32 @@
-ZDOTDIR="$m_SHELL_ZDOTDIR"
-
-if [ -r "$ZDOTDIR/.zshrc" ]
+if [ "${m_SHELL_ZDOTDIR+x}" = "x" ]
 then
-  . "$ZDOTDIR/.zshrc"
+  ZDOTDIR="$m_SHELL_ZDOTDIR"
+  export ZDOTDIR
+
+  if [ -r "$ZDOTDIR/.zshrc" ]
+  then
+    . "$ZDOTDIR/.zshrc"
+  fi
+else
+  unset ZDOTDIR
+
+  if [ -r "$HOME/.zshrc" ]
+  then
+    . "$HOME/.zshrc"
+  fi
 fi
 
-m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
-
-export m_SHELL_ZDOTDIR ZDOTDIR
+unset m_SHELL_ZDOTDIR
 unset m_SHELL_ZDOTDIR_INIT
 
-. "$m_LIB_DIR/sh/core.lib.sh"
+if [[ -o aliases ]]
+then
+  \builtin unsetopt aliases
+  . "$m_LIB_DIR/sh/core.lib.sh"
+  \builtin setopt aliases
+else
+  . "$m_LIB_DIR/sh/core.lib.sh"
+fi
 
 ZDOTDIR="$m_SHELL_ZDOTDIR"
 export ZDOTDIR

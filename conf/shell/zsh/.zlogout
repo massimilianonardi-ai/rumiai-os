@@ -1,11 +1,17 @@
-ZDOTDIR="$m_SHELL_ZDOTDIR"
-
-if [ -r "$ZDOTDIR/.zlogout" ]
+if [ "${m_SHELL_ZDOTDIR+x}" = "x" ]
 then
-  . "$ZDOTDIR/.zlogout"
+  ZDOTDIR="$m_SHELL_ZDOTDIR"
+  export ZDOTDIR
+
+  if [ -r "$ZDOTDIR/.zlogout" ]
+  then
+    . "$ZDOTDIR/.zlogout"
+  fi
+else
+  unset ZDOTDIR
+
+  if [ -r "$HOME/.zlogout" ]
+  then
+    . "$HOME/.zlogout"
+  fi
 fi
-
-m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
-
-export m_SHELL_ZDOTDIR ZDOTDIR

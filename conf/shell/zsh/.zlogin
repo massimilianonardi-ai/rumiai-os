@@ -1,11 +1,17 @@
-ZDOTDIR="$m_SHELL_ZDOTDIR"
-
-if [ -r "$ZDOTDIR/.zlogin" ]
+if [ "${m_SHELL_ZDOTDIR+x}" = "x" ]
 then
-  . "$ZDOTDIR/.zlogin"
+  ZDOTDIR="$m_SHELL_ZDOTDIR"
+  export ZDOTDIR
+
+  if [ -r "$ZDOTDIR/.zlogin" ]
+  then
+    . "$ZDOTDIR/.zlogin"
+  fi
+else
+  unset ZDOTDIR
+
+  if [ -r "$HOME/.zlogin" ]
+  then
+    . "$HOME/.zlogin"
+  fi
 fi
-
-m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
-
-export m_SHELL_ZDOTDIR ZDOTDIR

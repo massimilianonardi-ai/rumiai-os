@@ -198,8 +198,19 @@ shell()
       ;;
 
     zsh)
-      m_SHELL_ZDOTDIR="${ZDOTDIR:-$HOME}"
-      export -- m_SHELL_ZDOTDIR
+      unset m_SHELL_ZDOTDIR
+
+      if [ "${ZDOTDIR+x}" = "x" ]
+      then
+        m_SHELL_ZDOTDIR="$ZDOTDIR"
+        export -- m_SHELL_ZDOTDIR
+      fi
+
+      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/shell/zsh"
+      export -- m_SHELL_ZDOTDIR_INIT
+
+      ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
+      export -- ZDOTDIR
 
       m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/shell/zsh"
       export -- m_SHELL_ZDOTDIR_INIT
@@ -210,7 +221,7 @@ shell()
       exec "$SHELL" "$@"
       ;;
 
-    sh | dash | ash | ksh | mksh)
+    sh | dash | ash)
       m_SHELL_ENV="${ENV-}"
       export -- m_SHELL_ENV
 

@@ -3,7 +3,14 @@ then
   . "$HOME/.bashrc"
 fi
 
-. "$m_LIB_DIR/sh/core.lib.sh"
+if \builtin shopt -q expand_aliases
+then
+  \builtin shopt -u expand_aliases
+  . "$m_LIB_DIR/sh/core.lib.sh"
+  \builtin shopt -s expand_aliases
+else
+  . "$m_LIB_DIR/sh/core.lib.sh"
+fi
 
 PS1="\[$(tput setaf 7)$(tput bold)\]${m_OS_NAME}:${m_SHELL_NAME}\[$(tput sgr0)$(tput setaf 2)\] \u\[$(tput setaf 7)\]@\[$(tput setaf 2)\]\h\[$(tput setaf 7)\]:\[$(tput setaf 2)\]\w\[$(tput setaf 4)\] \\\$\[$(tput sgr0)\] "
 
