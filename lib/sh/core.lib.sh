@@ -194,7 +194,7 @@ shell()
 
   case "${SHELL##*/}" in
     bash)
-      exec "$SHELL" --rcfile "$m_CONF_DIR/shell/bash/bashrc" "$@"
+      exec "$SHELL" --rcfile "$m_CONF_DIR/sys/shell/bash/bashrc" "$@"
       ;;
 
     zsh)
@@ -206,7 +206,7 @@ shell()
         export -- m_SHELL_ZDOTDIR
       fi
 
-      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/shell/zsh"
+      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/sys/shell/zsh"
       export -- m_SHELL_ZDOTDIR_INIT
 
       ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
@@ -219,7 +219,7 @@ shell()
       m_SHELL_ENV="${ENV-}"
       export -- m_SHELL_ENV
 
-      ENV="$m_CONF_DIR/shell/sh/env"
+      ENV="$m_CONF_DIR/sys/shell/sh/env"
       export -- ENV
 
       exec "$SHELL" "$@"
