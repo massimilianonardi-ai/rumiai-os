@@ -1,0 +1,350 @@
+#!/usr/bin/env rumiai-os
+
+(
+  pkg_name_valid()
+  {
+    [ "$#" -eq 1 ] || return 1
+    case "$1" in
+      ""|[!a-z0-9]*|*[!a-z0-9._-]*|*[._-]) return 1;;
+    esac
+  }
+
+  pkg_version_valid()
+  {
+    [ "$#" -eq 1 ] || return 1
+    case "$1" in
+      ""|[!A-Za-z0-9]*|*[!A-Za-z0-9._+~-]*) return 1;;
+    esac
+  }
+
+  pkg_candidate_validate()
+  {
+    [ "$#" -eq 1 ] || return 1
+    pkg_validate_candidate="$1"
+
+    [ -d "$pkg_validate_candidate/root" ] && [ ! -L "$pkg_validate_candidate/root" ] || return 1
+    [ -d "$pkg_validate_candidate/cmd" ] && [ ! -L "$pkg_validate_candidate/cmd" ] || return 1
+
+    if [ -e "$pkg_validate_candidate/link" ] || [ -L "$pkg_validate_candidate/link" ]
+    then
+      [ -d "$pkg_validate_candidate/link" ] && [ ! -L "$pkg_validate_candidate/link" ] || return 1
+    fi
+
+    if [ -e "$pkg_validate_candidate/env" ] || [ -L "$pkg_validate_candidate/env" ]
+    then
+      [ -f "$pkg_validate_candidate/env" ] && [ ! -L "$pkg_validate_candidate/env" ] && [ -r "$pkg_validate_candidate/env" ] || return 1
+    fi
+
+    for pkg_validate_entry in "$pkg_validate_candidate"/*
+    do
+      [ -e "$pkg_validate_entry" ] || [ -L "$pkg_validate_entry" ] || continue
+      case "${pkg_validate_entry##*/}" in
+        root|cmd|link|env) :;;
+        *) return 1;;
+      esac
+    done
+
+    for pkg_validate_entry in "$pkg_validate_candidate"/.[!.]* "$pkg_validate_candidate"/..?*
+    do
+      [ -e "$pkg_validate_entry" ] || [ -L "$pkg_validate_entry" ] || continue
+      return 1
+    done
+
+    pkg_validate_command_count=0
+    for pkg_validate_command in "$pkg_validate_candidate/cmd"/*
+    do
+      [ -e "$pkg_validate_command" ] || [ -L "$pkg_validate_command" ] || continue
+      pkg_validate_command_name="${pkg_validate_command##*/}"
+      pkg_name_valid "$pkg_validate_command_name" || return 1
+      [ -f "$pkg_validate_command" ] && [ ! -L "$pkg_validate_command" ] && [ -r "$pkg_validate_command" ] && [ -x "$pkg_validate_command" ] || return 1
+
+      pkg_validate_first_line=
+      IFS= read -r pkg_validate_first_line < "$pkg_validate_command" || [ -n "$pkg_validate_first_line" ] || return 1
+      [ "$pkg_validate_first_line" = '#!/usr/bin/env rumiai-os' ] || return 1
+
+      pkg_validate_command_count=$((pkg_validate_command_count + 1))
+    done
+
+    for pkg_validate_command in "$pkg_validate_candidate/cmd"/.[!.]* "$pkg_validate_candidate/cmd"/..?*
+    do
+      [ -e "$pkg_validate_command" ] || [ -L "$pkg_validate_command" ] || continue
+      return 1
+    done
+
+    [ "$pkg_validate_command_count" -gt 0 ] || return 1
+
+    if [ -d "$pkg_validate_candidate/link" ]
+    then
+      for pkg_validate_link in "$pkg_validate_candidate/link"/*
+      do
+        [ -e "$pkg_validate_link" ] || [ -L "$pkg_validate_link" ] || continue
+        pkg_validate_link_name="${pkg_validate_link##*/}"
+        pkg_name_valid "$pkg_validate_link_name" || return 1
+        [ -L "$pkg_validate_link" ] || return 1
+        [ -f "$pkg_validate_candidate/cmd/$pkg_validate_link_name" ] && [ ! -L "$pkg_validate_candidate/cmd/$pkg_validate_link_name" ] || return 1
+
+        pkg_validate_link_text="$(command -p readlink "$pkg_validate_link" 2>/dev/null)" || return 1
+        case "$pkg_validate_link_text" in
+          /*) return 1;;
+        esac
+
+        readpathce pkg_validate_link_resolved "$pkg_validate_link" 2>/dev/null || return 1
+        [ -f "$pkg_validate_link_resolved" ] && [ -x "$pkg_validate_link_resolved" ] || return 1
+        case "$pkg_validate_link_resolved" in
+          "$pkg_validate_candidate/root/"*) :;;
+          *) return 1;;
+        esac
+      done
+
+      for pkg_validate_link in "$pkg_validate_candidate/link"/.[!.]* "$pkg_validate_candidate/link"/..?*
+      do
+        [ -e "$pkg_validate_link" ] || [ -L "$pkg_validate_link" ] || continue
+        return 1
+      done
+    fi
+  }
+
+  pkg_cleanup()
+  {
+    [ "${pkg_complete:-0}" -eq 0 ] || return 0
+
+    if [ -n "${pkg_selector_tmp:-}" ]
+    then
+      command -p rm -f "$pkg_selector_tmp" 2>/dev/null || :
+    fi
+
+    if [ "${pkg_bindings_created:-0}" -eq 1 ]
+    then
+      for pkg_cleanup_command in "$pkg_candidate/cmd"/*
+      do
+        [ -e "$pkg_cleanup_command" ] || [ -L "$pkg_cleanup_command" ] || continue
+        command -p rm -f "$pkg_ext_dir/${pkg_cleanup_command##*/}" 2>/dev/null || :
+      done
+    fi
+
+    if [ "${pkg_published:-0}" -eq 1 ]
+    then
+      command -p rm -rf "$pkg_final" 2>/dev/null || :
+    fi
+
+    if [ -n "${pkg_staging:-}" ]
+    then
+      command -p rm -rf "$pkg_staging" 2>/dev/null || :
+    fi
+  }
+
+  [ "$#" -eq 4 ] && [ "$1" = install ] || {
+    log error execution invalid-arguments
+    exit 1
+  }
+
+  pkg_name="$2"
+  pkg_version="$3"
+  pkg_candidate_operand="$4"
+
+  pkg_name_valid "$pkg_name" || {
+    log error execution invalid-arguments package "$pkg_name"
+    exit 1
+  }
+
+  pkg_version_valid "$pkg_version" || {
+    log error execution invalid-arguments version "$pkg_version"
+    exit 1
+  }
+
+  readpathce pkg_candidate "$pkg_candidate_operand" 2>/dev/null && [ -d "$pkg_candidate" ] || {
+    log error filesystem path-invalid path "$pkg_candidate_operand"
+    exit 1
+  }
+
+  pkg_candidate_validate "$pkg_candidate" || {
+    log error filesystem path-invalid path "$pkg_candidate"
+    exit 1
+  }
+
+  . "$m_LIB_DIR/sh/osarch.lib.sh"
+
+  case "$m_OSARCH_OS" in
+    linux|macos|windows) :;;
+    *) log error execution execution-failed operation pkg-install; exit 1;;
+  esac
+
+  case "$m_OSARCH_ARCH" in
+    arm64|x86_64) :;;
+    *) log error execution execution-failed operation pkg-install; exit 1;;
+  esac
+
+  pkg_dir="$m_ROOT/pkg"
+  pkg_concrete_name="$pkg_name@$pkg_version!$m_OSARCH"
+  pkg_final="$pkg_dir/$pkg_concrete_name"
+  pkg_selector_name="$pkg_name!$m_OSARCH"
+  pkg_selector="$pkg_dir/$pkg_selector_name"
+  pkg_ext_dir="$m_BIN_DIR/ext-$m_OSARCH"
+
+  if [ -e "$pkg_dir" ] || [ -L "$pkg_dir" ]
+  then
+    [ -d "$pkg_dir" ] && [ ! -L "$pkg_dir" ] || {
+      log error filesystem path-invalid path "$pkg_dir"
+      exit 1
+    }
+  fi
+
+  [ ! -e "$pkg_final" ] && [ ! -L "$pkg_final" ] || {
+    log error filesystem path-invalid path "$pkg_final"
+    exit 1
+  }
+
+  pkg_first_install=1
+  if [ -e "$pkg_selector" ] || [ -L "$pkg_selector" ]
+  then
+    [ -L "$pkg_selector" ] || {
+      log error filesystem path-invalid path "$pkg_selector"
+      exit 1
+    }
+
+    pkg_selector_text="$(command -p readlink "$pkg_selector" 2>/dev/null)" || {
+      log error filesystem path-invalid path "$pkg_selector"
+      exit 1
+    }
+    case "$pkg_selector_text" in
+      */*|"") log error filesystem path-invalid path "$pkg_selector"; exit 1;;
+    esac
+
+    readpathce pkg_selector_resolved "$pkg_selector" 2>/dev/null && [ -d "$pkg_selector_resolved" ] || {
+      log error filesystem path-invalid path "$pkg_selector"
+      exit 1
+    }
+
+    [ "${pkg_selector_resolved%/*}" = "$pkg_dir" ] || {
+      log error filesystem path-invalid path "$pkg_selector"
+      exit 1
+    }
+
+    pkg_selector_concrete_name="${pkg_selector_resolved##*/}"
+    pkg_selector_version="${pkg_selector_concrete_name#"$pkg_name@"}"
+    pkg_selector_version="${pkg_selector_version%"!$m_OSARCH"}"
+    pkg_version_valid "$pkg_selector_version" && \
+      [ "$pkg_selector_concrete_name" = "$pkg_name@$pkg_selector_version!$m_OSARCH" ] && \
+      [ "$pkg_selector_text" = "$pkg_selector_concrete_name" ] || {
+        log error filesystem path-invalid path "$pkg_selector"
+        exit 1
+      }
+
+    pkg_first_install=0
+  fi
+
+  if [ "$pkg_first_install" -eq 1 ]
+  then
+    if [ -e "$pkg_ext_dir" ] || [ -L "$pkg_ext_dir" ]
+    then
+      [ -d "$pkg_ext_dir" ] && [ ! -L "$pkg_ext_dir" ] || {
+        log error filesystem path-invalid path "$pkg_ext_dir"
+        exit 1
+      }
+    fi
+
+    for pkg_command in "$pkg_candidate/cmd"/*
+    do
+      [ -e "$pkg_command" ] || [ -L "$pkg_command" ] || continue
+      pkg_public_binding="$pkg_ext_dir/${pkg_command##*/}"
+      [ ! -e "$pkg_public_binding" ] && [ ! -L "$pkg_public_binding" ] || {
+        log error filesystem path-invalid path "$pkg_public_binding"
+        exit 1
+      }
+    done
+  fi
+
+  command -p mkdir -p "$pkg_dir" || {
+    log error execution execution-failed operation pkg-install
+    exit 1
+  }
+
+  pkg_staging="$pkg_dir/.install.$$"
+  [ ! -e "$pkg_staging" ] && [ ! -L "$pkg_staging" ] || {
+    log error filesystem path-invalid path "$pkg_staging"
+    exit 1
+  }
+
+  pkg_complete=0
+  pkg_published=0
+  pkg_bindings_created=0
+  pkg_selector_tmp=
+  trap 'pkg_cleanup' 0
+  trap 'exit 1' HUP INT TERM
+
+  command -p mkdir "$pkg_staging" || {
+    log error execution execution-failed operation pkg-install
+    exit 1
+  }
+
+  command -p cp -R "$pkg_candidate/root" "$pkg_staging/root" && \
+  command -p cp -R "$pkg_candidate/cmd" "$pkg_staging/cmd" || {
+    log error execution execution-failed operation pkg-install
+    exit 1
+  }
+
+  if [ -d "$pkg_candidate/link" ]
+  then
+    command -p cp -R "$pkg_candidate/link" "$pkg_staging/link" || {
+      log error execution execution-failed operation pkg-install
+      exit 1
+    }
+  fi
+
+  if [ -f "$pkg_candidate/env" ]
+  then
+    command -p cp "$pkg_candidate/env" "$pkg_staging/env" || {
+      log error execution execution-failed operation pkg-install
+      exit 1
+    }
+  fi
+
+  pkg_candidate_validate "$pkg_staging" || {
+    log error execution execution-failed operation pkg-install
+    exit 1
+  }
+
+  command -p mv "$pkg_staging" "$pkg_final" || {
+    log error execution execution-failed operation pkg-install
+    exit 1
+  }
+  pkg_staging=
+  pkg_published=1
+
+  if [ "$pkg_first_install" -eq 1 ]
+  then
+    command -p mkdir -p "$pkg_ext_dir" || {
+      log error execution execution-failed operation pkg-install
+      exit 1
+    }
+
+    pkg_bindings_created=1
+    for pkg_command in "$pkg_candidate/cmd"/*
+    do
+      [ -e "$pkg_command" ] || [ -L "$pkg_command" ] || continue
+      pkg_command_name="${pkg_command##*/}"
+      pkg_public_binding="$pkg_ext_dir/$pkg_command_name"
+      command -p ln -s "../../pkg/$pkg_selector_name/cmd/$pkg_command_name" "$pkg_public_binding" || {
+        log error execution execution-failed operation pkg-install
+        exit 1
+      }
+    done
+
+    pkg_selector_tmp="$pkg_dir/.selector.$$"
+    [ ! -e "$pkg_selector_tmp" ] && [ ! -L "$pkg_selector_tmp" ] || {
+      log error filesystem path-invalid path "$pkg_selector_tmp"
+      exit 1
+    }
+
+    command -p ln -s "$pkg_concrete_name" "$pkg_selector_tmp" && \
+    command -p mv "$pkg_selector_tmp" "$pkg_selector" || {
+      log error execution execution-failed operation pkg-install
+      exit 1
+    }
+    pkg_selector_tmp=
+  fi
+
+  pkg_complete=1
+  trap - 0 HUP INT TERM
+  exit 0
+)
