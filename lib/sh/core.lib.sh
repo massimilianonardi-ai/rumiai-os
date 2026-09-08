@@ -46,12 +46,17 @@ readpathce()
   set -- "$1" "$(
     set -eu
     shift
-    # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
-#     case $1 in */*) cmd="$1";; *) if [ -e "./$1" ] || [ -L "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-# x}"; fi;; esac
-    # bash 3.2 fix for case inside command substitution. bash 3.2 is sh on macos
-    if [ "${1#*/}" != "$1" ]; then cmd="$1"; elif [ -e "./$1" ] || [ -L "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}"; fi
+    # if invoked by PATH search (only command name, no /), then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
+    if [ "${1#*/}" != "$1" ]
+    then
+      cmd="$1"
+    elif [ -e "./$1" ] || [ -L "./$1" ]
+    then
+      cmd="./$1"
+    else
+      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}"
+    fi
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
