@@ -1,0 +1,152 @@
+#!/usr/bin/env rumiai-os
+
+(
+  http_fetch_invalid()
+  {
+    log error execution invalid-arguments operation http-fetch
+    exit 2
+  }
+
+  http_fetch_timeout=30
+  http_fetch_output=
+  http_fetch_headers=
+  http_fetch_lf='
+'
+  http_fetch_cr="$(printf '\r')"
+  http_fetch_seen_delimiter=0
+
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in
+      -H)
+        [ "$#" -ge 2 ] || http_fetch_invalid
+        http_fetch_header=$2
+        [ -n "$http_fetch_header" ] || http_fetch_invalid
+        case "$http_fetch_header" in
+          *:*) :;;
+          *) http_fetch_invalid;;
+        esac
+        case "$http_fetch_header" in
+          *"$http_fetch_lf"*|*"$http_fetch_cr"*) http_fetch_invalid;;
+        esac
+        if [ -n "$http_fetch_headers" ]
+        then
+          http_fetch_headers="$http_fetch_headers$http_fetch_lf$http_fetch_header"
+        else
+          http_fetch_headers=$http_fetch_header
+        fi
+        shift 2
+        ;;
+      -o)
+        [ "$#" -ge 2 ] || http_fetch_invalid
+        [ -n "$2" ] || http_fetch_invalid
+        http_fetch_output=$2
+        shift 2
+        ;;
+      -t)
+        [ "$#" -ge 2 ] || http_fetch_invalid
+        case "$2" in
+          ''|0|*[!0-9]*) http_fetch_invalid;;
+        esac
+        http_fetch_timeout=$2
+        shift 2
+        ;;
+      --)
+        http_fetch_seen_delimiter=1
+        shift
+        break
+        ;;
+      *) http_fetch_invalid;;
+    esac
+  done
+
+  [ "$http_fetch_seen_delimiter" -eq 1 ] || http_fetch_invalid
+  [ "$#" -eq 1 ] || http_fetch_invalid
+  http_fetch_url=$1
+
+  case "$http_fetch_url" in
+    http://*|https://*) :;;
+    *) http_fetch_invalid;;
+  esac
+
+  if command -- curl --version >/dev/null 2>&1
+  then
+    set -- \
+      -q \
+      --fail \
+      --location \
+      --silent \
+      --show-error \
+      --connect-timeout "$http_fetch_timeout" \
+      --speed-limit 1 \
+      --speed-time "$http_fetch_timeout" \
+      --proto '=http,https' \
+      --proto-redir '=http,https'
+
+    if [ -n "$http_fetch_output" ]
+    then
+      set -- "$@" --output "$http_fetch_output"
+    fi
+
+    if [ -n "$http_fetch_headers" ]
+    then
+      http_fetch_old_ifs=$IFS
+      IFS=$http_fetch_lf
+      set -f
+      for http_fetch_header in $http_fetch_headers
+      do
+        set -- "$@" --header "$http_fetch_header"
+      done
+      set +f
+      IFS=$http_fetch_old_ifs
+    fi
+
+    set -- "$@" -- "$http_fetch_url"
+    command -- curl "$@"
+    [ "$?" -eq 0 ] && exit 0
+    exit 1
+  fi
+
+  http_fetch_wget_version="$(LC_ALL=C command -- wget --version 2>/dev/null)" || http_fetch_wget_version=
+  if [ -n "$http_fetch_wget_version" ]
+  then
+    case "$http_fetch_wget_version" in
+      'GNU Wget '*|*"$http_fetch_lf"'GNU Wget '*)
+        set -- \
+          --no-config \
+          --no-verbose \
+          --tries=1 \
+          --timeout="$http_fetch_timeout" \
+          --max-redirect=20
+
+        if [ -n "$http_fetch_output" ]
+        then
+          set -- "$@" --output-document="$http_fetch_output"
+        else
+          set -- "$@" --output-document=-
+        fi
+
+        if [ -n "$http_fetch_headers" ]
+        then
+          http_fetch_old_ifs=$IFS
+          IFS=$http_fetch_lf
+          set -f
+          for http_fetch_header in $http_fetch_headers
+          do
+            set -- "$@" --header="$http_fetch_header"
+          done
+          set +f
+          IFS=$http_fetch_old_ifs
+        fi
+
+        set -- "$@" -- "$http_fetch_url"
+        command -- wget "$@"
+        [ "$?" -eq 0 ] && exit 0
+        exit 1
+        ;;
+    esac
+  fi
+
+  log error execution execution-failed operation http-fetch
+  exit 1
+)
