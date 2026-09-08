@@ -83,8 +83,8 @@ export_readonly m_OS_NAME
 m_BIN_DIR="$m_ROOT/bin"
 m_BIN_SYS_DIR="$m_BIN_DIR/sys"
 m_BIN_SYS_OSARCH_DIR="$m_BIN_DIR/sys-osarch"
-m_BIN_EXT_DIR="$m_ROOT/bin/ext"
-m_BIN_EXT_OSARCH_DIR="$m_ROOT/bin/ext-osarch"
+m_BIN_EXT_DIR="$m_BIN_DIR/ext"
+m_BIN_EXT_OSARCH_DIR="$m_BIN_DIR/ext-osarch"
 m_LIB_DIR="$m_ROOT/lib"
 m_PKG_DIR="$m_ROOT/pkg"
 
@@ -130,8 +130,8 @@ export -- PATH
 m_LANGUAGE_FALLBACK="en_US"
 m_TEXT_ENCODING="UTF-8"
 
-m_LANG_CURRENT_DIR="$m_ROOT/lang/current"
-m_LANG_FALLBACK_DIR="$m_ROOT/lang/$m_LANGUAGE_FALLBACK"
+m_LANG_CURRENT_DIR="$m_LANG_DIR/current"
+m_LANG_FALLBACK_DIR="$m_LANG_DIR/$m_LANGUAGE_FALLBACK"
 
 # export variables
 export_readonly \
