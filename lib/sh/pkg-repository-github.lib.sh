@@ -85,7 +85,7 @@ _pkg_repository_github_get()
 
 _pkg_repository_github_validate_release_tokens()
 {
-  [ "$#" -eq 4 ] || return 2
+  [ "$#" -ge 4 ] && [ "$#" -le 5 ] || return 2
 
   case "$1" in
     s:*) pkg_repository_github_release_tag=${1#s:};;
@@ -105,6 +105,20 @@ BEGIN {
   exit 1
 }
 ' || return 1
+
+  if [ "$#" -eq 5 ]
+  then
+    case "$5" in
+      s:*) pkg_repository_github_release_published=${5#s:};;
+      *) return 1;;
+    esac
+    LC_ALL=C command -p -- awk -v value="$pkg_repository_github_release_published" '
+BEGIN {
+  if (value ~ /^[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]T[0-9][0-9]:[0-9][0-9]:[0-9][0-9]Z$/) exit 0
+  exit 1
+}
+' || return 1
+  fi
 }
 
 pkg_repository_list_versions()
@@ -121,7 +135,7 @@ pkg_repository_list_versions()
   while :
   do
     pkg_repository_github_body="$(_pkg_repository_github_get "/releases?per_page=100&page=$pkg_repository_github_page")" || return 1
-    pkg_repository_github_records="$(printf '%s\n' "$pkg_repository_github_body" | json_array_object_fields tag_name draft prerelease created_at)" || return 1
+    pkg_repository_github_records="$(printf '%s\n' "$pkg_repository_github_body" | json_array_object_fields tag_name draft prerelease created_at published_at)" || return 1
 
     pkg_repository_github_count=0
     if [ -n "$pkg_repository_github_records" ]
@@ -131,6 +145,7 @@ pkg_repository_list_versions()
         pkg_repository_github_draft_token \
         pkg_repository_github_prerelease_token \
         pkg_repository_github_created_token \
+        pkg_repository_github_published_token \
         pkg_repository_github_extra
       do
         [ -z "$pkg_repository_github_extra" ] || return 1
@@ -150,9 +165,10 @@ pkg_repository_list_versions()
           "$pkg_repository_github_tag_token" \
           "$pkg_repository_github_draft_token" \
           "$pkg_repository_github_prerelease_token" \
-          "$pkg_repository_github_created_token" || return 1
+          "$pkg_repository_github_created_token" \
+          "$pkg_repository_github_published_token" || return 1
 
-        pkg_repository_github_record="$pkg_repository_github_release_created$pkg_repository_github_tab$pkg_repository_github_release_tag"
+        pkg_repository_github_record="$pkg_repository_github_release_created$pkg_repository_github_tab$pkg_repository_github_release_published$pkg_repository_github_tab$pkg_repository_github_release_tag"
         if [ -n "$pkg_repository_github_versions" ]
         then
           pkg_repository_github_versions="$pkg_repository_github_versions$pkg_repository_github_lf$pkg_repository_github_record"
@@ -173,13 +189,14 @@ EOF_RECORDS
   printf '%s\n' "$pkg_repository_github_versions" | \
     LC_ALL=C command -p -- sort | \
     LC_ALL=C command -p -- awk -F "$pkg_repository_github_tab" '
-NF != 2 { exit 1 }
+NF != 3 { exit 1 }
 {
-  if (previous_time != "" && $1 == previous_time) exit 1
-  if (seen[$2]) exit 1
-  seen[$2]=1
-  previous_time=$1
-  print $2
+  if (previous_created != "" && $1 == previous_created && $2 == previous_published) exit 1
+  if (seen[$3]) exit 1
+  seen[$3]=1
+  previous_created=$1
+  previous_published=$2
+  print $3
 }
 '
 )
