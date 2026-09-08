@@ -17,8 +17,8 @@ readpathce()
     set -eu
     shift
     # if invoked by PATH search, then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
-    case $1 in */*) cmd="$1";; *) if [ -e "./$1" ] || [ -L "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}"; fi;; esac
+    if [ "${1#*/}" != "$1" ]; then cmd="$1"; elif [ -e "./$1" ] || [ -L "./$1" ]; then cmd="./$1"; else cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}"; fi
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
