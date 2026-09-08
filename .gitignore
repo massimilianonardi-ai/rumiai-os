@@ -1,0 +1,11 @@
+# RumiAI package store and runtime state
+/pkg/
+/data/
+/home/
+/cache/
+/log/
+/run/
+/tmp/
+
+# Host metadata
+.DS_Store
