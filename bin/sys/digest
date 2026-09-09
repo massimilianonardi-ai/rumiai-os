@@ -1,17 +1,5 @@
 #!/usr/bin/env rumiai-os
 
-digest_invalid()
-{
-  log error execution invalid-arguments operation digest
-  exit 2
-}
-
-digest_backend_error()
-{
-  log error execution execution-failed operation digest algorithm "$digest_algorithm"
-  exit 1
-}
-
 digest_algorithm=
 digest_seen_delimiter=0
 
@@ -19,8 +7,8 @@ while [ "$#" -gt 0 ]
 do
   case "$1" in
     -a)
-      [ "$#" -ge 2 ] || digest_invalid
-      [ -z "$digest_algorithm" ] || digest_invalid
+      [ "$#" -ge 2 ] || fatal 2 execution invalid-arguments operation digest
+      [ -z "$digest_algorithm" ] || fatal 2 execution invalid-arguments operation digest
       digest_algorithm=$2
       shift 2
       ;;
@@ -30,26 +18,26 @@ do
       break
       ;;
     *)
-      digest_invalid
+      fatal 2 execution invalid-arguments operation digest
       ;;
   esac
 done
 
-[ -n "$digest_algorithm" ] || digest_invalid
+[ -n "$digest_algorithm" ] || fatal 2 execution invalid-arguments operation digest
 case "$digest_algorithm" in
   sha256) :;;
-  *) digest_invalid;;
+  *) fatal 2 execution invalid-arguments operation digest;;
 esac
 
 if [ "$digest_seen_delimiter" -eq 1 ]
 then
-  [ "$#" -eq 1 ] || digest_invalid
+  [ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation digest
   digest_file=$1
-  [ -f "$digest_file" ] && [ -r "$digest_file" ] || digest_backend_error
-  exec 3< "$digest_file" || digest_backend_error
+  [ -f "$digest_file" ] && [ -r "$digest_file" ] || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
+  exec 3< "$digest_file" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 else
-  [ "$#" -eq 0 ] || digest_invalid
-  exec 3<&0 || digest_backend_error
+  [ "$#" -eq 0 ] || fatal 2 execution invalid-arguments operation digest
+  exec 3<&0 || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 fi
 
 digest_output=
@@ -57,31 +45,30 @@ digest_value=
 
 if command -v -- cksum >/dev/null 2>&1 && command -- cksum -a sha256 </dev/null >/dev/null 2>&1
 then
-  digest_output="$(command -- cksum -a sha256 <&3)" || digest_backend_error
-  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || digest_backend_error
+  digest_output="$(command -- cksum -a sha256 <&3)" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 elif command -v -- sha256sum >/dev/null 2>&1
 then
-  digest_output="$(command -- sha256sum <&3)" || digest_backend_error
-  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || digest_backend_error
+  digest_output="$(command -- sha256sum <&3)" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 elif command -v -- shasum >/dev/null 2>&1
 then
-  digest_output="$(command -- shasum -a 256 <&3)" || digest_backend_error
-  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || digest_backend_error
+  digest_output="$(command -- shasum -a 256 <&3)" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 elif command -v -- openssl >/dev/null 2>&1
 then
-  digest_output="$(command -- openssl dgst -sha256 <&3)" || digest_backend_error
-  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || digest_backend_error
+  digest_output="$(command -- openssl dgst -sha256 <&3)" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 else
-  log error execution command-not-found operation digest command sha256 algorithm "$digest_algorithm"
-  exit 1
+  fatal execution command-not-found operation digest command sha256 algorithm "$digest_algorithm"
 fi
 
 exec 3<&-
 
-[ "${#digest_value}" -eq 64 ] || digest_backend_error
+[ "${#digest_value}" -eq 64 ] || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 case "$digest_value" in
-  *[!0-9A-Fa-f]*) digest_backend_error;;
+  *[!0-9A-Fa-f]*) fatal execution execution-failed operation digest algorithm "$digest_algorithm";;
 esac
 
-printf -- '%s\n' "$digest_value" | LC_ALL=C command -p -- awk '{ print tolower($0) }' || digest_backend_error
+printf -- '%s\n' "$digest_value" | LC_ALL=C command -p -- awk '{ print tolower($0) }' || fatal execution execution-failed operation digest algorithm "$digest_algorithm"
 exit 0
