@@ -112,6 +112,12 @@ pkg_download()
     return 1
   }
 
+  pkg_download_actual_size="$(printf -- '%s\n' "$pkg_download_actual_size" | LC_ALL=C command -p -- awk '{ print $1 }')" || {
+    command -p -- rm -f -- "$pkg_download_target" 2>/dev/null
+    _pkg_download_error size-check-failed
+    return 1
+  }
+
   if [ "$pkg_download_actual_size" != "$pkg_download_size" ]
   then
     command -p -- rm -f -- "$pkg_download_target" 2>/dev/null
