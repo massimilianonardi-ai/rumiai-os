@@ -36,104 +36,6 @@ pkg_analyze_make_work()
   trap 'exit 130' HUP INT TERM
 }
 
-pkg_analyze_count_single_dir()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_analyze_count_dir=$1
-  pkg_analyze_count=0
-  pkg_analyze_single=
-
-  for pkg_analyze_item in \
-    "$pkg_analyze_count_dir"/* \
-    "$pkg_analyze_count_dir"/.[!.]* \
-    "$pkg_analyze_count_dir"/..?*
-  do
-    [ -e "$pkg_analyze_item" ] || [ -L "$pkg_analyze_item" ] || continue
-    pkg_analyze_count=$((pkg_analyze_count + 1))
-    pkg_analyze_single=$pkg_analyze_item
-    [ "$pkg_analyze_count" -le 1 ] || break
-  done
-
-  [ "$pkg_analyze_count" -eq 1 ] && [ -d "$pkg_analyze_single" ] && [ ! -L "$pkg_analyze_single" ]
-}
-
-pkg_analyze_find_deepest_dir()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_analyze_chain_file="$pkg_analyze_work/root-chain"
-  pkg_analyze_auto_root=$1
-  pkg_analyze_auto_relative=.
-  : > "$pkg_analyze_chain_file" || return 1
-  printf -- '.\n' >> "$pkg_analyze_chain_file" || return 1
-
-  while pkg_analyze_count_single_dir "$pkg_analyze_auto_root"
-  do
-    pkg_analyze_auto_root=$pkg_analyze_single
-    pkg_analyze_component=${pkg_analyze_auto_root##*/}
-    if [ "$pkg_analyze_auto_relative" = . ]
-    then
-      pkg_analyze_auto_relative=$pkg_analyze_component
-    else
-      pkg_analyze_auto_relative="$pkg_analyze_auto_relative/$pkg_analyze_component"
-    fi
-    printf -- '%s\n' "$pkg_analyze_auto_relative" >> "$pkg_analyze_chain_file" || return 1
-  done
-}
-
-pkg_analyze_choose_root()
-{
-  while :
-  do
-    pkg_analyze_prompt "Useful root relative to extracted tree [$pkg_analyze_auto_relative]: " || fatal execution execution-failed operation pkg-analyze reason input-ended
-    pkg_analyze_selected_relative=$pkg_analyze_reply
-    [ -n "$pkg_analyze_selected_relative" ] || pkg_analyze_selected_relative=$pkg_analyze_auto_relative
-
-    case "$pkg_analyze_selected_relative" in
-      /*)
-        printf -- 'pkg-analyze: useful root must be relative to the extracted tree\n' >&2
-        continue
-        ;;
-    esac
-
-    if [ "$pkg_analyze_selected_relative" = . ]
-    then
-      pkg_analyze_selected_candidate=$pkg_analyze_base
-    else
-      pkg_analyze_selected_candidate="$pkg_analyze_base/$pkg_analyze_selected_relative"
-    fi
-
-    if ! readpathce pkg_analyze_root "$pkg_analyze_selected_candidate"
-    then
-      printf -- 'pkg-analyze: useful root does not resolve to an existing directory\n' >&2
-      continue
-    fi
-
-    case "$pkg_analyze_root" in
-      "$pkg_analyze_base"|"$pkg_analyze_base"/*)
-        :
-        ;;
-      *)
-        printf -- 'pkg-analyze: useful root escapes the extracted tree\n' >&2
-        continue
-        ;;
-    esac
-
-    if [ ! -d "$pkg_analyze_root" ] || [ -L "$pkg_analyze_root" ]
-    then
-      printf -- 'pkg-analyze: useful root must be a real directory\n' >&2
-      continue
-    fi
-
-    if [ "$pkg_analyze_root" = "$pkg_analyze_base" ]
-    then
-      pkg_analyze_root_relative=.
-    else
-      pkg_analyze_root_relative=${pkg_analyze_root#"$pkg_analyze_base"/}
-    fi
-    return 0
-  done
-}
-
 pkg_analyze_scan_candidates()
 {
   pkg_analyze_candidates_unsorted="$pkg_analyze_work/candidates.unsorted"
@@ -469,8 +371,8 @@ pkg_analyze_original_home=${HOME-}
 case "$#" in
   1)
     pkg_analyze_input=$1
-    readpathce pkg_analyze_base "$pkg_analyze_input" || fatal execution execution-failed operation pkg-analyze reason input-invalid
-    [ -d "$pkg_analyze_base" ] && [ ! -L "$pkg_analyze_base" ] || fatal execution execution-failed operation pkg-analyze reason input-not-directory
+    readpathce pkg_analyze_root "$pkg_analyze_input" || fatal execution execution-failed operation pkg-analyze reason input-invalid
+    [ -d "$pkg_analyze_root" ] && [ ! -L "$pkg_analyze_root" ] || fatal execution execution-failed operation pkg-analyze reason input-not-directory
     pkg_analyze_source=directory
     ;;
   2)
@@ -480,15 +382,13 @@ case "$#" in
     command -p -- mkdir -- "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason staging-create-failed
     . "$m_LIB_DIR/sh/pkg-extract.lib.sh" || fatal execution execution-failed operation pkg-analyze reason pkg-extract-load-failed
     pkg_extract "$pkg_analyze_artifact" "$pkg_analyze_format" "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason extraction-failed
-    readpathce pkg_analyze_base "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason staging-resolve-failed
+    readpathce pkg_analyze_root "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason staging-resolve-failed
     pkg_analyze_source=artifact
     ;;
   *)
     fatal 2 execution invalid-arguments operation pkg-analyze
     ;;
 esac
-
-pkg_analyze_find_deepest_dir "$pkg_analyze_base" || fatal execution execution-failed operation pkg-analyze reason root-discovery-failed
 
 printf -- 'pkg-analyze report\n'
 printf -- 'source\t%s\n' "$pkg_analyze_source"
@@ -497,13 +397,8 @@ then
   printf -- 'format\t%s\n' "$pkg_analyze_format"
   printf -- 'artifact\t%s\n' "$pkg_analyze_artifact"
 fi
-printf -- 'extracted-tree\t%s\n' "$pkg_analyze_base"
-printf -- '\nSingle-directory root chain:\n'
-command -p -- cat "$pkg_analyze_chain_file"
-printf -- 'suggested-useful-root\t%s\n' "$pkg_analyze_auto_relative"
-
-pkg_analyze_choose_root
-printf -- 'selected-useful-root\t%s\n' "$pkg_analyze_root_relative"
+printf -- 'extracted-tree\t%s\n' "$pkg_analyze_root"
+printf -- 'useful-root\t.\n'
 
 pkg_analyze_scan_candidates || fatal execution execution-failed operation pkg-analyze reason candidate-scan-failed
 pkg_analyze_print_candidates || fatal execution execution-failed operation pkg-analyze reason candidate-report-failed
