@@ -1,11 +1,5 @@
 #!/usr/bin/env rumiai-os
 
-http_fetch_invalid()
-{
-  log error execution invalid-arguments operation http-fetch
-  exit 2
-}
-
 http_fetch_timeout=30
 http_fetch_output=
 http_fetch_headers=
@@ -18,15 +12,15 @@ while [ "$#" -gt 0 ]
 do
   case "$1" in
     -H)
-      [ "$#" -ge 2 ] || http_fetch_invalid
+      [ "$#" -ge 2 ] || fatal 2 execution invalid-arguments operation http-fetch
       http_fetch_header=$2
-      [ -n "$http_fetch_header" ] || http_fetch_invalid
+      [ -n "$http_fetch_header" ] || fatal 2 execution invalid-arguments operation http-fetch
       case "$http_fetch_header" in
         *:*) :;;
-        *) http_fetch_invalid;;
+        *) fatal 2 execution invalid-arguments operation http-fetch;;
       esac
       case "$http_fetch_header" in
-        *"$http_fetch_lf"*|*"$http_fetch_cr"*) http_fetch_invalid;;
+        *"$http_fetch_lf"*|*"$http_fetch_cr"*) fatal 2 execution invalid-arguments operation http-fetch;;
       esac
       if [ -n "$http_fetch_headers" ]
       then
@@ -37,15 +31,15 @@ do
       shift 2
       ;;
     -o)
-      [ "$#" -ge 2 ] || http_fetch_invalid
-      [ -n "$2" ] || http_fetch_invalid
+      [ "$#" -ge 2 ] || fatal 2 execution invalid-arguments operation http-fetch
+      [ -n "$2" ] || fatal 2 execution invalid-arguments operation http-fetch
       http_fetch_output=$2
       shift 2
       ;;
     -t)
-      [ "$#" -ge 2 ] || http_fetch_invalid
+      [ "$#" -ge 2 ] || fatal 2 execution invalid-arguments operation http-fetch
       case "$2" in
-        ''|0|*[!0-9]*) http_fetch_invalid;;
+        ''|0|*[!0-9]*) fatal 2 execution invalid-arguments operation http-fetch;;
       esac
       http_fetch_timeout=$2
       shift 2
@@ -55,17 +49,17 @@ do
       shift
       break
       ;;
-    *) http_fetch_invalid;;
+    *) fatal 2 execution invalid-arguments operation http-fetch;;
   esac
 done
 
-[ "$http_fetch_seen_delimiter" -eq 1 ] || http_fetch_invalid
-[ "$#" -eq 1 ] || http_fetch_invalid
+[ "$http_fetch_seen_delimiter" -eq 1 ] || fatal 2 execution invalid-arguments operation http-fetch
+[ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation http-fetch
 http_fetch_url=$1
 
 case "$http_fetch_url" in
   http://*|https://*) :;;
-  *) http_fetch_invalid;;
+  *) fatal 2 execution invalid-arguments operation http-fetch;;
 esac
 
 if command -- curl --version >/dev/null 2>&1
@@ -146,5 +140,4 @@ then
   esac
 fi
 
-log error execution execution-failed operation http-fetch
-exit 1
+fatal execution execution-failed operation http-fetch
