@@ -1,0 +1,232 @@
+#!/usr/bin/env rumiai-os
+
+extract_invalid()
+{
+  log error execution invalid-arguments operation extract
+  exit 2
+}
+
+extract_error()
+{
+  log error execution execution-failed operation extract reason "$1" format "$extract_format"
+  exit 1
+}
+
+extract_missing()
+{
+  log error execution command-not-found operation extract command "$1" format "$extract_format"
+  exit 1
+}
+
+extract_have()
+{
+  [ "$#" -eq 1 ] || return 2
+  command -v -- "$1" >/dev/null 2>&1
+}
+
+extract_require()
+{
+  [ "$#" -eq 1 ] || return 2
+  extract_have "$1" && return 0
+  extract_missing "$1"
+}
+
+extract_stream_target()
+{
+  [ "$#" -eq 2 ] || return 2
+  extract_stream_name=$1
+  extract_stream_format=$2
+
+  case "$extract_stream_format:$extract_stream_name" in
+    gzip:*.gz|gz:*.gz) extract_stream_name=${extract_stream_name%.gz};;
+    gzip:*.gzip|gz:*.gzip) extract_stream_name=${extract_stream_name%.gzip};;
+    bzip:*.bz2|bzip2:*.bz2|bz2:*.bz2) extract_stream_name=${extract_stream_name%.bz2};;
+    bzip:*.bz|bzip2:*.bz|bz2:*.bz) extract_stream_name=${extract_stream_name%.bz};;
+    bzip:*.bzip2|bzip2:*.bzip2|bz2:*.bzip2) extract_stream_name=${extract_stream_name%.bzip2};;
+    xz:*.xz) extract_stream_name=${extract_stream_name%.xz};;
+    zstd:*.zst|zst:*.zst) extract_stream_name=${extract_stream_name%.zst};;
+    zstd:*.zstd|zst:*.zstd) extract_stream_name=${extract_stream_name%.zstd};;
+    *) return 1;;
+  esac
+
+  [ -n "$extract_stream_name" ] && [ "$extract_stream_name" != . ] && [ "$extract_stream_name" != .. ] || return 1
+  printf -- '%s\n' "$extract_stream_name"
+}
+
+extract_tar_stream()
+{
+  extract_require tar
+  (
+    cd -- "$extract_destination" || exit 1
+    TAR_OPTIONS= command -- tar -xf -
+  ) < "$extract_artifact"
+}
+
+extract_compressed_tar()
+{
+  extract_compressor=$1
+  extract_require "$extract_compressor"
+  extract_require tar
+
+  extract_tmp="$extract_destination/.extract-$$.tar"
+  [ ! -e "$extract_tmp" ] && [ ! -L "$extract_tmp" ] || extract_error temporary-target-exists
+
+  case "$extract_compressor" in
+    gzip)
+      GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_tmp"
+      ;;
+    bzip2)
+      BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_tmp"
+      ;;
+    xz)
+      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_tmp"
+      ;;
+    zstd)
+      command -- zstd -dcq < "$extract_artifact" > "$extract_tmp"
+      ;;
+    *)
+      extract_invalid
+      ;;
+  esac
+  extract_status=$?
+  if [ "$extract_status" -ne 0 ]
+  then
+    command -p -- rm -f -- "$extract_tmp" 2>/dev/null
+    extract_error decompression-failed
+  fi
+
+  exec 3< "$extract_tmp" || {
+    command -p -- rm -f -- "$extract_tmp" 2>/dev/null
+    extract_error temporary-read-failed
+  }
+  command -p -- rm -f -- "$extract_tmp" || {
+    exec 3<&-
+    extract_error temporary-cleanup-failed
+  }
+
+  (
+    cd -- "$extract_destination" || exit 1
+    TAR_OPTIONS= command -- tar -xf - <&3
+  )
+  extract_status=$?
+  exec 3<&-
+  [ "$extract_status" -eq 0 ] || extract_error extraction-failed
+}
+
+extract_stream()
+{
+  extract_compressor=$1
+  extract_require "$extract_compressor"
+
+  extract_stream_base=${extract_artifact##*/}
+  extract_stream_name="$(extract_stream_target "$extract_stream_base" "$extract_format")" || extract_error output-name-invalid
+  extract_stream_output="$extract_destination/$extract_stream_name"
+  [ ! -e "$extract_stream_output" ] && [ ! -L "$extract_stream_output" ] || extract_error output-exists
+
+  case "$extract_compressor" in
+    gzip)
+      GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_stream_output"
+      ;;
+    bzip2)
+      BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_stream_output"
+      ;;
+    xz)
+      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_stream_output"
+      ;;
+    zstd)
+      command -- zstd -dcq < "$extract_artifact" > "$extract_stream_output"
+      ;;
+    *)
+      extract_invalid
+      ;;
+  esac
+  extract_status=$?
+  if [ "$extract_status" -ne 0 ]
+  then
+    command -p -- rm -f -- "$extract_stream_output" 2>/dev/null
+    extract_error decompression-failed
+  fi
+}
+
+extract_zip()
+{
+  extract_require unzip
+  UNZIP= UNZIPOPT= command -- unzip -qq -d "$extract_destination" "$extract_artifact" || extract_error extraction-failed
+}
+
+extract_7z_command()
+{
+  for extract_candidate in 7zz 7z 7za
+  do
+    if extract_have "$extract_candidate"
+    then
+      printf -- '%s\n' "$extract_candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+extract_7z()
+{
+  extract_command="$(extract_7z_command)" || extract_missing 7z
+  command -- "$extract_command" x -y "-o$extract_destination" -- "$extract_artifact" >/dev/null || extract_error extraction-failed
+}
+
+extract_deb()
+{
+  extract_require dpkg-deb
+  command -- dpkg-deb -x "$extract_artifact" "$extract_destination" || extract_error extraction-failed
+}
+
+[ "$#" -eq 3 ] || extract_invalid
+extract_format=$1
+extract_artifact=$2
+extract_destination=$3
+
+[ -f "$extract_artifact" ] && [ -r "$extract_artifact" ] || extract_error artifact-invalid
+[ -d "$extract_destination" ] && [ ! -L "$extract_destination" ] || extract_error destination-invalid
+
+case "$extract_format" in
+  tar)
+    extract_tar_stream || extract_error extraction-failed
+    ;;
+  tar.gz|tgz)
+    extract_compressed_tar gzip
+    ;;
+  tar.bz2|tar.bzip2|tbz|tbz2)
+    extract_compressed_tar bzip2
+    ;;
+  tar.xz|txz)
+    extract_compressed_tar xz
+    ;;
+  tar.zst|tzst)
+    extract_compressed_tar zstd
+    ;;
+  gzip|gz)
+    extract_stream gzip
+    ;;
+  bzip|bzip2|bz2)
+    extract_stream bzip2
+    ;;
+  xz)
+    extract_stream xz
+    ;;
+  zstd|zst)
+    extract_stream zstd
+    ;;
+  zip|jar|war)
+    extract_zip
+    ;;
+  7z|7zip|dmg)
+    extract_7z
+    ;;
+  deb)
+    extract_deb
+    ;;
+  *)
+    extract_invalid
+    ;;
+esac
+
+exit 0

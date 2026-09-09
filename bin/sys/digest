@@ -1,0 +1,87 @@
+#!/usr/bin/env rumiai-os
+
+digest_invalid()
+{
+  log error execution invalid-arguments operation digest
+  exit 2
+}
+
+digest_backend_error()
+{
+  log error execution execution-failed operation digest algorithm "$digest_algorithm"
+  exit 1
+}
+
+digest_algorithm=
+digest_seen_delimiter=0
+
+while [ "$#" -gt 0 ]
+do
+  case "$1" in
+    -a)
+      [ "$#" -ge 2 ] || digest_invalid
+      [ -z "$digest_algorithm" ] || digest_invalid
+      digest_algorithm=$2
+      shift 2
+      ;;
+    --)
+      digest_seen_delimiter=1
+      shift
+      break
+      ;;
+    *)
+      digest_invalid
+      ;;
+  esac
+done
+
+[ -n "$digest_algorithm" ] || digest_invalid
+case "$digest_algorithm" in
+  sha256) :;;
+  *) digest_invalid;;
+esac
+
+if [ "$digest_seen_delimiter" -eq 1 ]
+then
+  [ "$#" -eq 1 ] || digest_invalid
+  digest_file=$1
+  [ -f "$digest_file" ] && [ -r "$digest_file" ] || digest_backend_error
+  exec 3< "$digest_file" || digest_backend_error
+else
+  [ "$#" -eq 0 ] || digest_invalid
+  exec 3<&0 || digest_backend_error
+fi
+
+digest_output=
+digest_value=
+
+if command -v -- cksum >/dev/null 2>&1 && command -- cksum -a sha256 </dev/null >/dev/null 2>&1
+then
+  digest_output="$(command -- cksum -a sha256 <&3)" || digest_backend_error
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || digest_backend_error
+elif command -v -- sha256sum >/dev/null 2>&1
+then
+  digest_output="$(command -- sha256sum <&3)" || digest_backend_error
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || digest_backend_error
+elif command -v -- shasum >/dev/null 2>&1
+then
+  digest_output="$(command -- shasum -a 256 <&3)" || digest_backend_error
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { print $1; exit }')" || digest_backend_error
+elif command -v -- openssl >/dev/null 2>&1
+then
+  digest_output="$(command -- openssl dgst -sha256 <&3)" || digest_backend_error
+  digest_value="$(printf -- '%s\n' "$digest_output" | LC_ALL=C command -p -- awk 'NF { value=$NF } END { print value }')" || digest_backend_error
+else
+  log error execution command-not-found operation digest command sha256 algorithm "$digest_algorithm"
+  exit 1
+fi
+
+exec 3<&-
+
+[ "${#digest_value}" -eq 64 ] || digest_backend_error
+case "$digest_value" in
+  *[!0-9A-Fa-f]*) digest_backend_error;;
+esac
+
+printf -- '%s\n' "$digest_value" | LC_ALL=C command -p -- awk '{ print tolower($0) }' || digest_backend_error
+exit 0
