@@ -285,15 +285,19 @@ _pkg_install_stream_select()
   pkg_install_pkg=$2
   pkg_install_target=$3
   pkg_install_package_dir="$pkg_install_catalog/$pkg_install_pkg"
+  pkg_install_target_stream="$pkg_install_package_dir/catalog-$pkg_install_target"
+  pkg_install_generic_stream="$pkg_install_package_dir/catalog"
   [ -d "$pkg_install_package_dir" ] && [ ! -L "$pkg_install_package_dir" ] || return 1
 
-  if [ -d "$pkg_install_package_dir/catalog-$pkg_install_target" ] && [ ! -L "$pkg_install_package_dir/catalog-$pkg_install_target" ]
+  if [ -e "$pkg_install_target_stream" ] || [ -L "$pkg_install_target_stream" ]
   then
-    pkg_install_stream="$pkg_install_package_dir/catalog-$pkg_install_target"
+    [ -d "$pkg_install_target_stream" ] && [ ! -L "$pkg_install_target_stream" ] || return 1
+    pkg_install_stream=$pkg_install_target_stream
     pkg_install_identity_osarch=$pkg_install_target
-  elif [ -d "$pkg_install_package_dir/catalog" ] && [ ! -L "$pkg_install_package_dir/catalog" ]
+  elif [ -e "$pkg_install_generic_stream" ] || [ -L "$pkg_install_generic_stream" ]
   then
-    pkg_install_stream="$pkg_install_package_dir/catalog"
+    [ -d "$pkg_install_generic_stream" ] && [ ! -L "$pkg_install_generic_stream" ] || return 1
+    pkg_install_stream=$pkg_install_generic_stream
     pkg_install_identity_osarch=
   else
     return 1
@@ -549,7 +553,7 @@ pkg_install()
     if [ "$pkg_install_status" -ne 0 ]
     then
       _pkg_install_error package-failed
-      return "$pkg_install_status"
+      return 1
     fi
   done
 
