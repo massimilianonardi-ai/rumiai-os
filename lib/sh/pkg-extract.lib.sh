@@ -18,6 +18,78 @@ _pkg_extract_require_empty_dir()
   done
 }
 
+_pkg_extract_single_real_dir()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_extract_count=0
+  pkg_extract_single_dir=
+
+  for pkg_extract_item in \
+    "$1"/* \
+    "$1"/.[!.]* \
+    "$1"/..?*
+  do
+    [ -e "$pkg_extract_item" ] || [ -L "$pkg_extract_item" ] || continue
+    pkg_extract_count=$((pkg_extract_count + 1))
+    pkg_extract_single_dir=$pkg_extract_item
+    [ "$pkg_extract_count" -le 1 ] || return 1
+  done
+
+  [ "$pkg_extract_count" -eq 1 ] && [ -d "$pkg_extract_single_dir" ] && [ ! -L "$pkg_extract_single_dir" ]
+}
+
+_pkg_extract_normalize_root()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_extract_output=$1
+  pkg_extract_useful_root=$pkg_extract_output
+  pkg_extract_top_wrapper=
+
+  while _pkg_extract_single_real_dir "$pkg_extract_useful_root"
+  do
+    [ -n "$pkg_extract_top_wrapper" ] || pkg_extract_top_wrapper=$pkg_extract_single_dir
+    pkg_extract_useful_root=$pkg_extract_single_dir
+  done
+
+  [ "$pkg_extract_useful_root" != "$pkg_extract_output" ] || return 0
+
+  pkg_extract_swap_counter=0
+  while :
+  do
+    pkg_extract_swap_name=".rumiai-pkg-extract-$$-$pkg_extract_swap_counter"
+    pkg_extract_swap="$pkg_extract_output/$pkg_extract_swap_name"
+    if [ ! -e "$pkg_extract_swap" ] && [ ! -L "$pkg_extract_swap" ] && \
+       [ ! -e "$pkg_extract_useful_root/$pkg_extract_swap_name" ] && [ ! -L "$pkg_extract_useful_root/$pkg_extract_swap_name" ]
+    then
+      break
+    fi
+    pkg_extract_swap_counter=$((pkg_extract_swap_counter + 1))
+  done
+
+  command -p -- mv -- "$pkg_extract_top_wrapper" "$pkg_extract_swap" || return 1
+
+  if [ "$pkg_extract_useful_root" = "$pkg_extract_top_wrapper" ]
+  then
+    pkg_extract_useful_root=$pkg_extract_swap
+  else
+    pkg_extract_useful_suffix=${pkg_extract_useful_root#"$pkg_extract_top_wrapper"}
+    pkg_extract_useful_root="$pkg_extract_swap$pkg_extract_useful_suffix"
+  fi
+
+  for pkg_extract_item in \
+    "$pkg_extract_useful_root"/* \
+    "$pkg_extract_useful_root"/.[!.]* \
+    "$pkg_extract_useful_root"/..?*
+  do
+    [ -e "$pkg_extract_item" ] || [ -L "$pkg_extract_item" ] || continue
+    pkg_extract_target="$pkg_extract_output/${pkg_extract_item##*/}"
+    [ ! -e "$pkg_extract_target" ] && [ ! -L "$pkg_extract_target" ] || return 1
+    command -p -- mv -- "$pkg_extract_item" "$pkg_extract_output/" || return 1
+  done
+
+  command -p -- rm -rf -- "$pkg_extract_swap" || return 1
+}
+
 _pkg_extract_appimage()
 {
   [ "$#" -eq 2 ] || return 2
@@ -57,6 +129,12 @@ pkg_extract()
   if [ "$pkg_extract_status" -ne 0 ]
   then
     _pkg_extract_error extraction-failed "$pkg_extract_format"
+    return 1
+  fi
+
+  if ! _pkg_extract_normalize_root "$pkg_extract_staging"
+  then
+    _pkg_extract_error normalization-failed "$pkg_extract_format"
     return 1
   fi
 
