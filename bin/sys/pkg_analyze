@@ -1,0 +1,527 @@
+#!/usr/bin/env rumiai-os
+
+pkg_analyze_invalid()
+{
+  log error execution invalid-arguments operation pkg_analyze
+  exit 2
+}
+
+pkg_analyze_error()
+{
+  log error execution execution-failed operation pkg_analyze reason "$1"
+  exit 1
+}
+
+pkg_analyze_cleanup()
+{
+  if [ -n "${pkg_analyze_work-}" ] && [ -d "$pkg_analyze_work" ] && [ ! -L "$pkg_analyze_work" ]
+  then
+    command -p -- rm -rf -- "$pkg_analyze_work" 2>/dev/null || :
+    if [ -n "${pkg_analyze_work_parent-}" ]
+    then
+      command -p -- rmdir -- "$pkg_analyze_work_parent" 2>/dev/null || :
+      command -p -- rmdir -- "$m_TMP_DIR/sys" 2>/dev/null || :
+    fi
+  fi
+}
+
+pkg_analyze_prompt()
+{
+  [ "$#" -eq 1 ] || return 2
+  printf -- '%s' "$1" >&2
+  IFS= read -r pkg_analyze_reply <&3
+}
+
+pkg_analyze_make_work()
+{
+  [ -n "${m_TMP_DIR-}" ] || pkg_analyze_error runtime-tmp-missing
+
+  pkg_analyze_work_parent="$m_TMP_DIR/sys/pkg_analyze"
+  pkg_analyze_work="$pkg_analyze_work_parent/analysis-$$"
+
+  umask 077
+  command -p -- mkdir -p -- "$pkg_analyze_work_parent" || pkg_analyze_error work-parent-create-failed
+  [ ! -e "$pkg_analyze_work" ] && [ ! -L "$pkg_analyze_work" ] || pkg_analyze_error work-exists
+  command -p -- mkdir -- "$pkg_analyze_work" || pkg_analyze_error work-create-failed
+
+  trap 'pkg_analyze_cleanup' 0
+  trap 'exit 130' HUP INT TERM
+}
+
+pkg_analyze_count_single_dir()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_analyze_count_dir=$1
+  pkg_analyze_count=0
+  pkg_analyze_single=
+
+  for pkg_analyze_item in \
+    "$pkg_analyze_count_dir"/* \
+    "$pkg_analyze_count_dir"/.[!.]* \
+    "$pkg_analyze_count_dir"/..?*
+  do
+    [ -e "$pkg_analyze_item" ] || [ -L "$pkg_analyze_item" ] || continue
+    pkg_analyze_count=$((pkg_analyze_count + 1))
+    pkg_analyze_single=$pkg_analyze_item
+    [ "$pkg_analyze_count" -le 1 ] || break
+  done
+
+  [ "$pkg_analyze_count" -eq 1 ] && [ -d "$pkg_analyze_single" ] && [ ! -L "$pkg_analyze_single" ]
+}
+
+pkg_analyze_find_deepest_dir()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_analyze_chain_file="$pkg_analyze_work/root-chain"
+  pkg_analyze_auto_root=$1
+  pkg_analyze_auto_relative=.
+  : > "$pkg_analyze_chain_file" || return 1
+  printf -- '.\n' >> "$pkg_analyze_chain_file" || return 1
+
+  while pkg_analyze_count_single_dir "$pkg_analyze_auto_root"
+  do
+    pkg_analyze_auto_root=$pkg_analyze_single
+    pkg_analyze_component=${pkg_analyze_auto_root##*/}
+    if [ "$pkg_analyze_auto_relative" = . ]
+    then
+      pkg_analyze_auto_relative=$pkg_analyze_component
+    else
+      pkg_analyze_auto_relative="$pkg_analyze_auto_relative/$pkg_analyze_component"
+    fi
+    printf -- '%s\n' "$pkg_analyze_auto_relative" >> "$pkg_analyze_chain_file" || return 1
+  done
+}
+
+pkg_analyze_choose_root()
+{
+  while :
+  do
+    pkg_analyze_prompt "Useful root relative to extracted tree [$pkg_analyze_auto_relative]: " || pkg_analyze_error input-ended
+    pkg_analyze_selected_relative=$pkg_analyze_reply
+    [ -n "$pkg_analyze_selected_relative" ] || pkg_analyze_selected_relative=$pkg_analyze_auto_relative
+
+    case "$pkg_analyze_selected_relative" in
+      /*)
+        printf -- 'pkg_analyze: useful root must be relative to the extracted tree\n' >&2
+        continue
+        ;;
+    esac
+
+    if [ "$pkg_analyze_selected_relative" = . ]
+    then
+      pkg_analyze_selected_candidate=$pkg_analyze_base
+    else
+      pkg_analyze_selected_candidate="$pkg_analyze_base/$pkg_analyze_selected_relative"
+    fi
+
+    if ! readpathce pkg_analyze_root "$pkg_analyze_selected_candidate"
+    then
+      printf -- 'pkg_analyze: useful root does not resolve to an existing directory\n' >&2
+      continue
+    fi
+
+    case "$pkg_analyze_root" in
+      "$pkg_analyze_base"|"$pkg_analyze_base"/*)
+        :
+        ;;
+      *)
+        printf -- 'pkg_analyze: useful root escapes the extracted tree\n' >&2
+        continue
+        ;;
+    esac
+
+    if [ ! -d "$pkg_analyze_root" ] || [ -L "$pkg_analyze_root" ]
+    then
+      printf -- 'pkg_analyze: useful root must be a real directory\n' >&2
+      continue
+    fi
+
+    if [ "$pkg_analyze_root" = "$pkg_analyze_base" ]
+    then
+      pkg_analyze_root_relative=.
+    else
+      pkg_analyze_root_relative=${pkg_analyze_root#"$pkg_analyze_base"/}
+    fi
+    return 0
+  done
+}
+
+pkg_analyze_scan_candidates()
+{
+  pkg_analyze_candidates_unsorted="$pkg_analyze_work/candidates.unsorted"
+  pkg_analyze_candidates="$pkg_analyze_work/candidates"
+  : > "$pkg_analyze_candidates_unsorted" || return 1
+
+  command -p -- find "$pkg_analyze_root" -type f -exec sh -c '
+root=$1
+out=$2
+shift 2
+tab=$(printf "\t")
+cr=$(printf "\r")
+lf="
+"
+for path
+do
+  case "$path" in
+    *"$tab"*|*"$cr"*|*"$lf"*)
+      printf "pkg_analyze: candidate pathname with TAB/CR/LF is not representable in the interactive candidate list; skipped\n" >&2
+      continue
+      ;;
+  esac
+
+  kind=
+  if [ -x "$path" ]
+  then
+    kind=executable
+  else
+    case "$path" in
+      *.sh|*.bash|*.zsh|*.ksh|*.command|*.bat|*.cmd|*.ps1|*.exe|*.com|*.jar|*.py|*.pl|*.rb)
+        kind=launch-like
+        ;;
+    esac
+  fi
+  [ -n "$kind" ] || continue
+
+  if [ "$root" = / ]
+  then
+    relative=${path#/}
+  else
+    case "$path" in
+      "$root"/*) relative=${path#"$root"/};;
+      *) continue;;
+    esac
+  fi
+
+  printf "%s\t%s\n" "$relative" "$kind" >> "$out" || exit 1
+done
+' sh "$pkg_analyze_root" "$pkg_analyze_candidates_unsorted" {} + || return 1
+
+  LC_ALL=C command -p -- sort -u < "$pkg_analyze_candidates_unsorted" > "$pkg_analyze_candidates" || return 1
+}
+
+pkg_analyze_print_candidates()
+{
+  printf -- '\nLaunch candidates:\n'
+  if [ -s "$pkg_analyze_candidates" ]
+  then
+    LC_ALL=C command -p -- awk -F '\t' '{ printf "%d\t%s\t%s\n", NR, $2, $1 }' < "$pkg_analyze_candidates"
+  else
+    printf -- '(none)\n'
+  fi
+}
+
+pkg_analyze_record()
+{
+  [ "$#" -eq 1 ] || return 2
+  LC_ALL=C command -p -- awk -F '\t' -v wanted="$1" '
+NR == wanted { print; found=1; exit }
+END { if (!found) exit 1 }
+' < "$pkg_analyze_candidates"
+}
+
+pkg_analyze_choose_candidates()
+{
+  pkg_analyze_selected="$pkg_analyze_work/selected"
+  : > "$pkg_analyze_selected" || return 1
+
+  [ -s "$pkg_analyze_candidates" ] || return 0
+
+  while :
+  do
+    pkg_analyze_prompt 'Candidate numbers to export/probe (space separated, empty = none): ' || pkg_analyze_error input-ended
+    [ -n "$pkg_analyze_reply" ] || return 0
+
+    pkg_analyze_selection_valid=1
+    : > "$pkg_analyze_selected" || return 1
+    for pkg_analyze_id in $pkg_analyze_reply
+    do
+      case "$pkg_analyze_id" in
+        ''|*[!0-9]*) pkg_analyze_selection_valid=0; break;;
+      esac
+      if ! pkg_analyze_record "$pkg_analyze_id" >/dev/null 2>&1
+      then
+        pkg_analyze_selection_valid=0
+        break
+      fi
+      printf -- '%s\n' "$pkg_analyze_id" >> "$pkg_analyze_selected" || return 1
+    done
+
+    if [ "$pkg_analyze_selection_valid" -eq 1 ]
+    then
+      LC_ALL=C command -p -- sort -nu < "$pkg_analyze_selected" > "$pkg_analyze_selected.sorted" || return 1
+      command -p -- mv -- "$pkg_analyze_selected.sorted" "$pkg_analyze_selected" || return 1
+      return 0
+    fi
+
+    printf -- 'pkg_analyze: invalid candidate selection\n' >&2
+  done
+}
+
+pkg_analyze_print_selected()
+{
+  printf -- '\nSelected export candidates:\n'
+  if [ ! -s "$pkg_analyze_selected" ]
+  then
+    printf -- '(none)\n'
+    return 0
+  fi
+
+  while IFS= read -r pkg_analyze_id
+  do
+    pkg_analyze_line="$(pkg_analyze_record "$pkg_analyze_id")" || return 1
+    pkg_analyze_tab="$(printf '\t')"
+    IFS="$pkg_analyze_tab" read -r pkg_analyze_selected_relative pkg_analyze_selected_kind pkg_analyze_selected_extra <<EOF_SELECTED
+$pkg_analyze_line
+EOF_SELECTED
+    [ -z "$pkg_analyze_selected_extra" ] || return 1
+    printf -- '%s\t%s\t%s\n' "$pkg_analyze_id" "$pkg_analyze_selected_kind" "$pkg_analyze_selected_relative"
+  done < "$pkg_analyze_selected"
+}
+
+pkg_analyze_snapshot_paths()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_analyze_snapshot_root=$1
+  pkg_analyze_snapshot_out=$2
+  pkg_analyze_snapshot_unsorted="$pkg_analyze_snapshot_out.unsorted"
+  : > "$pkg_analyze_snapshot_unsorted" || return 1
+
+  [ -d "$pkg_analyze_snapshot_root" ] && [ ! -L "$pkg_analyze_snapshot_root" ] || return 1
+
+  command -p -- find "$pkg_analyze_snapshot_root" -exec sh -c '
+root=$1
+out=$2
+shift 2
+tab=$(printf "\t")
+cr=$(printf "\r")
+lf="
+"
+for path
+do
+  [ "$path" != "$root" ] || continue
+  case "$path" in
+    *"$tab"*|*"$cr"*|*"$lf"*)
+      printf "pkg_analyze: snapshot pathname with TAB/CR/LF is not representable in the report; skipped\n" >&2
+      continue
+      ;;
+  esac
+
+  if [ -L "$path" ]
+  then
+    kind=L
+  elif [ -d "$path" ]
+  then
+    kind=D
+  elif [ -f "$path" ]
+  then
+    kind=F
+  else
+    kind=O
+  fi
+
+  if [ "$root" = / ]
+  then
+    relative=${path#/}
+  else
+    case "$path" in
+      "$root"/*) relative=${path#"$root"/};;
+      *) continue;;
+    esac
+  fi
+
+  printf "%s\t%s\n" "$relative" "$kind" >> "$out" || exit 1
+done
+' sh "$pkg_analyze_snapshot_root" "$pkg_analyze_snapshot_unsorted" {} + || return 1
+
+  LC_ALL=C command -p -- sort -u < "$pkg_analyze_snapshot_unsorted" > "$pkg_analyze_snapshot_out" || return 1
+}
+
+pkg_analyze_print_delta()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_analyze_delta_label=$1
+  pkg_analyze_delta_before=$2
+  pkg_analyze_delta_after=$3
+
+  printf -- '%s\n' "$pkg_analyze_delta_label"
+  printf -- '  added:\n'
+  pkg_analyze_delta_added="$(command -p -- comm -13 "$pkg_analyze_delta_before" "$pkg_analyze_delta_after")" || return 1
+  if [ -n "$pkg_analyze_delta_added" ]
+  then
+    printf -- '%s\n' "$pkg_analyze_delta_added" | command -p -- sed 's/^/    /'
+  else
+    printf -- '    (none)\n'
+  fi
+
+  printf -- '  removed:\n'
+  pkg_analyze_delta_removed="$(command -p -- comm -23 "$pkg_analyze_delta_before" "$pkg_analyze_delta_after")" || return 1
+  if [ -n "$pkg_analyze_delta_removed" ]
+  then
+    printf -- '%s\n' "$pkg_analyze_delta_removed" | command -p -- sed 's/^/    /'
+  else
+    printf -- '    (none)\n'
+  fi
+}
+
+pkg_analyze_probe_one()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_analyze_probe_id=$1
+  pkg_analyze_probe_line="$(pkg_analyze_record "$pkg_analyze_probe_id")" || return 1
+  pkg_analyze_tab="$(printf '\t')"
+  IFS="$pkg_analyze_tab" read -r pkg_analyze_probe_relative pkg_analyze_probe_kind pkg_analyze_probe_extra <<EOF_RECORD
+$pkg_analyze_probe_line
+EOF_RECORD
+  [ -z "$pkg_analyze_probe_extra" ] || return 1
+
+  pkg_analyze_probe_command="$pkg_analyze_root/$pkg_analyze_probe_relative"
+  pkg_analyze_probe_state="$pkg_analyze_work/probe-$pkg_analyze_probe_id-state"
+  pkg_analyze_probe_meta="$pkg_analyze_work/probe-$pkg_analyze_probe_id-report"
+  command -p -- mkdir -- "$pkg_analyze_probe_state" "$pkg_analyze_probe_meta" || return 1
+
+  for pkg_analyze_probe_area in home xdg-config xdg-data xdg-cache xdg-state xdg-runtime tmp
+  do
+    command -p -- mkdir -- "$pkg_analyze_probe_state/$pkg_analyze_probe_area" || return 1
+  done
+
+  pkg_analyze_snapshot_paths "$pkg_analyze_root" "$pkg_analyze_probe_meta/root.before" || return 1
+  pkg_analyze_probe_home_available=0
+  if [ -n "$pkg_analyze_original_home" ] && [ -d "$pkg_analyze_original_home" ] && [ ! -L "$pkg_analyze_original_home" ]
+  then
+    pkg_analyze_snapshot_paths "$pkg_analyze_original_home" "$pkg_analyze_probe_meta/home.before" || return 1
+    pkg_analyze_probe_home_available=1
+  fi
+  pkg_analyze_snapshot_paths "$pkg_analyze_probe_state" "$pkg_analyze_probe_meta/isolation.before" || return 1
+
+  printf -- '\nProbe %s: %s\n' "$pkg_analyze_probe_id" "$pkg_analyze_probe_relative"
+
+  pkg_analyze_probe_runnable=1
+  case "$pkg_analyze_probe_kind:$pkg_analyze_probe_relative" in
+    executable:*) :;;
+    launch-like:*.sh) :;;
+    *) pkg_analyze_probe_runnable=0;;
+  esac
+
+  if [ "$pkg_analyze_probe_runnable" -eq 1 ]
+  then
+    (
+      HOME="$pkg_analyze_probe_state/home"
+      XDG_CONFIG_HOME="$pkg_analyze_probe_state/xdg-config"
+      XDG_DATA_HOME="$pkg_analyze_probe_state/xdg-data"
+      XDG_CACHE_HOME="$pkg_analyze_probe_state/xdg-cache"
+      XDG_STATE_HOME="$pkg_analyze_probe_state/xdg-state"
+      XDG_RUNTIME_DIR="$pkg_analyze_probe_state/xdg-runtime"
+      TMPDIR="$pkg_analyze_probe_state/tmp"
+      TMP="$pkg_analyze_probe_state/tmp"
+      TEMP="$pkg_analyze_probe_state/tmp"
+      export HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME XDG_RUNTIME_DIR TMPDIR TMP TEMP
+
+      cd -- "$pkg_analyze_root" || exit 125
+      if [ -t 3 ]
+      then
+        exec 0<&3
+      else
+        exec </dev/null
+      fi
+      case "$pkg_analyze_probe_kind:$pkg_analyze_probe_relative" in
+        executable:*) "$pkg_analyze_probe_command";;
+        launch-like:*.sh) command -p -- sh "$pkg_analyze_probe_command";;
+        *) exit 126;;
+      esac
+    )
+    pkg_analyze_probe_status=$?
+    printf -- '  exit-status: %s\n' "$pkg_analyze_probe_status"
+    pkg_analyze_prompt 'Press Enter when this program and its children are finished: ' || pkg_analyze_error input-ended
+  else
+    printf -- '  execution: skipped (candidate is not directly runnable by the POSIX analyzer)\n'
+  fi
+
+  pkg_analyze_snapshot_paths "$pkg_analyze_root" "$pkg_analyze_probe_meta/root.after" || return 1
+  pkg_analyze_snapshot_paths "$pkg_analyze_probe_state" "$pkg_analyze_probe_meta/isolation.after" || return 1
+  if [ "$pkg_analyze_probe_home_available" -eq 1 ]
+  then
+    pkg_analyze_snapshot_paths "$pkg_analyze_original_home" "$pkg_analyze_probe_meta/home.after" || return 1
+  fi
+
+  pkg_analyze_print_delta '  package-root path delta:' "$pkg_analyze_probe_meta/root.before" "$pkg_analyze_probe_meta/root.after" || return 1
+  pkg_analyze_print_delta '  redirected-environment path delta:' "$pkg_analyze_probe_meta/isolation.before" "$pkg_analyze_probe_meta/isolation.after" || return 1
+  if [ "$pkg_analyze_probe_home_available" -eq 1 ]
+  then
+    pkg_analyze_print_delta '  original-HOME path delta:' "$pkg_analyze_probe_meta/home.before" "$pkg_analyze_probe_meta/home.after" || return 1
+  else
+    printf -- '  original-HOME path delta: unavailable\n'
+  fi
+}
+
+pkg_analyze_probe_selected()
+{
+  [ -s "$pkg_analyze_selected" ] || return 0
+
+  printf -- '\nWARNING: dynamic probing is diagnostic only; it is not a sandbox.\n' >&2
+  printf -- 'Selected upstream programs run with your user permissions and may ignore redirected environment variables, access the network, or modify other files.\n' >&2
+  pkg_analyze_prompt 'Run the selected candidates? [y/N] ' || pkg_analyze_error input-ended
+  case "$pkg_analyze_reply" in
+    y|Y|yes|YES|Yes) :;;
+    *)
+      printf -- '\nDynamic probes: skipped\n'
+      return 0
+      ;;
+  esac
+
+  while IFS= read -r pkg_analyze_probe_id
+  do
+    pkg_analyze_probe_one "$pkg_analyze_probe_id" || pkg_analyze_error probe-failed
+  done < "$pkg_analyze_selected"
+}
+
+exec 3<&0
+pkg_analyze_make_work
+pkg_analyze_original_home=${HOME-}
+
+case "$#" in
+  1)
+    pkg_analyze_input=$1
+    readpathce pkg_analyze_base "$pkg_analyze_input" || pkg_analyze_error input-invalid
+    [ -d "$pkg_analyze_base" ] && [ ! -L "$pkg_analyze_base" ] || pkg_analyze_error input-not-directory
+    pkg_analyze_source=directory
+    ;;
+  2)
+    pkg_analyze_format=$1
+    pkg_analyze_artifact=$2
+    pkg_analyze_staging="$pkg_analyze_work/staging"
+    command -p -- mkdir -- "$pkg_analyze_staging" || pkg_analyze_error staging-create-failed
+    . "$m_LIB_DIR/sh/pkg-extract.lib.sh" || pkg_analyze_error pkg-extract-load-failed
+    pkg_extract "$pkg_analyze_artifact" "$pkg_analyze_format" "$pkg_analyze_staging" || pkg_analyze_error extraction-failed
+    readpathce pkg_analyze_base "$pkg_analyze_staging" || pkg_analyze_error staging-resolve-failed
+    pkg_analyze_source=artifact
+    ;;
+  *)
+    pkg_analyze_invalid
+    ;;
+esac
+
+pkg_analyze_find_deepest_dir "$pkg_analyze_base" || pkg_analyze_error root-discovery-failed
+
+printf -- 'pkg_analyze report\n'
+printf -- 'source\t%s\n' "$pkg_analyze_source"
+if [ "$pkg_analyze_source" = artifact ]
+then
+  printf -- 'format\t%s\n' "$pkg_analyze_format"
+  printf -- 'artifact\t%s\n' "$pkg_analyze_artifact"
+fi
+printf -- 'extracted-tree\t%s\n' "$pkg_analyze_base"
+printf -- '\nSingle-directory root chain:\n'
+command -p -- cat "$pkg_analyze_chain_file"
+printf -- 'suggested-useful-root\t%s\n' "$pkg_analyze_auto_relative"
+
+pkg_analyze_choose_root
+printf -- 'selected-useful-root\t%s\n' "$pkg_analyze_root_relative"
+
+pkg_analyze_scan_candidates || pkg_analyze_error candidate-scan-failed
+pkg_analyze_print_candidates || pkg_analyze_error candidate-report-failed
+pkg_analyze_choose_candidates || pkg_analyze_error candidate-selection-failed
+pkg_analyze_print_selected || pkg_analyze_error selected-report-failed
+pkg_analyze_probe_selected || pkg_analyze_error probe-failed
+
+printf -- '\nAnalysis complete.\n'
+exit 0
