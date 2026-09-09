@@ -54,14 +54,12 @@ readpathce()
     then
       cmd="./$1"
     else
-      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}"
+      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%\nx}"
     fi
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
-    cmd="${cmd%
-x}"
+    cmd="${cmd%\nx}"
     [ -e "$cmd" ] || exit 1
     printf -- '%s' "${cmd}x"
 )"
@@ -214,11 +212,33 @@ shell()
         export -- m_SHELL_ZDOTDIR
       fi
 
-      m_SHELL_ZDOTDIR_INIT="$m_CONF_DIR/sys/shell/zsh"
+      shell_zdotdir_init="$m_HOME_DIR/sys/shell/zsh"
+      command -p -- mkdir -p "$shell_zdotdir_init" || return 1
+
+      for shell_zdotfile in .zshenv .zprofile .zshrc
+      do
+        shell_zdottmp="$shell_zdotdir_init/$shell_zdotfile.$$"
+
+        if ! printf -- '. "$m_CONF_DIR/sys/shell/zsh/%s"\n' "$shell_zdotfile" > "$shell_zdottmp"
+        then
+          command -p -- rm -f "$shell_zdottmp" 2>/dev/null
+          return 1
+        fi
+
+        if ! command -p -- mv -f "$shell_zdottmp" "$shell_zdotdir_init/$shell_zdotfile"
+        then
+          command -p -- rm -f "$shell_zdottmp" 2>/dev/null
+          return 1
+        fi
+      done
+
+      m_SHELL_ZDOTDIR_INIT="$shell_zdotdir_init"
       export -- m_SHELL_ZDOTDIR_INIT
 
       ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
       export -- ZDOTDIR
+
+      unset shell_zdotdir_init shell_zdotfile shell_zdottmp
 
       exec "$SHELL" "$@"
       ;;
