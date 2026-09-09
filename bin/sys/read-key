@@ -1,9 +1,6 @@
 #!/bin/sh
 
-[ "$#" -eq 0 ] || {
-  printf -- '%s\n' 'read-key: invalid arguments' >&2
-  exit 2
-}
+[ "$#" -eq 0 ] || exit 2
 
 LC_ALL=C
 export LC_ALL
@@ -52,8 +49,8 @@ read_byte()
 hex_of()
 {
   printf -- '%s' "$1" |
-    command -p od -A n -t x1 |
-    command -p tr -d ' \n'
+    command -p od -A n -t x1 2>/dev/null |
+    command -p tr -d ' \n' 2>/dev/null
 }
 
 map_add()
@@ -116,15 +113,8 @@ EOF_MAP
 }
 
 # Saving the state also verifies that a controlling terminal is available.
-tty_saved="$(command -p stty -g 2>/dev/null < "$tty_device")" || {
-  printf -- '%s\n' 'read-key: no controlling terminal' >&2
-  exit 1
-}
-
-[ -n "$tty_saved" ] || {
-  printf -- '%s\n' 'read-key: cannot read terminal state' >&2
-  exit 1
-}
+tty_saved="$(command -p stty -g 2>/dev/null < "$tty_device")" || exit 1
+[ -n "$tty_saved" ] || exit 1
 
 trap cleanup 0
 trap 'exit 129' HUP
@@ -134,16 +124,10 @@ trap 'exit 143' TERM
 trap 'exit 141' PIPE
 trap 'exit 148' TSTP
 
-command -v tput >/dev/null 2>&1 || {
-  printf -- '%s\n' 'read-key: tput unavailable' >&2
-  exit 1
-}
+command -v tput >/dev/null 2>&1 || exit 1
 
 # Check that TERM has a usable terminfo entry.
-command tput cols >/dev/null 2>&1 || {
-  printf -- '%s\n' 'read-key: TERM/terminfo unavailable' >&2
-  exit 1
-}
+command tput cols >/dev/null 2>&1 || exit 1
 
 # Non-canonical, blocking, no echo.
 command -p stty \
@@ -246,8 +230,6 @@ then
 
     if [ -z "$exact" ] && ! map_has_longer "$key_hex"
     then
-      printf -- '%s\n' \
-        "read-key: unknown terminal sequence: $key_hex" >&2
       exit 2
     fi
   done
@@ -258,8 +240,6 @@ then
     exit 0
   fi
 
-  printf -- '%s\n' \
-    "read-key: incomplete terminal sequence: $key_hex" >&2
   exit 2
 fi
 
@@ -289,8 +269,6 @@ case "$first_hex" in
     remaining="3"
     ;;
   *)
-    printf -- '%s\n' \
-      "read-key: unsupported input byte: $first_hex" >&2
     exit 2
     ;;
 esac
@@ -308,10 +286,7 @@ while [ "$remaining" -gt 0 ]
 do
   read_byte || exit 1
 
-  [ -n "$byte" ] || {
-    printf -- '%s\n' 'read-key: incomplete UTF-8 character' >&2
-    exit 2
-  }
+  [ -n "$byte" ] || exit 2
 
   byte_hex="$(hex_of "$byte")" || exit 1
 
@@ -319,7 +294,6 @@ do
     [89ab][0-9a-f])
       ;;
     *)
-      printf -- '%s\n' 'read-key: invalid UTF-8 character' >&2
       exit 2
       ;;
   esac
@@ -330,19 +304,15 @@ do
   then
     case "$first_hex:$byte_hex" in
       e0:8[0-9a-f]|e0:9[0-9a-f])
-        printf -- '%s\n' 'read-key: invalid UTF-8 character' >&2
         exit 2
         ;;
       ed:a[0-9a-f]|ed:b[0-9a-f])
-        printf -- '%s\n' 'read-key: invalid UTF-8 character' >&2
         exit 2
         ;;
       f0:8[0-9a-f])
-        printf -- '%s\n' 'read-key: invalid UTF-8 character' >&2
         exit 2
         ;;
       f4:9[0-9a-f]|f4:a[0-9a-f]|f4:b[0-9a-f])
-        printf -- '%s\n' 'read-key: invalid UTF-8 character' >&2
         exit 2
         ;;
     esac
