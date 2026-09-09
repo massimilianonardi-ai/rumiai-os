@@ -54,12 +54,14 @@ readpathce()
     then
       cmd="./$1"
     else
-      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%\nx}"
+      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}"
     fi
     [ -e "$cmd" ] || exit 1
     # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
-    cmd="${cmd%\nx}"
+    cmd="${cmd%
+x}"
     [ -e "$cmd" ] || exit 1
     printf -- '%s' "${cmd}x"
 )"
