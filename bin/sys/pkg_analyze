@@ -1,17 +1,5 @@
 #!/usr/bin/env rumiai-os
 
-pkg_analyze_invalid()
-{
-  log error execution invalid-arguments operation pkg_analyze
-  exit 2
-}
-
-pkg_analyze_error()
-{
-  log error execution execution-failed operation pkg_analyze reason "$1"
-  exit 1
-}
-
 pkg_analyze_cleanup()
 {
   if [ -n "${pkg_analyze_work-}" ] && [ -d "$pkg_analyze_work" ] && [ ! -L "$pkg_analyze_work" ]
@@ -34,15 +22,15 @@ pkg_analyze_prompt()
 
 pkg_analyze_make_work()
 {
-  [ -n "${m_TMP_DIR-}" ] || pkg_analyze_error runtime-tmp-missing
+  [ -n "${m_TMP_DIR-}" ] || fatal execution execution-failed operation pkg_analyze reason runtime-tmp-missing
 
   pkg_analyze_work_parent="$m_TMP_DIR/sys/pkg_analyze"
   pkg_analyze_work="$pkg_analyze_work_parent/analysis-$$"
 
   umask 077
-  command -p -- mkdir -p -- "$pkg_analyze_work_parent" || pkg_analyze_error work-parent-create-failed
-  [ ! -e "$pkg_analyze_work" ] && [ ! -L "$pkg_analyze_work" ] || pkg_analyze_error work-exists
-  command -p -- mkdir -- "$pkg_analyze_work" || pkg_analyze_error work-create-failed
+  command -p -- mkdir -p -- "$pkg_analyze_work_parent" || fatal execution execution-failed operation pkg_analyze reason work-parent-create-failed
+  [ ! -e "$pkg_analyze_work" ] && [ ! -L "$pkg_analyze_work" ] || fatal execution execution-failed operation pkg_analyze reason work-exists
+  command -p -- mkdir -- "$pkg_analyze_work" || fatal execution execution-failed operation pkg_analyze reason work-create-failed
 
   trap 'pkg_analyze_cleanup' 0
   trap 'exit 130' HUP INT TERM
@@ -96,7 +84,7 @@ pkg_analyze_choose_root()
 {
   while :
   do
-    pkg_analyze_prompt "Useful root relative to extracted tree [$pkg_analyze_auto_relative]: " || pkg_analyze_error input-ended
+    pkg_analyze_prompt "Useful root relative to extracted tree [$pkg_analyze_auto_relative]: " || fatal execution execution-failed operation pkg_analyze reason input-ended
     pkg_analyze_selected_relative=$pkg_analyze_reply
     [ -n "$pkg_analyze_selected_relative" ] || pkg_analyze_selected_relative=$pkg_analyze_auto_relative
 
@@ -228,7 +216,7 @@ pkg_analyze_choose_candidates()
 
   while :
   do
-    pkg_analyze_prompt 'Candidate numbers to export/probe (space separated, empty = none): ' || pkg_analyze_error input-ended
+    pkg_analyze_prompt 'Candidate numbers to export/probe (space separated, empty = none): ' || fatal execution execution-failed operation pkg_analyze reason input-ended
     [ -n "$pkg_analyze_reply" ] || return 0
 
     pkg_analyze_selection_valid=1
@@ -431,7 +419,7 @@ EOF_RECORD
     )
     pkg_analyze_probe_status=$?
     printf -- '  exit-status: %s\n' "$pkg_analyze_probe_status"
-    pkg_analyze_prompt 'Press Enter when this program and its children are finished: ' || pkg_analyze_error input-ended
+    pkg_analyze_prompt 'Press Enter when this program and its children are finished: ' || fatal execution execution-failed operation pkg_analyze reason input-ended
   else
     printf -- '  execution: skipped (candidate is not directly runnable by the POSIX analyzer)\n'
   fi
@@ -459,7 +447,7 @@ pkg_analyze_probe_selected()
 
   printf -- '\nWARNING: dynamic probing is diagnostic only; it is not a sandbox.\n' >&2
   printf -- 'Selected upstream programs run with your user permissions and may ignore redirected environment variables, access the network, or modify other files.\n' >&2
-  pkg_analyze_prompt 'Run the selected candidates? [y/N] ' || pkg_analyze_error input-ended
+  pkg_analyze_prompt 'Run the selected candidates? [y/N] ' || fatal execution execution-failed operation pkg_analyze reason input-ended
   case "$pkg_analyze_reply" in
     y|Y|yes|YES|Yes) :;;
     *)
@@ -470,7 +458,7 @@ pkg_analyze_probe_selected()
 
   while IFS= read -r pkg_analyze_probe_id
   do
-    pkg_analyze_probe_one "$pkg_analyze_probe_id" || pkg_analyze_error probe-failed
+    pkg_analyze_probe_one "$pkg_analyze_probe_id" || fatal execution execution-failed operation pkg_analyze reason probe-failed
   done < "$pkg_analyze_selected"
 }
 
@@ -481,26 +469,26 @@ pkg_analyze_original_home=${HOME-}
 case "$#" in
   1)
     pkg_analyze_input=$1
-    readpathce pkg_analyze_base "$pkg_analyze_input" || pkg_analyze_error input-invalid
-    [ -d "$pkg_analyze_base" ] && [ ! -L "$pkg_analyze_base" ] || pkg_analyze_error input-not-directory
+    readpathce pkg_analyze_base "$pkg_analyze_input" || fatal execution execution-failed operation pkg_analyze reason input-invalid
+    [ -d "$pkg_analyze_base" ] && [ ! -L "$pkg_analyze_base" ] || fatal execution execution-failed operation pkg_analyze reason input-not-directory
     pkg_analyze_source=directory
     ;;
   2)
     pkg_analyze_format=$1
     pkg_analyze_artifact=$2
     pkg_analyze_staging="$pkg_analyze_work/staging"
-    command -p -- mkdir -- "$pkg_analyze_staging" || pkg_analyze_error staging-create-failed
-    . "$m_LIB_DIR/sh/pkg-extract.lib.sh" || pkg_analyze_error pkg-extract-load-failed
-    pkg_extract "$pkg_analyze_artifact" "$pkg_analyze_format" "$pkg_analyze_staging" || pkg_analyze_error extraction-failed
-    readpathce pkg_analyze_base "$pkg_analyze_staging" || pkg_analyze_error staging-resolve-failed
+    command -p -- mkdir -- "$pkg_analyze_staging" || fatal execution execution-failed operation pkg_analyze reason staging-create-failed
+    . "$m_LIB_DIR/sh/pkg-extract.lib.sh" || fatal execution execution-failed operation pkg_analyze reason pkg-extract-load-failed
+    pkg_extract "$pkg_analyze_artifact" "$pkg_analyze_format" "$pkg_analyze_staging" || fatal execution execution-failed operation pkg_analyze reason extraction-failed
+    readpathce pkg_analyze_base "$pkg_analyze_staging" || fatal execution execution-failed operation pkg_analyze reason staging-resolve-failed
     pkg_analyze_source=artifact
     ;;
   *)
-    pkg_analyze_invalid
+    fatal 2 execution invalid-arguments operation pkg_analyze
     ;;
 esac
 
-pkg_analyze_find_deepest_dir "$pkg_analyze_base" || pkg_analyze_error root-discovery-failed
+pkg_analyze_find_deepest_dir "$pkg_analyze_base" || fatal execution execution-failed operation pkg_analyze reason root-discovery-failed
 
 printf -- 'pkg_analyze report\n'
 printf -- 'source\t%s\n' "$pkg_analyze_source"
@@ -517,11 +505,11 @@ printf -- 'suggested-useful-root\t%s\n' "$pkg_analyze_auto_relative"
 pkg_analyze_choose_root
 printf -- 'selected-useful-root\t%s\n' "$pkg_analyze_root_relative"
 
-pkg_analyze_scan_candidates || pkg_analyze_error candidate-scan-failed
-pkg_analyze_print_candidates || pkg_analyze_error candidate-report-failed
-pkg_analyze_choose_candidates || pkg_analyze_error candidate-selection-failed
-pkg_analyze_print_selected || pkg_analyze_error selected-report-failed
-pkg_analyze_probe_selected || pkg_analyze_error probe-failed
+pkg_analyze_scan_candidates || fatal execution execution-failed operation pkg_analyze reason candidate-scan-failed
+pkg_analyze_print_candidates || fatal execution execution-failed operation pkg_analyze reason candidate-report-failed
+pkg_analyze_choose_candidates || fatal execution execution-failed operation pkg_analyze reason candidate-selection-failed
+pkg_analyze_print_selected || fatal execution execution-failed operation pkg_analyze reason selected-report-failed
+pkg_analyze_probe_selected || fatal execution execution-failed operation pkg_analyze reason probe-failed
 
 printf -- '\nAnalysis complete.\n'
 exit 0
