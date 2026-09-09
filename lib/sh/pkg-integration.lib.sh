@@ -22,9 +22,8 @@ _pkg_integration_version_valid()
 _pkg_integration_osarch_valid()
 {
   [ "$#" -eq 1 ] || return 2
-  _pkg_integration_name_valid "$1" || return 1
   case "$1" in
-    *-*) return 0 ;;
+    linux-arm64 | linux-x86_64 | macos-arm64 | macos-x86_64 | windows-arm64 | windows-x86_64) return 0 ;;
     *) return 1 ;;
   esac
 }
