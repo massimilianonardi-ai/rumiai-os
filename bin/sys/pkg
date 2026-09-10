@@ -29,6 +29,16 @@ case "$pkg_command" in
     pkg_uninstall "$@"
     exit $?
     ;;
+  versions)
+    . "$m_LIB_DIR/sh/pkg-versions.lib.sh"
+    pkg_versions "$@"
+    exit $?
+    ;;
+  default)
+    . "$m_LIB_DIR/sh/pkg-default.lib.sh"
+    pkg_default_command "$@"
+    exit $?
+    ;;
   *)
     log error execution invalid-arguments operation pkg subcommand "$pkg_command"
     exit 2
