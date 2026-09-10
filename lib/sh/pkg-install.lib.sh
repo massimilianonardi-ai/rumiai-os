@@ -7,31 +7,6 @@ _pkg_install_error()
   log error execution execution-failed operation pkg-install reason "$1"
 }
 
-_pkg_install_name_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) return 1 ;;
-  esac
-}
-
-_pkg_install_version_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | [!A-Za-z0-9]* | *[!A-Za-z0-9._+~-]*) return 1 ;;
-  esac
-}
-
-_pkg_install_osarch_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    linux-arm64 | linux-x86_64 | macos-arm64 | macos-x86_64 | windows-arm64 | windows-x86_64) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 _pkg_install_scalar()
 {
   [ "$#" -eq 1 ] || return 2
@@ -75,7 +50,7 @@ _pkg_install_operand_parse()
       pkg_install_requested_osarch=${pkg_install_left##*!}
       pkg_install_left=${pkg_install_left%!"$pkg_install_requested_osarch"}
       case "$pkg_install_left" in *!*) return 2 ;; esac
-      _pkg_install_osarch_valid "$pkg_install_requested_osarch" || return 2
+      _pkg_integration_osarch_valid "$pkg_install_requested_osarch" || return 2
       ;;
   esac
 
@@ -84,14 +59,14 @@ _pkg_install_operand_parse()
       pkg_install_requested_version=${pkg_install_left##*@}
       pkg_install_pkg=${pkg_install_left%@"$pkg_install_requested_version"}
       case "$pkg_install_pkg" in *@*) return 2 ;; esac
-      _pkg_install_version_valid "$pkg_install_requested_version" || return 2
+      _pkg_integration_version_valid "$pkg_install_requested_version" || return 2
       ;;
     *)
       pkg_install_pkg=$pkg_install_left
       ;;
   esac
 
-  _pkg_install_name_valid "$pkg_install_pkg" || return 2
+  _pkg_integration_name_valid "$pkg_install_pkg" || return 2
   return 0
 }
 
@@ -180,7 +155,7 @@ _pkg_install_catalog_validate()
   [ "$pkg_install_catalog_validate_inside" = true ] || return 1
 
   pkg_install_catalog_validate_origin="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" remote get-url origin 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_origin" = "$pkg_install_catalog_validate_remote" ] || return 1
+  [ "$pkg_install_catalog_validate_origin" = "$pkg_install_catalog_remote" ] || return 1
 
   pkg_install_catalog_validate_branch_actual="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 1
   [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_validate_branch" ] || return 1
@@ -331,7 +306,7 @@ _pkg_install_ranges_validate()
         [ -d "$pkg_install_stream_entry" ] && [ ! -L "$pkg_install_stream_entry" ] || return 1
         pkg_install_range_prefix=${pkg_install_stream_name%%=*}
         pkg_install_range_anchor=${pkg_install_stream_name#*=}
-        _pkg_install_version_valid "$pkg_install_range_anchor" || return 1
+        _pkg_integration_version_valid "$pkg_install_range_anchor" || return 1
         printf -- '%s\t%s\n' "$pkg_install_stream_name" "$pkg_install_range_anchor" >> "$pkg_install_ranges_file" || return 1
         ;;
       *)
@@ -421,7 +396,7 @@ _pkg_install_one()
     pkg_install_target=$pkg_install_requested_osarch
   else
     pkg_install_target=${m_OSARCH-}
-    _pkg_install_osarch_valid "$pkg_install_target" || return 1
+    _pkg_integration_osarch_valid "$pkg_install_target" || return 1
   fi
 
   _pkg_install_stream_select "$pkg_install_catalog" "$pkg_install_pkg" "$pkg_install_target" || return 1
@@ -462,7 +437,7 @@ _pkg_install_one()
   fi
 
   pkg_install_version="$(_pkg_install_scalar "$pkg_install_resolved_file")" || return 1
-  _pkg_install_version_valid "$pkg_install_version" || return 1
+  _pkg_integration_version_valid "$pkg_install_version" || return 1
   if [ -n "$pkg_install_requested_version" ]
   then
     [ "$pkg_install_version" = "$pkg_install_requested_version" ] || return 1
