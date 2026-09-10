@@ -1,7 +1,6 @@
 #!/usr/bin/env rumiai-os
 
 . "$m_LIB_DIR/sh/osarch.lib.sh"
-. "$m_LIB_DIR/sh/pkg-install.lib.sh"
 
 [ "$#" -ge 1 ] || {
   log error execution invalid-arguments operation pkg
@@ -17,7 +16,17 @@ case "$pkg_command" in
       log error execution invalid-arguments operation pkg subcommand install
       exit 2
     }
+    . "$m_LIB_DIR/sh/pkg-install.lib.sh"
     pkg_install "$@"
+    exit $?
+    ;;
+  uninstall)
+    [ "$#" -ge 1 ] || {
+      log error execution invalid-arguments operation pkg subcommand uninstall
+      exit 2
+    }
+    . "$m_LIB_DIR/sh/pkg-uninstall.lib.sh"
+    pkg_uninstall "$@"
     exit $?
     ;;
   *)
