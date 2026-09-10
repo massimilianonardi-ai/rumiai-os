@@ -61,7 +61,7 @@ _pkg_local_class_scan()
   then
     pkg_local_class_present=1
     [ -L "$pkg_local_selector" ] || return 1
-    pkg_local_class_current_name="$(command -p -- readlink "$pkg_local_selector")" || return 1
+    pkg_local_class_current_name="$(command -p -- readlink -- "$pkg_local_selector")" || return 1
     case "$pkg_local_class_current_name" in
       "" | */*) return 1 ;;
     esac
