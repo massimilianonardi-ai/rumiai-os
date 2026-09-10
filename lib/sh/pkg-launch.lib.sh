@@ -14,16 +14,15 @@ _pkg_launch_name_valid()
 _pkg_launch_env_apply()
 {
   [ "$#" -eq 1 ] || return 2
-  pkg_launch_env=$1
 
-  if [ ! -e "$pkg_launch_env" ] && [ ! -L "$pkg_launch_env" ]
+  if [ ! -e "$1" ] && [ ! -L "$1" ]
   then
     return 0
   fi
 
-  [ -f "$pkg_launch_env" ] && [ ! -L "$pkg_launch_env" ] && [ -r "$pkg_launch_env" ] || return 1
-  command -p -- sh -n "$pkg_launch_env" >/dev/null 2>&1 || return 1
-  . "$pkg_launch_env" || return 1
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || return 1
+  command -p -- sh -n "$1" >/dev/null 2>&1 || return 1
+  . "$1" || return 1
 }
 
 launcher()
