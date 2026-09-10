@@ -35,17 +35,37 @@ _json_extract()
     -v array_field="$json_extract_array_field" \
     -v fields="$json_extract_fields" '
 function fail() { failed=1; exit 1 }
-function peek() { return substr(src, pos, 1) }
+function load_window() {
+  if (pos < window_start || pos > window_end) {
+    window_start=pos
+    window=substr(src, window_start, 4096)
+    window_end=window_start+length(window)-1
+  }
+}
+function peek(    offset) {
+  if (pos > src_len) return ""
+  load_window()
+  offset=pos-window_start+1
+  return substr(window, offset, 1)
+}
+function peek_n(n,    offset,available) {
+  if (n <= 0 || pos > src_len) return ""
+  load_window()
+  offset=pos-window_start+1
+  available=window_end-pos+1
+  if (n <= available) return substr(window, offset, n)
+  return substr(src, pos, n)
+}
 function skip_ws(    c) {
   while (pos <= src_len) {
-    c=substr(src, pos, 1)
+    c=peek()
     if (c==" " || c=="\t" || c=="\r" || c=="\n") pos++
     else break
   }
 }
 function expect(ch) {
   skip_ws()
-  if (substr(src, pos, length(ch)) != ch) fail()
+  if (peek_n(length(ch)) != ch) fail()
   pos += length(ch)
 }
 function parse_string(capture,    c,e,h,i,out) {
@@ -55,12 +75,12 @@ function parse_string(capture,    c,e,h,i,out) {
   pos++
   out=""
   while (pos <= src_len) {
-    c=substr(src, pos, 1)
+    c=peek()
     pos++
     if (c == "\"") return out
     if (c == "\\") {
       if (pos > src_len) fail()
-      e=substr(src, pos, 1)
+      e=peek()
       pos++
       if (e == "\"" || e == "\\" || e == "/") {
         if (capture) out=out e
@@ -82,7 +102,7 @@ function parse_string(capture,    c,e,h,i,out) {
       }
       else if (e == "u") {
         if (pos + 3 > src_len) fail()
-        h=substr(src, pos, 4)
+        h=peek_n(4)
         if (h !~ /^[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]$/) fail()
         pos += 4
         parsed_string_unicode=1
@@ -101,7 +121,7 @@ function parse_number(    start,c,value) {
   skip_ws()
   start=pos
   while (pos <= src_len) {
-    c=substr(src, pos, 1)
+    c=peek()
     if (c ~ /[0-9eE+.-]/) pos++
     else break
   }
@@ -141,9 +161,9 @@ function skip_value(    c,key) {
       fail()
     }
   }
-  if (substr(src, pos, 4) == "true") { pos+=4; return }
-  if (substr(src, pos, 5) == "false") { pos+=5; return }
-  if (substr(src, pos, 4) == "null") { pos+=4; return }
+  if (peek_n(4) == "true") { pos+=4; return }
+  if (peek_n(5) == "false") { pos+=5; return }
+  if (peek_n(4) == "null") { pos+=4; return }
   parse_number()
 }
 function parse_typed_scalar(    c,value) {
@@ -155,9 +175,9 @@ function parse_typed_scalar(    c,value) {
     if (index(value, "\t") || index(value, "\r") || index(value, "\n")) fail()
     return "s:" value
   }
-  if (substr(src, pos, 4) == "true") { pos+=4; return "b:true" }
-  if (substr(src, pos, 5) == "false") { pos+=5; return "b:false" }
-  if (substr(src, pos, 4) == "null") { pos+=4; return "z:" }
+  if (peek_n(4) == "true") { pos+=4; return "b:true" }
+  if (peek_n(5) == "false") { pos+=5; return "b:false" }
+  if (peek_n(4) == "null") { pos+=4; return "z:" }
   if (c == "{" || c == "[") fail()
   value=parse_number()
   return "n:" value
@@ -270,6 +290,9 @@ END {
   if (failed) exit 1
   src_len=length(src)
   pos=1
+  window_start=0
+  window_end=0
+  window=""
   field_count=split(fields, field_name, ",")
   if (field_count < 1) fail()
   for (i=1; i<=field_count; i++) {
