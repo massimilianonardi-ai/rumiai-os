@@ -48,7 +48,7 @@ function expect(ch) {
   if (substr(src, pos, length(ch)) != ch) fail()
   pos += length(ch)
 }
-function parse_string(    c,e,h,i,out) {
+function parse_string(capture,    c,e,h,i,out) {
   skip_ws()
   parsed_string_unicode=0
   if (peek() != "\"") fail()
@@ -62,25 +62,37 @@ function parse_string(    c,e,h,i,out) {
       if (pos > src_len) fail()
       e=substr(src, pos, 1)
       pos++
-      if (e == "\"" || e == "\\" || e == "/") out=out e
-      else if (e == "b") out=out sprintf("%c", 8)
-      else if (e == "f") out=out sprintf("%c", 12)
-      else if (e == "n") out=out "\n"
-      else if (e == "r") out=out "\r"
-      else if (e == "t") out=out "\t"
+      if (e == "\"" || e == "\\" || e == "/") {
+        if (capture) out=out e
+      }
+      else if (e == "b") {
+        if (capture) out=out sprintf("%c", 8)
+      }
+      else if (e == "f") {
+        if (capture) out=out sprintf("%c", 12)
+      }
+      else if (e == "n") {
+        if (capture) out=out "\n"
+      }
+      else if (e == "r") {
+        if (capture) out=out "\r"
+      }
+      else if (e == "t") {
+        if (capture) out=out "\t"
+      }
       else if (e == "u") {
         if (pos + 3 > src_len) fail()
         h=substr(src, pos, 4)
         if (h !~ /^[0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f][0-9A-Fa-f]$/) fail()
         pos += 4
         parsed_string_unicode=1
-        out=out "\\u" h
+        if (capture) out=out "\\u" h
       }
       else fail()
     }
     else {
       if (c ~ /[[:cntrl:]]/) fail()
-      out=out c
+      if (capture) out=out c
     }
   }
   fail()
@@ -100,13 +112,13 @@ function parse_number(    start,c,value) {
 function skip_value(    c,key) {
   skip_ws()
   c=peek()
-  if (c == "\"") { parse_string(); return }
+  if (c == "\"") { parse_string(0); return }
   if (c == "{") {
     pos++
     skip_ws()
     if (peek() == "}") { pos++; return }
     while (1) {
-      parse_string()
+      parse_string(0)
       expect(":")
       skip_value()
       skip_ws()
@@ -138,7 +150,7 @@ function parse_typed_scalar(    c,value) {
   skip_ws()
   c=peek()
   if (c == "\"") {
-    value=parse_string()
+    value=parse_string(1)
     if (parsed_string_unicode) fail()
     if (index(value, "\t") || index(value, "\r") || index(value, "\n")) fail()
     return "s:" value
@@ -175,7 +187,7 @@ function parse_object_record(emit,    c,key,idx) {
     return
   }
   while (1) {
-    key=parse_string()
+    key=parse_string(1)
     expect(":")
     idx=wanted[key]
     if (idx) {
@@ -232,7 +244,7 @@ function parse_root_object_for_array(    c,key) {
   skip_ws()
   if (peek() == "}") fail()
   while (1) {
-    key=parse_string()
+    key=parse_string(1)
     expect(":")
     if (key == array_field) {
       if (array_seen) fail()
