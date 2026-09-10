@@ -155,6 +155,64 @@ extract_7z()
   command -- "$extract_command" x -y "-o$extract_destination" -- "$extract_artifact" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
 }
 
+extract_dmg_cleanup()
+{
+  extract_cleanup_status=$?
+  trap - 0 HUP INT TERM
+
+  if [ "$extract_dmg_mounted" -eq 1 ]
+  then
+    if command -- hdiutil detach "$extract_dmg_mount" >/dev/null 2>&1
+    then
+      extract_dmg_mounted=0
+    fi
+  fi
+
+  if [ "$extract_dmg_mounted" -eq 0 ] && [ -d "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ]
+  then
+    command -p -- rmdir "$extract_dmg_mount" 2>/dev/null || :
+  fi
+
+  exit "$extract_cleanup_status"
+}
+
+extract_dmg_native()
+{
+  readpathce extract_dmg_artifact "$extract_artifact" || fatal execution execution-failed operation extract reason artifact-resolution-failed format "$extract_format"
+  readpathce extract_dmg_destination "$extract_destination" || fatal execution execution-failed operation extract reason destination-resolution-failed format "$extract_format"
+
+  extract_dmg_mount="$m_TMP_DIR/.extract-dmg-$$"
+  [ ! -e "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
+  command -p -- mkdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-create-failed format "$extract_format"
+
+  extract_dmg_mounted=0
+  trap extract_dmg_cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  command -- hdiutil attach -readonly -nobrowse -mountpoint "$extract_dmg_mount" "$extract_dmg_artifact" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  extract_dmg_mounted=1
+
+  command -- ditto "$extract_dmg_mount" "$extract_dmg_destination" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+
+  command -- hdiutil detach "$extract_dmg_mount" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  extract_dmg_mounted=0
+
+  command -p -- rmdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-cleanup-failed format "$extract_format"
+  trap - 0 HUP INT TERM
+}
+
+extract_dmg()
+{
+  if extract_have hdiutil && extract_have ditto
+  then
+    extract_dmg_native
+  else
+    extract_7z
+  fi
+}
+
 extract_deb()
 {
   extract_require dpkg-deb
@@ -200,8 +258,11 @@ case "$extract_format" in
   zip|jar|war)
     extract_zip
     ;;
-  7z|7zip|dmg)
+  7z|7zip)
     extract_7z
+    ;;
+  dmg)
+    extract_dmg
     ;;
   deb)
     extract_deb
