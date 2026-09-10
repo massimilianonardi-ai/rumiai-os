@@ -125,6 +125,18 @@ launcher()
     return 1
   }
 
+  readonly -- \
+    pkg_launch_pkg \
+    pkg_launch_command_bin \
+    pkg_launch_command \
+    pkg_launch_cmd_dir \
+    pkg_launch_concrete \
+    pkg_launch_pkg_dir \
+    pkg_launch_root \
+    pkg_launch_link \
+    pkg_launch_link_text \
+    pkg_launch_target
+
   HOME="$m_HOME_DIR/$pkg_launch_pkg"
   export -- HOME
 
@@ -138,7 +150,6 @@ launcher()
   }
 
   exec "$pkg_launch_target" "$@"
-  pkg_launch_status=$?
   _pkg_launch_error exec-failed
-  return "$pkg_launch_status"
+  return 1
 }
