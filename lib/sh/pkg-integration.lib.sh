@@ -7,7 +7,7 @@ _pkg_integration_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
   case "$1" in
-    "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) return 1 ;;
+    "" | [!abcdefghijklmnopqrstuvwxyz0123456789]* | *[!abcdefghijklmnopqrstuvwxyz0123456789._-]* | *[._-]) return 1 ;;
   esac
 }
 
@@ -15,7 +15,7 @@ _pkg_integration_version_valid()
 {
   [ "$#" -eq 1 ] || return 2
   case "$1" in
-    "" | [!A-Za-z0-9]* | *[!A-Za-z0-9._+~-]*) return 1 ;;
+    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._+~-]*) return 1 ;;
   esac
 }
 
