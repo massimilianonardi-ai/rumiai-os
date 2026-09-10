@@ -150,6 +150,4 @@ launcher()
   }
 
   exec "$pkg_launch_target" "$@"
-  _pkg_launch_error exec-failed
-  return 1
 }
