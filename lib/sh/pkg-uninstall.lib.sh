@@ -5,31 +5,6 @@ _pkg_uninstall_error()
   log error execution execution-failed operation pkg-uninstall reason "$1"
 }
 
-_pkg_uninstall_name_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | [!a-z0-9]* | *[!a-z0-9._-]* | *[._-]) return 1 ;;
-  esac
-}
-
-_pkg_uninstall_version_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | [!A-Za-z0-9]* | *[!A-Za-z0-9._+~-]*) return 1 ;;
-  esac
-}
-
-_pkg_uninstall_osarch_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    linux-arm64 | linux-x86_64 | macos-arm64 | macos-x86_64 | windows-arm64 | windows-x86_64) return 0 ;;
-    *) return 1 ;;
-  esac
-}
-
 _pkg_uninstall_operand_parse()
 {
   [ "$#" -eq 1 ] || return 2
@@ -44,7 +19,7 @@ _pkg_uninstall_operand_parse()
       pkg_uninstall_requested_osarch=${pkg_uninstall_left##*!}
       pkg_uninstall_left=${pkg_uninstall_left%!"$pkg_uninstall_requested_osarch"}
       case "$pkg_uninstall_left" in *!*) return 2 ;; esac
-      _pkg_uninstall_osarch_valid "$pkg_uninstall_requested_osarch" || return 2
+      _pkg_integration_osarch_valid "$pkg_uninstall_requested_osarch" || return 2
       ;;
   esac
 
@@ -53,14 +28,14 @@ _pkg_uninstall_operand_parse()
       pkg_uninstall_requested_version=${pkg_uninstall_left##*@}
       pkg_uninstall_pkg=${pkg_uninstall_left%@"$pkg_uninstall_requested_version"}
       case "$pkg_uninstall_pkg" in *@*) return 2 ;; esac
-      _pkg_uninstall_version_valid "$pkg_uninstall_requested_version" || return 2
+      _pkg_integration_version_valid "$pkg_uninstall_requested_version" || return 2
       ;;
     *)
       pkg_uninstall_pkg=$pkg_uninstall_left
       ;;
   esac
 
-  _pkg_uninstall_name_valid "$pkg_uninstall_pkg" || return 2
+  _pkg_integration_name_valid "$pkg_uninstall_pkg" || return 2
 }
 
 _pkg_uninstall_class_scan()
@@ -105,7 +80,7 @@ _pkg_uninstall_class_scan()
           return 1
           ;;
       esac
-      _pkg_uninstall_version_valid "$pkg_uninstall_class_current_version" || return 1
+      _pkg_integration_version_valid "$pkg_uninstall_class_current_version" || return 1
       [ "$pkg_uninstall_class_current_name" = "$pkg_uninstall_scan_pkg@$pkg_uninstall_class_current_version!$pkg_uninstall_scan_osarch" ] || return 1
     else
       pkg_uninstall_current_prefix="$pkg_uninstall_scan_pkg@"
@@ -117,7 +92,7 @@ _pkg_uninstall_class_scan()
           return 1
           ;;
       esac
-      _pkg_uninstall_version_valid "$pkg_uninstall_class_current_version" || return 1
+      _pkg_integration_version_valid "$pkg_uninstall_class_current_version" || return 1
       [ "$pkg_uninstall_class_current_name" = "$pkg_uninstall_scan_pkg@$pkg_uninstall_class_current_version" ] || return 1
     fi
   fi
@@ -139,7 +114,7 @@ _pkg_uninstall_class_scan()
           continue
           ;;
       esac
-      _pkg_uninstall_version_valid "$pkg_uninstall_version" || return 1
+      _pkg_integration_version_valid "$pkg_uninstall_version" || return 1
       [ "$pkg_uninstall_name" = "$pkg_uninstall_scan_pkg@$pkg_uninstall_version!$pkg_uninstall_scan_osarch" ] || return 1
     else
       case "$pkg_uninstall_name" in
@@ -151,7 +126,7 @@ _pkg_uninstall_class_scan()
           continue
           ;;
       esac
-      _pkg_uninstall_version_valid "$pkg_uninstall_version" || return 1
+      _pkg_integration_version_valid "$pkg_uninstall_version" || return 1
       [ "$pkg_uninstall_name" = "$pkg_uninstall_scan_pkg@$pkg_uninstall_version" ] || return 1
     fi
 
@@ -190,7 +165,7 @@ _pkg_uninstall_resolve()
     _pkg_uninstall_class_scan "$pkg_uninstall_pkg" "$pkg_uninstall_identity_osarch" || return 1
     [ "$pkg_uninstall_class_present" -eq 1 ] || return 1
   else
-    _pkg_uninstall_osarch_valid "$m_OSARCH" || return 1
+    _pkg_integration_osarch_valid "$m_OSARCH" || return 1
     _pkg_uninstall_class_scan "$pkg_uninstall_pkg" "$m_OSARCH" || return 1
     if [ "$pkg_uninstall_class_present" -eq 1 ]
     then
