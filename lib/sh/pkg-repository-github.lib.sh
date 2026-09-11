@@ -121,6 +121,35 @@ BEGIN {
   fi
 }
 
+_pkg_repository_github_release_order_key()
+(
+  [ "$#" -eq 2 ] || return 2
+  _pkg_repository_github_validate_repository "$1" || return 1
+  pkg_repository_github_requested=$2
+  _pkg_repository_github_validate_version "$pkg_repository_github_requested" || return 1
+
+  pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested")" || return 1
+  json_object_read \
+    tag_name pkg_repository_github_tag_token \
+    draft pkg_repository_github_draft_token \
+    prerelease pkg_repository_github_prerelease_token \
+    created_at pkg_repository_github_created_token \
+    published_at pkg_repository_github_published_token <<EOF_JSON
+$pkg_repository_github_body
+EOF_JSON
+  [ "$?" -eq 0 ] || return 1
+
+  _pkg_repository_github_validate_release_tokens \
+    "$pkg_repository_github_tag_token" \
+    "$pkg_repository_github_draft_token" \
+    "$pkg_repository_github_prerelease_token" \
+    "$pkg_repository_github_created_token" \
+    "$pkg_repository_github_published_token" || return 1
+  [ "$pkg_repository_github_release_tag" = "$pkg_repository_github_requested" ] || return 1
+
+  printf -- '%s\t%s\n' "$pkg_repository_github_release_created" "$pkg_repository_github_release_published"
+)
+
 pkg_repository_list_versions()
 (
   [ "$#" -eq 1 ] || return 2
@@ -199,6 +228,37 @@ NF != 3 { exit 1 }
   print $3
 }
 '
+)
+
+pkg_repository_compare_versions()
+(
+  [ "$#" -eq 3 ] || return 2
+  pkg_repository_github_repository_dir=$1
+  pkg_repository_github_left=$2
+  pkg_repository_github_right=$3
+
+  _pkg_repository_github_validate_repository "$pkg_repository_github_repository_dir" || return 1
+  _pkg_repository_github_validate_version "$pkg_repository_github_left" || return 1
+  _pkg_repository_github_validate_version "$pkg_repository_github_right" || return 1
+
+  pkg_repository_github_left_key="$(_pkg_repository_github_release_order_key "$pkg_repository_github_repository_dir" "$pkg_repository_github_left")" || return 1
+  if [ "$pkg_repository_github_left" = "$pkg_repository_github_right" ]
+  then
+    printf -- '0\n'
+    return 0
+  fi
+
+  pkg_repository_github_right_key="$(_pkg_repository_github_release_order_key "$pkg_repository_github_repository_dir" "$pkg_repository_github_right")" || return 1
+  pkg_repository_github_order="$(LC_ALL=C command -p -- awk -v left="$pkg_repository_github_left_key" -v right="$pkg_repository_github_right_key" 'BEGIN {
+  if (left < right) print "-1"
+  else if (left > right) print "1"
+  else exit 1
+}')" || return 1
+
+  case "$pkg_repository_github_order" in
+    -1|1) printf -- '%s\n' "$pkg_repository_github_order";;
+    *) return 1;;
+  esac
 )
 
 pkg_repository_resolve_version()
