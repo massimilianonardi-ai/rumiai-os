@@ -1,4 +1,5 @@
 . "$m_LIB_DIR/sh/pkg-facility.lib.sh"
+. "$m_LIB_DIR/sh/pkg-dependency.lib.sh"
 
 _pkg_integration_error()
 {
@@ -124,6 +125,9 @@ _pkg_integration_validate_definition()
         ;;
       facility)
         _pkg_facility_file_validate "$pkg_integration_entry" || return 1
+        ;;
+      dependency)
+        _pkg_dependency_file_validate "$pkg_integration_entry" || return 1
         ;;
       cmd)
         [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
@@ -371,6 +375,13 @@ pkg_integrate()
   pkg_integrate_status=$?
   [ "$pkg_integrate_status" -eq 0 ] || return "$pkg_integrate_status"
 
+  if ! _pkg_dependency_resolve "$pkg_integrate_range/dependency" "$pkg_integrate_osarch"
+  then
+    _pkg_integration_error pkg-integrate dependency-resolution-failed
+    return 1
+  fi
+  pkg_integrate_dependency_resolved="$pkg_dependency_resolved"
+
   command -p -- mkdir "$pkg_integration_concrete" || return 1
   if ! command -p -- mv -- "$pkg_integrate_root" "$pkg_integration_concrete/root"
   then
@@ -400,9 +411,20 @@ pkg_integrate()
     return 1
   fi
 
+  if ! _pkg_dependency_materialize "$pkg_integrate_range/dependency" "$pkg_integration_concrete" "$pkg_integrate_dependency_resolved"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate dependency-materialization-failed
+    return 1
+  fi
+
   if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -434,6 +456,7 @@ pkg_deintegrate()
   _pkg_default_read_current "$pkg_integration_selector" || return 1
   _pkg_default_current_valid "$pkg_default_current" || return 1
   [ "$pkg_default_current" != "$pkg_integration_concrete_name" ] || return 1
+  _pkg_dependency_provider_unreferenced "$pkg_integration_concrete_name" || return 1
 
   _pkg_facility_provider_remove "$pkg_integration_concrete" "$pkg_integration_concrete_name" || return 1
   command -p -- rm -rf -- "$pkg_integration_concrete" || return 1
