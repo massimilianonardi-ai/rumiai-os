@@ -104,6 +104,13 @@ _pkg_integration_link_target_read()
   return 0
 }
 
+_pkg_integration_env_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -x "$1" ] || return 1
+  command -p -- sh -n "$1" >/dev/null 2>&1
+}
+
 _pkg_integration_validate_definition()
 {
   [ "$#" -eq 2 ] || return 2
@@ -128,6 +135,9 @@ _pkg_integration_validate_definition()
         ;;
       dependency)
         _pkg_dependency_file_validate "$pkg_integration_entry" || return 1
+        ;;
+      env)
+        _pkg_integration_env_validate "$pkg_integration_entry" || return 1
         ;;
       cmd)
         [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
@@ -206,6 +216,20 @@ _pkg_integration_materialize_commands()
     _pkg_integration_link_target_read "$pkg_integration_range/link/$pkg_integration_command" || return 1
     command -p -- ln -s "../root/$pkg_integration_link_target" "$pkg_integration_concrete/link/$pkg_integration_command" || return 1
   done
+}
+
+_pkg_integration_materialize_env()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_range=$1
+  pkg_integration_concrete=$2
+  [ -e "$pkg_integration_range/env" ] || [ -L "$pkg_integration_range/env" ] || return 0
+
+  command -p -- cp -- "$pkg_integration_range/env" "$pkg_integration_concrete/env" || return 1
+  [ -f "$pkg_integration_concrete/env" ] && \
+  [ ! -L "$pkg_integration_concrete/env" ] && \
+  [ -r "$pkg_integration_concrete/env" ] && \
+  [ ! -x "$pkg_integration_concrete/env" ]
 }
 
 _pkg_default_read_current()
@@ -400,9 +424,20 @@ pkg_integrate()
     return 1
   fi
 
+  if ! _pkg_integration_materialize_env "$pkg_integrate_range" "$pkg_integration_concrete"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate env-materialization-failed
+    return 1
+  fi
+
   if ! _pkg_facility_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -413,7 +448,7 @@ pkg_integrate()
 
   if ! _pkg_dependency_materialize "$pkg_integrate_range/dependency" "$pkg_integration_concrete" "$pkg_integrate_dependency_resolved"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -424,7 +459,7 @@ pkg_integrate()
 
   if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
