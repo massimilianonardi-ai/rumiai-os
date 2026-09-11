@@ -158,7 +158,7 @@ _pkg_install_catalog_validate()
   [ "$pkg_install_catalog_validate_origin" = "$pkg_install_catalog_remote" ] || return 1
 
   pkg_install_catalog_validate_branch_actual="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_validate_branch" ] || return 1
+  [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_branch" ] || return 1
 
   pkg_install_catalog_validate_dirty="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" status --porcelain=v1 --untracked-files=all 2>/dev/null)" || return 1
   [ -z "$pkg_install_catalog_validate_dirty" ] || return 1
@@ -343,40 +343,58 @@ _pkg_install_repository_adapter()
   [ -f "$pkg_install_adapter" ] && [ ! -L "$pkg_install_adapter" ] && [ -r "$pkg_install_adapter" ] && [ ! -x "$pkg_install_adapter" ] || return 1
 }
 
-_pkg_install_versions_validate()
+_pkg_install_compare_versions()
 {
-  [ "$#" -eq 1 ] || return 2
-  [ -s "$1" ] || return 1
-  LC_ALL=C command -p -- awk '
-BEGIN { ok=1 }
-$0 !~ /^[A-Za-z0-9][A-Za-z0-9._+~-]*$/ { ok=0; exit }
-seen[$0]++ { ok=0; exit }
-END { if (!ok || NR == 0) exit 1 }
-' "$1"
+  [ "$#" -eq 4 ] || return 2
+  pkg_install_compare="$({
+    . "$1" || exit 1
+    pkg_repository_compare_versions "$2" "$3" "$4"
+  })" || return 1
+
+  case "$pkg_install_compare" in
+    -1|0|1) printf -- '%s\n' "$pkg_install_compare";;
+    *) return 1;;
+  esac
 }
 
 _pkg_install_resolve_range()
 {
-  [ "$#" -eq 3 ] || return 2
+  [ "$#" -eq 4 ] || return 2
   pkg_install_ranges_file=$1
-  pkg_install_versions_file=$2
-  pkg_install_version=$3
+  pkg_install_repository_dir=$2
+  pkg_install_adapter=$3
+  pkg_install_version=$4
 
-  pkg_install_requested_pos="$(LC_ALL=C command -p -- awk -v wanted="$pkg_install_version" '$0 == wanted { print NR; count++ } END { if (count != 1) exit 1 }' "$pkg_install_versions_file")" || return 1
   pkg_install_selected_range=
-  pkg_install_previous_anchor_pos=0
+  pkg_install_previous_anchor=
   pkg_install_tab="$(printf '\t')"
 
   while IFS="$pkg_install_tab" read -r pkg_install_range_name pkg_install_anchor pkg_install_range_extra
   do
     [ -z "$pkg_install_range_extra" ] || return 1
-    pkg_install_anchor_pos="$(LC_ALL=C command -p -- awk -v wanted="$pkg_install_anchor" '$0 == wanted { print NR; count++ } END { if (count != 1) exit 1 }' "$pkg_install_versions_file")" || return 1
-    [ "$pkg_install_anchor_pos" -gt "$pkg_install_previous_anchor_pos" ] || return 1
-    pkg_install_previous_anchor_pos=$pkg_install_anchor_pos
-    if [ "$pkg_install_anchor_pos" -le "$pkg_install_requested_pos" ]
+
+    if [ -n "$pkg_install_previous_anchor" ]
     then
-      pkg_install_selected_range="$pkg_install_stream/$pkg_install_range_name"
+      pkg_install_anchor_order="$(_pkg_install_compare_versions \
+        "$pkg_install_adapter" \
+        "$pkg_install_repository_dir" \
+        "$pkg_install_previous_anchor" \
+        "$pkg_install_anchor")" || return 1
+      [ "$pkg_install_anchor_order" = -1 ] || return 1
     fi
+
+    pkg_install_target_order="$(_pkg_install_compare_versions \
+      "$pkg_install_adapter" \
+      "$pkg_install_repository_dir" \
+      "$pkg_install_anchor" \
+      "$pkg_install_version")" || return 1
+    case "$pkg_install_target_order" in
+      -1|0) pkg_install_selected_range="$pkg_install_stream/$pkg_install_range_name";;
+      1) :;;
+      *) return 1;;
+    esac
+
+    pkg_install_previous_anchor=$pkg_install_anchor
   done < "$pkg_install_ranges_file"
 
   [ -n "$pkg_install_selected_range" ] || return 1
@@ -406,16 +424,6 @@ _pkg_install_one()
   pkg_install_repository_dir="$pkg_install_stream/repository"
   _pkg_install_repository_adapter "$pkg_install_repository_dir" || return 1
 
-  pkg_install_versions="$pkg_install_item/versions"
-  if ! (
-    . "$pkg_install_adapter" || exit 1
-    pkg_repository_list_versions "$pkg_install_repository_dir"
-  ) > "$pkg_install_versions"
-  then
-    return 1
-  fi
-  _pkg_install_versions_validate "$pkg_install_versions" || return 1
-
   pkg_install_resolved_file="$pkg_install_item/version"
   if [ -n "$pkg_install_requested_version" ]
   then
@@ -441,12 +449,13 @@ _pkg_install_one()
   if [ -n "$pkg_install_requested_version" ]
   then
     [ "$pkg_install_version" = "$pkg_install_requested_version" ] || return 1
-  else
-    pkg_install_latest="$(LC_ALL=C command -p -- awk 'END { if (NR == 0) exit 1; print }' < "$pkg_install_versions")" || return 1
-    [ "$pkg_install_version" = "$pkg_install_latest" ] || return 1
   fi
 
-  _pkg_install_resolve_range "$pkg_install_ranges" "$pkg_install_versions" "$pkg_install_version" || return 1
+  _pkg_install_resolve_range \
+    "$pkg_install_ranges" \
+    "$pkg_install_repository_dir" \
+    "$pkg_install_adapter" \
+    "$pkg_install_version" || return 1
 
   pkg_install_descriptor="$pkg_install_item/artifact"
   if ! (
