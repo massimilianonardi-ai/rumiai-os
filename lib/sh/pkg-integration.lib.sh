@@ -1,3 +1,5 @@
+. "$m_LIB_DIR/sh/pkg-facility.lib.sh"
+
 _pkg_integration_error()
 {
   log error execution execution-failed operation "$1" reason "$2"
@@ -119,6 +121,9 @@ _pkg_integration_validate_definition()
     case "$pkg_integration_entry_name" in
       archive_regex | digest_regex | digest_type | format)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        ;;
+      facility)
+        _pkg_facility_file_validate "$pkg_integration_entry" || return 1
         ;;
       cmd)
         [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
@@ -384,6 +389,28 @@ pkg_integrate()
     return 1
   fi
 
+  if ! _pkg_facility_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate facility-materialization-failed
+    return 1
+  fi
+
+  if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/facility" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate provider-index-failed
+    return 1
+  fi
+
   return 0
 )
 
@@ -408,6 +435,7 @@ pkg_deintegrate()
   _pkg_default_current_valid "$pkg_default_current" || return 1
   [ "$pkg_default_current" != "$pkg_integration_concrete_name" ] || return 1
 
+  _pkg_facility_provider_remove "$pkg_integration_concrete" "$pkg_integration_concrete_name" || return 1
   command -p -- rm -rf -- "$pkg_integration_concrete" || return 1
   return 0
 )
