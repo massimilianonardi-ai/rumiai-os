@@ -95,7 +95,7 @@ _pkg_setuid_rollback()
 
     if [ -e "$pkg_setuid_work" ] || [ -L "$pkg_setuid_work" ]
     then
-      command -p -- rm -f "$pkg_setuid_work" || pkg_setuid_rollback_status=1
+      command -p -- rm -f -- "$pkg_setuid_work" || pkg_setuid_rollback_status=1
     fi
 
     if [ -e "$pkg_setuid_backup" ] || [ -L "$pkg_setuid_backup" ]
@@ -107,17 +107,17 @@ _pkg_setuid_rollback()
 
       if [ -e "$pkg_setuid_target" ] || [ -L "$pkg_setuid_target" ]
       then
-        command -p -- rm -f "$pkg_setuid_target" || {
+        command -p -- rm -f -- "$pkg_setuid_target" || {
           pkg_setuid_rollback_status=1
           continue
         }
       fi
 
-      command -p -- mv "$pkg_setuid_backup" "$pkg_setuid_target" || pkg_setuid_rollback_status=1
+      command -p -- mv -- "$pkg_setuid_backup" "$pkg_setuid_target" || pkg_setuid_rollback_status=1
     fi
   done < "$pkg_setuid_file"
 
-  command -p -- rmdir "$pkg_setuid_rollback_dir" 2>/dev/null || pkg_setuid_rollback_status=1
+  command -p -- rmdir -- "$pkg_setuid_rollback_dir" 2>/dev/null || pkg_setuid_rollback_status=1
   return "$pkg_setuid_rollback_status"
 }
 
@@ -134,7 +134,7 @@ _pkg_setuid_materialize()
     return 0
   fi
 
-  command -p -- mkdir "$pkg_setuid_rollback_dir" || return 1
+  command -p -- mkdir -- "$pkg_setuid_rollback_dir" || return 1
 
   pkg_setuid_index=0
   while IFS= read -r pkg_setuid_path
@@ -144,10 +144,10 @@ _pkg_setuid_materialize()
     pkg_setuid_backup="$pkg_setuid_rollback_dir/original-$pkg_setuid_index"
     pkg_setuid_work="$pkg_setuid_rollback_dir/work-$pkg_setuid_index"
 
-    command -p -- mv "$pkg_setuid_target" "$pkg_setuid_backup" || return 1
-    command -p -- cp "$pkg_setuid_backup" "$pkg_setuid_work" || return 1
+    command -p -- mv -- "$pkg_setuid_target" "$pkg_setuid_backup" || return 1
+    command -p -- cp -- "$pkg_setuid_backup" "$pkg_setuid_work" || return 1
     _pkg_setuid_apply_file "$pkg_setuid_work" || return 1
-    command -p -- mv "$pkg_setuid_work" "$pkg_setuid_target" || return 1
+    command -p -- mv -- "$pkg_setuid_work" "$pkg_setuid_target" || return 1
   done < "$pkg_setuid_file"
 
   return 0
@@ -183,8 +183,8 @@ _pkg_setuid_commit()
   do
     pkg_setuid_index=$((pkg_setuid_index + 1))
     pkg_setuid_backup="$pkg_setuid_rollback_dir/original-$pkg_setuid_index"
-    command -p -- rm -f "$pkg_setuid_backup" || return 1
+    command -p -- rm -f -- "$pkg_setuid_backup" || return 1
   done < "$pkg_setuid_file"
 
-  command -p -- rmdir "$pkg_setuid_rollback_dir"
+  command -p -- rmdir -- "$pkg_setuid_rollback_dir"
 }
