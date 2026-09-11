@@ -1,5 +1,6 @@
 . "$m_LIB_DIR/sh/pkg-facility.lib.sh"
 . "$m_LIB_DIR/sh/pkg-dependency.lib.sh"
+. "$m_LIB_DIR/sh/pkg-state.lib.sh"
 
 _pkg_integration_error()
 {
@@ -138,6 +139,9 @@ _pkg_integration_validate_definition()
         ;;
       env)
         _pkg_integration_env_validate "$pkg_integration_entry" || return 1
+        ;;
+      var)
+        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         ;;
       cmd)
         [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
@@ -399,6 +403,8 @@ pkg_integrate()
   pkg_integrate_status=$?
   [ "$pkg_integrate_status" -eq 0 ] || return "$pkg_integrate_status"
 
+  _pkg_state_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_pkg" || return 1
+
   if ! _pkg_dependency_resolve "$pkg_integrate_range/dependency" "$pkg_integrate_osarch"
   then
     _pkg_integration_error pkg-integrate dependency-resolution-failed
@@ -457,8 +463,24 @@ pkg_integrate()
     return 1
   fi
 
+  if ! _pkg_state_materialize "$pkg_integrate_range" "$pkg_integration_concrete" "$pkg_integrate_pkg"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate state-materialization-failed
+    return 1
+  fi
+
   if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
   then
+    if ! _pkg_state_rollback "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate state-rollback-failed
+      return 1
+    fi
     command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
