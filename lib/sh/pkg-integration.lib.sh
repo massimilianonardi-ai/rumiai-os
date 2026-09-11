@@ -1,6 +1,7 @@
 . "$m_LIB_DIR/sh/pkg-facility.lib.sh"
 . "$m_LIB_DIR/sh/pkg-dependency.lib.sh"
 . "$m_LIB_DIR/sh/pkg-state.lib.sh"
+. "$m_LIB_DIR/sh/pkg-setuid.lib.sh"
 
 _pkg_integration_error()
 {
@@ -139,6 +140,9 @@ _pkg_integration_validate_definition()
         ;;
       env)
         _pkg_integration_env_validate "$pkg_integration_entry" || return 1
+        ;;
+      setuid_root)
+        [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         ;;
       var)
         [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
@@ -404,6 +408,7 @@ pkg_integrate()
   [ "$pkg_integrate_status" -eq 0 ] || return "$pkg_integrate_status"
 
   _pkg_state_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_pkg" || return 1
+  _pkg_setuid_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_osarch" "$pkg_state_paths" || return 1
 
   if ! _pkg_dependency_resolve "$pkg_integrate_range/dependency" "$pkg_integrate_osarch"
   then
@@ -474,19 +479,81 @@ pkg_integrate()
     return 1
   fi
 
-  if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
+  if ! _pkg_setuid_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
   then
+    pkg_integrate_rollback_status=0
+    if ! _pkg_setuid_rollback "$pkg_integrate_range" "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate setuid-rollback-failed
+      pkg_integrate_rollback_status=1
+    fi
     if ! _pkg_state_rollback "$pkg_integration_concrete"
     then
       _pkg_integration_error pkg-integrate state-rollback-failed
-      return 1
+      pkg_integrate_rollback_status=1
     fi
+    [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
+
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate setuid-materialization-failed
+    return 1
+  fi
+
+  if ! _pkg_facility_provider_add "$pkg_integration_concrete" "$pkg_integration_concrete_name"
+  then
+    pkg_integrate_rollback_status=0
+    if ! _pkg_setuid_rollback "$pkg_integrate_range" "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate setuid-rollback-failed
+      pkg_integrate_rollback_status=1
+    fi
+    if ! _pkg_state_rollback "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate state-rollback-failed
+      pkg_integrate_rollback_status=1
+    fi
+    [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
+
     command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
     fi
     _pkg_integration_error pkg-integrate provider-index-failed
+    return 1
+  fi
+
+  if ! _pkg_setuid_commit "$pkg_integrate_range" "$pkg_integration_concrete"
+  then
+    if ! _pkg_facility_provider_remove "$pkg_integration_concrete" "$pkg_integration_concrete_name"
+    then
+      _pkg_integration_error pkg-integrate provider-rollback-failed
+      return 1
+    fi
+
+    pkg_integrate_rollback_status=0
+    if ! _pkg_setuid_rollback "$pkg_integrate_range" "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate setuid-rollback-failed
+      pkg_integrate_rollback_status=1
+    fi
+    if ! _pkg_state_rollback "$pkg_integration_concrete"
+    then
+      _pkg_integration_error pkg-integrate state-rollback-failed
+      pkg_integrate_rollback_status=1
+    fi
+    [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
+
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate setuid-commit-failed
     return 1
   fi
 
