@@ -232,3 +232,15 @@ _pkg_setuid_cleanup()
   [ -d "$pkg_setuid_rollback_dir" ] && [ ! -L "$pkg_setuid_rollback_dir" ] || return 1
   command -p -- rm -rf -- "$pkg_setuid_rollback_dir"
 }
+
+_pkg_setuid_commit()
+{
+  [ "$#" -eq 2 ] || return 2
+
+  if ! _pkg_setuid_cleanup "$1" "$2"
+  then
+    log warn execution execution-failed operation pkg-integrate reason setuid-cleanup-failed || :
+  fi
+
+  return 0
+}
