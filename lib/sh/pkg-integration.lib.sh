@@ -527,35 +527,7 @@ pkg_integrate()
     return 1
   fi
 
-  if ! _pkg_setuid_commit "$pkg_integrate_range" "$pkg_integration_concrete"
-  then
-    if ! _pkg_facility_provider_remove "$pkg_integration_concrete" "$pkg_integration_concrete_name"
-    then
-      _pkg_integration_error pkg-integrate provider-rollback-failed
-      return 1
-    fi
-
-    pkg_integrate_rollback_status=0
-    if ! _pkg_setuid_rollback "$pkg_integrate_range" "$pkg_integration_concrete"
-    then
-      _pkg_integration_error pkg-integrate setuid-rollback-failed
-      pkg_integrate_rollback_status=1
-    fi
-    if ! _pkg_state_rollback "$pkg_integration_concrete"
-    then
-      _pkg_integration_error pkg-integrate state-rollback-failed
-      pkg_integrate_rollback_status=1
-    fi
-    [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
-
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" "$pkg_integration_concrete/binding" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
-    _pkg_integration_error pkg-integrate setuid-commit-failed
-    return 1
-  fi
+  _pkg_setuid_commit "$pkg_integrate_range" "$pkg_integration_concrete" || :
 
   return 0
 )
