@@ -38,6 +38,21 @@ _pkg_extract_single_real_dir()
   [ "$pkg_extract_count" -eq 1 ] && [ -d "$pkg_extract_single_dir" ] && [ ! -L "$pkg_extract_single_dir" ]
 }
 
+_pkg_extract_macos_application_bundle()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  case "${1##*/}" in
+    *.app) : ;;
+    *) return 1 ;;
+  esac
+
+  [ -d "$1" ] && [ ! -L "$1" ] || return 1
+  [ -d "$1/Contents" ] && [ ! -L "$1/Contents" ] || return 1
+  [ -f "$1/Contents/Info.plist" ] && [ ! -L "$1/Contents/Info.plist" ] || return 1
+  [ -d "$1/Contents/MacOS" ] && [ ! -L "$1/Contents/MacOS" ] || return 1
+}
+
 _pkg_extract_normalize_root()
 {
   [ "$#" -eq 1 ] || return 2
@@ -47,6 +62,7 @@ _pkg_extract_normalize_root()
 
   while _pkg_extract_single_real_dir "$pkg_extract_useful_root"
   do
+    _pkg_extract_macos_application_bundle "$pkg_extract_single_dir" && break
     [ -n "$pkg_extract_top_wrapper" ] || pkg_extract_top_wrapper=$pkg_extract_single_dir
     pkg_extract_useful_root=$pkg_extract_single_dir
   done
