@@ -27,30 +27,11 @@ _pkg_launch_env_apply()
 
 launcher()
 {
-  pkg_launch_mode="link"
-  if [ "$#" -ge 1 ] && [ "$1" = "-c" ]
-  then
-    pkg_launch_mode="command"
-    shift
-  fi
-
   [ "$#" -ge 1 ] || return 2
   pkg_launch_pkg=$1
   shift
 
   _pkg_launch_name_valid "$pkg_launch_pkg" || return 2
-
-  pkg_launch_explicit=
-  if [ "$pkg_launch_mode" = "command" ]
-  then
-    [ "$#" -ge 1 ] || return 2
-    pkg_launch_explicit=$1
-    shift
-    case "$pkg_launch_explicit" in
-      /*) : ;;
-      *) return 2 ;;
-    esac
-  fi
 
   [ -n "${m_COMMAND_BIN-}" ] && \
   [ -n "${m_PKG_DIR-}" ] && \
@@ -76,7 +57,7 @@ launcher()
   }
 
   pkg_launch_cmd_dir=${pkg_launch_command_bin%/*}
-  [ "${pkg_launch_cmd_dir##*/}" = "cmd" ] || {
+  [ "${pkg_launch_cmd_dir##*/}" = cmd ] || {
     _pkg_launch_error command-layout-invalid
     return 1
   }
@@ -110,56 +91,41 @@ launcher()
     return 1
   }
 
-  pkg_launch_link=
-  pkg_launch_link_text=
-  case "$pkg_launch_mode" in
-    link)
-      pkg_launch_link="$pkg_launch_concrete/link/$pkg_launch_command"
-      [ -L "$pkg_launch_link" ] || {
-        _pkg_launch_error link-missing
-        return 1
-      }
-      pkg_launch_link_text="$(command -p -- readlink "$pkg_launch_link")" || {
-        _pkg_launch_error link-invalid
-        return 1
-      }
-      case "$pkg_launch_link_text" in
-        "" | /* | *'
+  pkg_launch_link="$pkg_launch_concrete/link/$pkg_launch_command"
+  [ -L "$pkg_launch_link" ] || {
+    _pkg_launch_error link-missing
+    return 1
+  }
+  pkg_launch_link_text="$(command -p -- readlink "$pkg_launch_link")" || {
+    _pkg_launch_error link-invalid
+    return 1
+  }
+  case "$pkg_launch_link_text" in
+    "" | /* | *'
 '*)
-          _pkg_launch_error link-invalid
-          return 1
-          ;;
-      esac
-
-      readpathce pkg_launch_target "$pkg_launch_link" || {
-        _pkg_launch_error target-invalid
-        return 1
-      }
-      case "$pkg_launch_target" in
-        "$pkg_launch_root"/*) : ;;
-        *)
-          _pkg_launch_error target-outside-root
-          return 1
-          ;;
-      esac
-      ;;
-    command)
-      readpathce pkg_launch_target "$pkg_launch_explicit" || {
-        _pkg_launch_error target-invalid
-        return 1
-      }
+      _pkg_launch_error link-invalid
+      return 1
       ;;
   esac
 
+  readpathce pkg_launch_target "$pkg_launch_link" || {
+    _pkg_launch_error target-invalid
+    return 1
+  }
+  case "$pkg_launch_target" in
+    "$pkg_launch_root"/*) : ;;
+    *)
+      _pkg_launch_error target-outside-root
+      return 1
+      ;;
+  esac
   [ -f "$pkg_launch_target" ] && [ -x "$pkg_launch_target" ] || {
     _pkg_launch_error target-not-executable
     return 1
   }
 
   readonly -- \
-    pkg_launch_mode \
     pkg_launch_pkg \
-    pkg_launch_explicit \
     pkg_launch_command_bin \
     pkg_launch_command \
     pkg_launch_cmd_dir \
