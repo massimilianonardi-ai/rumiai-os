@@ -161,10 +161,13 @@ _pkg_integration_validate_definition()
     esac
   done
 
-  [ "$pkg_integration_have_cmd" -eq "$pkg_integration_have_link" ] || return 1
+  [ "$pkg_integration_have_link" -eq 0 ] || [ "$pkg_integration_have_cmd" -eq 1 ] || return 1
   [ "$pkg_integration_have_cmd" -eq 1 ] || return 0
   _pkg_integration_dir_entries_empty "$pkg_integration_range/cmd" && return 1
-  _pkg_integration_dir_entries_empty "$pkg_integration_range/link" && return 1
+  if [ "$pkg_integration_have_link" -eq 1 ]
+  then
+    _pkg_integration_dir_entries_empty "$pkg_integration_range/link" && return 1
+  fi
 
   for pkg_integration_cmd_source in "$pkg_integration_range/cmd"/*
   do
@@ -172,16 +175,20 @@ _pkg_integration_validate_definition()
     pkg_integration_command=${pkg_integration_cmd_source##*/}
     _pkg_integration_command_name_valid "$pkg_integration_command" || return 1
     [ -f "$pkg_integration_cmd_source" ] && [ ! -L "$pkg_integration_cmd_source" ] && [ -r "$pkg_integration_cmd_source" ] && [ ! -x "$pkg_integration_cmd_source" ] || return 1
-    [ -f "$pkg_integration_range/link/$pkg_integration_command" ] && [ ! -L "$pkg_integration_range/link/$pkg_integration_command" ] || return 1
 
-    _pkg_integration_link_target_read "$pkg_integration_range/link/$pkg_integration_command" || return 1
-    [ -e "$pkg_integration_root/$pkg_integration_link_target" ] || [ -L "$pkg_integration_root/$pkg_integration_link_target" ] || return 1
-    readpathce pkg_integration_link_resolved "$pkg_integration_root/$pkg_integration_link_target" || return 1
-    case "$pkg_integration_link_resolved" in
-      "$pkg_integration_root"/*) : ;;
-      *) return 1 ;;
-    esac
-    [ -f "$pkg_integration_link_resolved" ] || return 1
+    pkg_integration_link_source="$pkg_integration_range/link/$pkg_integration_command"
+    if [ -e "$pkg_integration_link_source" ] || [ -L "$pkg_integration_link_source" ]
+    then
+      [ -f "$pkg_integration_link_source" ] && [ ! -L "$pkg_integration_link_source" ] || return 1
+      _pkg_integration_link_target_read "$pkg_integration_link_source" || return 1
+      [ -e "$pkg_integration_root/$pkg_integration_link_target" ] || [ -L "$pkg_integration_root/$pkg_integration_link_target" ] || return 1
+      readpathce pkg_integration_link_resolved "$pkg_integration_root/$pkg_integration_link_target" || return 1
+      case "$pkg_integration_link_resolved" in
+        "$pkg_integration_root"/*) : ;;
+        *) return 1 ;;
+      esac
+      [ -f "$pkg_integration_link_resolved" ] || return 1
+    fi
   done
 
   for pkg_integration_link_source in "$pkg_integration_range/link"/*
@@ -212,7 +219,11 @@ _pkg_integration_materialize_commands()
   pkg_integration_concrete=$2
   [ -d "$pkg_integration_range/cmd" ] || return 0
 
-  command -p -- mkdir "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" || return 1
+  command -p -- mkdir "$pkg_integration_concrete/cmd" || return 1
+  if [ -d "$pkg_integration_range/link" ]
+  then
+    command -p -- mkdir "$pkg_integration_concrete/link" || return 1
+  fi
 
   for pkg_integration_cmd_source in "$pkg_integration_range/cmd"/*
   do
@@ -220,8 +231,13 @@ _pkg_integration_materialize_commands()
     pkg_integration_command=${pkg_integration_cmd_source##*/}
     command -p -- cp -- "$pkg_integration_cmd_source" "$pkg_integration_concrete/cmd/$pkg_integration_command" || return 1
     command -p -- chmod +x "$pkg_integration_concrete/cmd/$pkg_integration_command" || return 1
+  done
 
-    _pkg_integration_link_target_read "$pkg_integration_range/link/$pkg_integration_command" || return 1
+  for pkg_integration_link_source in "$pkg_integration_range/link"/*
+  do
+    [ -e "$pkg_integration_link_source" ] || [ -L "$pkg_integration_link_source" ] || continue
+    pkg_integration_command=${pkg_integration_link_source##*/}
+    _pkg_integration_link_target_read "$pkg_integration_link_source" || return 1
     command -p -- ln -s "../root/$pkg_integration_link_target" "$pkg_integration_concrete/link/$pkg_integration_command" || return 1
   done
 }
