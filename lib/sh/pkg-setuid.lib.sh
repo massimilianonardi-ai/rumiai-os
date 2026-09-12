@@ -116,21 +116,21 @@ _pkg_setuid_privilege_notice()
 _pkg_setuid_apply_file()
 {
   [ "$#" -eq 1 ] || return 2
-  pkg_setuid_target=$1
+  pkg_setuid_apply_target=$1
 
   _pkg_setuid_effective_uid_set || return 1
   if [ "$pkg_setuid_effective_uid" -eq 0 ]
   then
     _pkg_setuid_command_paths_set 0 || return 1
-    "$pkg_setuid_chown_bin" 0:0 "$pkg_setuid_target" || return 1
-    "$pkg_setuid_chmod_bin" 4755 "$pkg_setuid_target"
+    "$pkg_setuid_chown_bin" 0:0 "$pkg_setuid_apply_target" || return 1
+    "$pkg_setuid_chmod_bin" 4755 "$pkg_setuid_apply_target"
     return $?
   fi
 
   _pkg_setuid_command_paths_set 1 || return 1
-  _pkg_setuid_privilege_notice "$pkg_setuid_target" || return 1
-  "$pkg_setuid_sudo_bin" -- "$pkg_setuid_chown_bin" 0:0 "$pkg_setuid_target" || return 1
-  "$pkg_setuid_sudo_bin" -- "$pkg_setuid_chmod_bin" 4755 "$pkg_setuid_target"
+  _pkg_setuid_privilege_notice "$pkg_setuid_apply_target" || return 1
+  "$pkg_setuid_sudo_bin" -- "$pkg_setuid_chown_bin" 0:0 "$pkg_setuid_apply_target" || return 1
+  "$pkg_setuid_sudo_bin" -- "$pkg_setuid_chmod_bin" 4755 "$pkg_setuid_apply_target"
 }
 
 _pkg_setuid_rollback()
