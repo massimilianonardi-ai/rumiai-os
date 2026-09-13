@@ -38,6 +38,7 @@ readpathce()
 {
   [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
 
+  # safeguard against invalid variable name: read will make entire script fail when passing an invalid variable name
   case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
 
   eval $1=''
@@ -45,6 +46,7 @@ readpathce()
   set -- "$1" "$(
     set -eu
     shift
+    # if invoked by PATH search (only command name, no /), then acquire path used, safeguard against paths with trailing newline (NB command -v always adds a newline)
     if [ "${1#*/}" != "$1" ]
     then
       cmd="$1"
@@ -56,14 +58,18 @@ readpathce()
 x}"
     fi
     [ -e "$cmd" ] || exit 1
+    # resolve and canonicalize an existing path portably
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
     cmd="${cmd%
 x}"
     [ -e "$cmd" ] || exit 1
     printf -- '%s' "${cmd}x"
-  )"
+)"
 
+  # safeguard here has no additional newlines, only the last character
   set -- "$1" "${2%x}"
+
+  # safeguard against failed subshell: read will pass with zero return code, but its varible will be empty and path empty is an error
   [ -n "$2" ] || return 3
 
   eval $1='$2'
@@ -81,10 +87,10 @@ lang()
 
   printf -- '%s\n' "$lang_message"
 )
-
 #-------------------------------------------------------------------------------
 
 : "${m_LOG_LEVEL:=info}"
+
 export -- m_LOG_LEVEL
 
 log()
@@ -189,7 +195,7 @@ shell()
 
   m_SHELL_NAME="${SHELL##*/}"
   export -- m_SHELL_NAME
-  printf -- '%s\n' "$(tput setaf 2)$(tput bold)${m_SHELL_NAME}$(tput sgr0)" >&2
+  printf -- '%s\n'  "$(tput setaf 2)$(tput bold)${m_SHELL_NAME} $(tput setaf 7)${m_OS_NAME}$(tput sgr0)" >&2
 
   : "${m_SHELL_EXT:=}"
   export m_SHELL_EXT
