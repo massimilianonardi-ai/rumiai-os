@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sh/pkg-local.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-local.lib.sh"
 
 _pkg_default_command_call()
 {

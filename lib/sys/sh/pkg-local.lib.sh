@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sh/pkg-integration.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-integration.lib.sh"
 
 _pkg_local_operand_parse()
 {
