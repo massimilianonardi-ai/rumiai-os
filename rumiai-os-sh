@@ -1,0 +1,23 @@
+#!/bin/sh
+
+if [ -n "${m_ROOT-}" ] && [ "${m_COMMAND_BIN-}" = "$m_ROOT/rumiai-os-sh" ]
+then
+  PATH="$m_BIN_DIR/ai-osarch:$m_BIN_DIR/ai:$PATH"
+  export -- PATH
+  shell "$@"
+  exit $?
+fi
+
+rumiai_os_sh_self="$(command -p -- realpath -- "$0" 2>/dev/null)" || {
+  printf -- '%s\n' 'rumiai-os-sh path resolution error' >&2
+  exit 1
+}
+[ -f "$rumiai_os_sh_self" ] || {
+  printf -- '%s\n' 'rumiai-os-sh path resolution error' >&2
+  exit 1
+}
+
+rumiai_os_sh_root=${rumiai_os_sh_self%/*}
+[ -n "$rumiai_os_sh_root" ] || rumiai_os_sh_root=/
+
+exec "$rumiai_os_sh_root/m" "$rumiai_os_sh_root/rumiai-os-sh" "$@"
