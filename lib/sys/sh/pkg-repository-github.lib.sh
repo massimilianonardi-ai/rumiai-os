@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sh/json.lib.sh"
+. "$m_LIB_DIR/sys/sh/json.lib.sh"
 
 _pkg_repository_github_scalar()
 {
