@@ -77,14 +77,6 @@ m_PKG_DIR="$m_ROOT/pkg"
 m_LANG_DIR="$m_ROOT/lang"
 m_SRC_DIR="$m_ROOT/src"
 
-m_CONF_DIR="$m_ROOT/conf"
-m_DATA_DIR="$m_ROOT/data"
-m_HOME_DIR="$m_ROOT/home"
-m_CACHE_DIR="$m_ROOT/cache"
-m_LOG_DIR="$m_ROOT/log"
-m_RUN_DIR="$m_ROOT/run"
-m_TMP_DIR="$m_ROOT/tmp"
-
 export_readonly \
   m_BIN_DIR \
   m_BIN_SYS_DIR \
@@ -95,13 +87,6 @@ export_readonly \
   m_PKG_DIR \
   m_LANG_DIR \
   m_SRC_DIR \
-  m_CONF_DIR \
-  m_DATA_DIR \
-  m_HOME_DIR \
-  m_CACHE_DIR \
-  m_LOG_DIR \
-  m_RUN_DIR \
-  m_TMP_DIR
 
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
