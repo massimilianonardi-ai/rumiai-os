@@ -34,9 +34,7 @@ launcher()
   _pkg_launch_name_valid "$pkg_launch_pkg" || return 2
 
   [ -n "${m_COMMAND_BIN-}" ] && \
-  [ -n "${m_PKG_DIR-}" ] && \
-  [ -n "${m_HOME_DIR-}" ] && \
-  [ -n "${m_CONF_DIR-}" ] || {
+  [ -n "${m_PKG_DIR-}" ] || {
     _pkg_launch_error runtime-variable-missing
     return 1
   }
@@ -124,6 +122,25 @@ launcher()
     return 1
   }
 
+  pkg_launch_home="$(command -- state-path user pkg "$pkg_launch_pkg" home)" || {
+    _pkg_launch_error home-state-invalid
+    return 1
+  }
+  pkg_launch_conf="$(command -- state-path user pkg "$pkg_launch_pkg" conf)" || {
+    _pkg_launch_error conf-state-invalid
+    return 1
+  }
+
+  umask 077
+  command -p -- mkdir -p -- "$pkg_launch_home" || {
+    _pkg_launch_error home-state-create-failed
+    return 1
+  }
+  [ -d "$pkg_launch_home" ] && [ ! -L "$pkg_launch_home" ] || {
+    _pkg_launch_error home-state-invalid
+    return 1
+  }
+
   readonly -- \
     pkg_launch_pkg \
     pkg_launch_command_bin \
@@ -134,16 +151,18 @@ launcher()
     pkg_launch_root \
     pkg_launch_link \
     pkg_launch_link_text \
-    pkg_launch_target
+    pkg_launch_target \
+    pkg_launch_home \
+    pkg_launch_conf
 
-  HOME="$m_HOME_DIR/$pkg_launch_pkg"
+  HOME=$pkg_launch_home
   export -- HOME
 
   _pkg_launch_env_apply "$pkg_launch_concrete/env" || {
     _pkg_launch_error package-env-invalid
     return 1
   }
-  _pkg_launch_env_apply "$m_CONF_DIR/$pkg_launch_pkg/env" || {
+  _pkg_launch_env_apply "$pkg_launch_conf/.m/env" || {
     _pkg_launch_error user-env-invalid
     return 1
   }
