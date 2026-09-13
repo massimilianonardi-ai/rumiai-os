@@ -1,21 +1,20 @@
 _pkg_state_area_root_set()
 {
-  [ "$#" -eq 1 ] || return 2
-  pkg_state_area=$1
+  [ "$#" -eq 2 ] || return 2
+  pkg_state_pkg=$1
+  pkg_state_area=$2
 
   case "$pkg_state_area" in
-    conf) pkg_state_area_root=${m_CONF_DIR-} ;;
-    data) pkg_state_area_root=${m_DATA_DIR-} ;;
-    home) pkg_state_area_root=${m_HOME_DIR-} ;;
-    cache) pkg_state_area_root=${m_CACHE_DIR-} ;;
-    log) pkg_state_area_root=${m_LOG_DIR-} ;;
-    run) pkg_state_area_root=${m_RUN_DIR-} ;;
-    tmp) pkg_state_area_root=${m_TMP_DIR-} ;;
+    conf | data | home | cache | log | run | tmp) : ;;
     *) return 1 ;;
   esac
 
-  [ "$pkg_state_area_root" = "$m_ROOT/$pkg_state_area" ] || return 1
-  [ -d "$pkg_state_area_root" ] && [ ! -L "$pkg_state_area_root" ]
+  pkg_state_area_root="$(command -- state-path system pkg "$pkg_state_pkg" "$pkg_state_area")" || return 1
+  [ -n "$pkg_state_area_root" ] || return 1
+  case "$pkg_state_area_root" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
 }
 
 _pkg_state_path_valid()
@@ -91,21 +90,19 @@ _pkg_state_source_type_set()
 
 _pkg_state_existing_validate()
 {
-  [ "$#" -eq 4 ] || return 2
+  [ "$#" -eq 3 ] || return 2
   pkg_state_area_root=$1
-  pkg_state_pkg=$2
-  pkg_state_path=$3
-  pkg_state_expected_type=$4
-  pkg_state_pkg_root="$pkg_state_area_root/$pkg_state_pkg"
+  pkg_state_path=$2
+  pkg_state_expected_type=$3
 
-  if [ -e "$pkg_state_pkg_root" ] || [ -L "$pkg_state_pkg_root" ]
+  if [ -e "$pkg_state_area_root" ] || [ -L "$pkg_state_area_root" ]
   then
-    [ -d "$pkg_state_pkg_root" ] && [ ! -L "$pkg_state_pkg_root" ] || return 1
+    [ -d "$pkg_state_area_root" ] && [ ! -L "$pkg_state_area_root" ] || return 1
   else
     return 0
   fi
 
-  pkg_state_existing_current=$pkg_state_pkg_root
+  pkg_state_existing_current=$pkg_state_area_root
   pkg_state_existing_rest=$pkg_state_path
   while :
   do
@@ -246,14 +243,14 @@ _pkg_state_validate()
       *) return 1 ;;
     esac
     _pkg_state_file_validate "$pkg_state_area_file" || return 1
-    _pkg_state_area_root_set "$pkg_state_area" || return 1
+    _pkg_state_area_root_set "$pkg_state_pkg" "$pkg_state_area" || return 1
     pkg_state_current_area_root=$pkg_state_area_root
 
     while IFS= read -r pkg_state_path
     do
       _pkg_state_source_type_set "$pkg_state_root" "$pkg_state_path" || return 1
       pkg_state_current_type=$pkg_state_source_type
-      _pkg_state_existing_validate "$pkg_state_current_area_root" "$pkg_state_pkg" "$pkg_state_path" "$pkg_state_current_type" || return 1
+      _pkg_state_existing_validate "$pkg_state_current_area_root" "$pkg_state_path" "$pkg_state_current_type" || return 1
       _pkg_state_path_add "$pkg_state_area" "$pkg_state_path" || return 1
     done < "$pkg_state_area_file"
   done
@@ -310,14 +307,26 @@ _pkg_state_dir_ensure_owned()
   _pkg_state_created_dir_add "$1"
 }
 
+_pkg_state_area_root_ensure()
+{
+  [ "$#" -eq 1 ] || return 2
+  if [ -e "$1" ] || [ -L "$1" ]
+  then
+    [ -d "$1" ] && [ ! -L "$1" ]
+    return $?
+  fi
+  command -p -- mkdir -p -- "$1" || return 1
+  [ -d "$1" ] && [ ! -L "$1" ] || return 1
+  _pkg_state_created_dir_add "$1"
+}
+
 _pkg_state_parent_dirs_ensure()
 {
-  [ "$#" -eq 3 ] || return 2
+  [ "$#" -eq 2 ] || return 2
   pkg_state_area_root=$1
-  pkg_state_pkg=$2
-  pkg_state_path=$3
-  pkg_state_current="$pkg_state_area_root/$pkg_state_pkg"
-  _pkg_state_dir_ensure_owned "$pkg_state_current" || return 1
+  pkg_state_path=$2
+  _pkg_state_area_root_ensure "$pkg_state_area_root" || return 1
+  pkg_state_current=$pkg_state_area_root
 
   pkg_state_parent=${pkg_state_path%/*}
   [ "$pkg_state_parent" != "$pkg_state_path" ] || return 0
@@ -356,7 +365,7 @@ _pkg_state_var_area_ensure()
   pkg_state_pkg=$3
   pkg_state_var_dir="$pkg_state_concrete/var"
   pkg_state_var_link="$pkg_state_var_dir/$pkg_state_area"
-  pkg_state_var_target="../../../$pkg_state_area/$pkg_state_pkg"
+  pkg_state_var_target="../../../state/system/current/pkg/$pkg_state_pkg/$pkg_state_area"
 
   if [ ! -e "$pkg_state_var_dir" ] && [ ! -L "$pkg_state_var_dir" ]
   then
@@ -488,7 +497,7 @@ _pkg_state_materialize()
   do
     pkg_state_area=${pkg_state_mapping%%/*}
     pkg_state_path=${pkg_state_mapping#*/}
-    _pkg_state_area_root_set "$pkg_state_area" || {
+    _pkg_state_area_root_set "$pkg_state_pkg" "$pkg_state_area" || {
       _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
       return 1
     }
@@ -500,7 +509,7 @@ _pkg_state_materialize()
     pkg_state_current_type=$pkg_state_source_type
     pkg_state_source="$pkg_state_concrete/root/$pkg_state_path"
     pkg_state_default="$pkg_state_concrete/default/$pkg_state_area/$pkg_state_path"
-    pkg_state_destination="$pkg_state_current_area_root/$pkg_state_pkg/$pkg_state_path"
+    pkg_state_destination="$pkg_state_current_area_root/$pkg_state_path"
 
     _pkg_state_default_parent_ensure "$pkg_state_concrete" "$pkg_state_area" "$pkg_state_path" || {
       _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
@@ -517,7 +526,7 @@ _pkg_state_materialize()
 
     if [ ! -e "$pkg_state_destination" ] && [ ! -L "$pkg_state_destination" ]
     then
-      _pkg_state_parent_dirs_ensure "$pkg_state_current_area_root" "$pkg_state_pkg" "$pkg_state_path" || {
+      _pkg_state_parent_dirs_ensure "$pkg_state_current_area_root" "$pkg_state_path" || {
         _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
         return 1
       }
