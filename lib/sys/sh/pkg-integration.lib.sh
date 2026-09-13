@@ -1,7 +1,7 @@
-. "$m_LIB_DIR/sh/pkg-facility.lib.sh"
-. "$m_LIB_DIR/sh/pkg-dependency.lib.sh"
-. "$m_LIB_DIR/sh/pkg-state.lib.sh"
-. "$m_LIB_DIR/sh/pkg-setuid.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-facility.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-dependency.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-state.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-setuid.lib.sh"
 
 _pkg_integration_error()
 {
