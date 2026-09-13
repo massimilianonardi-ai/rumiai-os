@@ -98,10 +98,14 @@ _pkg_facility_dir_ensure()
 _pkg_facility_provider_root_ensure()
 {
   [ "$#" -eq 0 ] || return 2
-  [ -d "$m_DATA_DIR" ] && [ ! -L "$m_DATA_DIR" ] || return 1
-  _pkg_facility_dir_ensure "$m_DATA_DIR/sys" || return 1
-  _pkg_facility_dir_ensure "$m_DATA_DIR/sys/pkg" || return 1
-  _pkg_facility_dir_ensure "$m_DATA_DIR/sys/pkg/providers" || return 1
+  pkg_facility_data_root="$(command -- state-path system sys pkg data)" || return 1
+  pkg_facility_provider_root="$pkg_facility_data_root/providers"
+  if [ ! -e "$pkg_facility_data_root" ] && [ ! -L "$pkg_facility_data_root" ]
+  then
+    command -p -- mkdir -p -- "$pkg_facility_data_root" || return 1
+  fi
+  [ -d "$pkg_facility_data_root" ] && [ ! -L "$pkg_facility_data_root" ] || return 1
+  _pkg_facility_dir_ensure "$pkg_facility_provider_root" || return 1
 }
 
 _pkg_facility_dir_entries_empty()
@@ -139,7 +143,7 @@ _pkg_facility_provider_add_rollback()
   do
     [ "$pkg_facility_index" -lt "$pkg_facility_limit" ] || break
     _pkg_facility_line_parse "$pkg_facility_line" || return 1
-    pkg_facility_compatibility_dir="$m_DATA_DIR/sys/pkg/providers/$pkg_facility_name/$pkg_facility_compatibility"
+    pkg_facility_compatibility_dir="$pkg_facility_provider_root/$pkg_facility_name/$pkg_facility_compatibility"
     pkg_facility_marker="$pkg_facility_compatibility_dir/$pkg_facility_concrete_name"
     command -p -- rm -f -- "$pkg_facility_marker" 2>/dev/null || :
     if [ -d "$pkg_facility_compatibility_dir" ] && [ ! -L "$pkg_facility_compatibility_dir" ]
@@ -172,7 +176,7 @@ _pkg_facility_provider_add()
       _pkg_facility_provider_add_rollback "$pkg_facility_concrete" "$pkg_facility_concrete_name" "$pkg_facility_added"
       return 1
     }
-    pkg_facility_facility_dir="$m_DATA_DIR/sys/pkg/providers/$pkg_facility_name"
+    pkg_facility_facility_dir="$pkg_facility_provider_root/$pkg_facility_name"
     pkg_facility_compatibility_dir="$pkg_facility_facility_dir/$pkg_facility_compatibility"
     _pkg_facility_dir_ensure "$pkg_facility_facility_dir" || {
       _pkg_facility_provider_add_rollback "$pkg_facility_concrete" "$pkg_facility_concrete_name" "$pkg_facility_added"
@@ -215,12 +219,14 @@ _pkg_facility_provider_remove()
   fi
 
   _pkg_facility_file_validate "$pkg_facility_file" || return 1
-  [ -d "$m_DATA_DIR/sys/pkg/providers" ] && [ ! -L "$m_DATA_DIR/sys/pkg/providers" ] || return 1
+  pkg_facility_data_root="$(command -- state-path system sys pkg data)" || return 1
+  pkg_facility_provider_root="$pkg_facility_data_root/providers"
+  [ -d "$pkg_facility_provider_root" ] && [ ! -L "$pkg_facility_provider_root" ] || return 1
 
   while IFS= read -r pkg_facility_line
   do
     _pkg_facility_line_parse "$pkg_facility_line" || return 1
-    pkg_facility_facility_dir="$m_DATA_DIR/sys/pkg/providers/$pkg_facility_name"
+    pkg_facility_facility_dir="$pkg_facility_provider_root/$pkg_facility_name"
     pkg_facility_compatibility_dir="$pkg_facility_facility_dir/$pkg_facility_compatibility"
     pkg_facility_marker="$pkg_facility_compatibility_dir/$pkg_facility_concrete_name"
     [ -d "$pkg_facility_facility_dir" ] && [ ! -L "$pkg_facility_facility_dir" ] || return 1
@@ -231,7 +237,7 @@ _pkg_facility_provider_remove()
   while IFS= read -r pkg_facility_line
   do
     _pkg_facility_line_parse "$pkg_facility_line" || return 1
-    pkg_facility_compatibility_dir="$m_DATA_DIR/sys/pkg/providers/$pkg_facility_name/$pkg_facility_compatibility"
+    pkg_facility_compatibility_dir="$pkg_facility_provider_root/$pkg_facility_name/$pkg_facility_compatibility"
     pkg_facility_marker="$pkg_facility_compatibility_dir/$pkg_facility_concrete_name"
     command -p -- rm -f -- "$pkg_facility_marker" || return 1
     _pkg_facility_compatibility_dir_remove_if_empty "$pkg_facility_compatibility_dir" || return 1
