@@ -1,76 +1,134 @@
 # RumiAI OS
 
-RumiAI OS is the portable bootstrap/runtime layer for RumiAI.
+RumiAI OS contains the technical `m` substrate and the branded RumiAI product entrypoints built on top of it.
 
-Current implementation status: POSIX bootstrap/runtime with semantic executable roots, minimal `lang` resolver/logger, explicit language/platform utilities, interactive shell entry and source-command interpretation.
+Current implementation status: active Model 2.0 migration on `main`. The technical runtime is `m`; `rumiai-os-sh` is the branded shell entrypoint, and `rumiai-os` currently delegates to the same shell-oriented baseline while its future GUI role remains separate from the technical runtime contract.
 
-## CLI
+## Entrypoints
+
+```text
+m
+```
+
+`m` bootstraps the technical runtime. Commands owned by the `m` layer use:
+
+```text
+#!/usr/bin/env m
+```
+
+The runtime is exposed on the technical PATH through:
+
+```text
+bin/sys/m -> ../../m
+```
+
+The branded RumiAI entrypoints are:
 
 ```text
 rumiai-os
+rumiai-os-sh
 ```
 
-Bootstraps the RumiAI environment and enters `$SHELL`, falling back to `sh` when `SHELL` is not set.
+`rumiai-os-sh` activates the RumiAI executable layer and enters the shell. `rumiai-os` currently follows the same shell-oriented baseline; this is an implementation state of the migration, not a permanent GUI contract.
+
+## Executable layout
 
 ```text
-rumiai-os file [args...]
+bin/sys/          platform-independent m commands
+bin/sys-*/        platform-specific m commands
+bin/sys-osarch    active relative link to bin/sys-<osarch>/
+bin/ext/          platform-independent package executables
+bin/ext-*/        platform-specific package executables
+bin/ext-osarch    active relative link to bin/ext-<osarch>/
+bin/ai/           platform-independent RumiAI commands
+bin/ai-*/         platform-specific RumiAI commands
+bin/ai-osarch     active relative link to bin/ai-<osarch>/
 ```
 
-Bootstraps RumiAI and sources the explicitly supplied readable regular file. A RumiAI command that is also directly executable can use:
+The `m` runtime PATH is ordered as:
 
 ```text
-#!/usr/bin/env rumiai-os
+sys-osarch : sys : ext-osarch : ext : host PATH
 ```
 
-Platform-independent system commands include:
+RumiAI activation prepends:
 
 ```text
-log [args...]
-lang <domain> <message-id>
-lang-set [language]
-osarch-update
+ai-osarch : ai
 ```
 
-`lang` delegates to the bootstrap language resolver. `lang-set` reports the effective current language and available catalog counts when called without arguments, or selects an existing language with one argument. `osarch-update` detects the native platform, creates the matching platform-specific executable directories when needed, and refreshes the active relative symlinks.
+## Libraries and packages
 
-## Layout
+Technical shell libraries live under:
 
 ```text
-rumiai-os        runtime/front controller
-bin/             executable-directory container
-bin/sys/         platform-independent RumiAI commands and runtime exposure
-bin/sys-*/       platform-specific RumiAI commands
-bin/sys-osarch   active relative symlink to bin/sys-<osarch>/
-bin/ext/         platform-independent third-party executables
-bin/ext-*/       platform-specific third-party executables
-bin/ext-osarch   active relative symlink to bin/ext-<osarch>/
-lang/            UTF-8 language catalogs
-src/             ignored local development workspace
+lib/sys/sh/<name>.lib.sh
 ```
 
-The active portable runtime is exposed through the relative symlink:
+RumiAI-specific libraries use the corresponding `lib/ai/<runtime>/` layer when present.
+
+The package store and package catalog belong to the `m` substrate. Package launchers resolve mutable state through `state-path`; they do not depend on legacy top-level `conf`, `data`, `home`, `cache`, `log`, `run`, or `tmp` roots.
+
+## State
+
+Mutable state is rooted at:
 
 ```text
-bin/sys/rumiai-os -> ../../rumiai-os
+state/
 ```
 
-Platform-independent RumiAI system commands live under `bin/sys/`.
-
-`src/` may contain independent local checkouts such as `rumiai-tests` and `rumiai-dev-PoCs`; its operational contents are ignored by Git and are not runtime dependencies.
-
-## Language catalogs
-
-Catalogs use reusable semantic domains rather than component-specific bootstrap domains:
+The bootstrap exports only the state roots required by Model 2.0:
 
 ```text
-lang/<language_TERRITORY>/filesystem/<message-id>
-lang/<language_TERRITORY>/execution/<message-id>
-lang/<language_TERRITORY>/security/<message-id>
+m_STATE_DIR
+m_STATE_SYS_DIR
+m_STATE_USER_DIR
 ```
 
-The fallback catalog is `en_US`. Language selection is represented by the relative symlink `lang/current -> <language_TERRITORY>`; if no valid selection exists, the resolver uses the `en_US` fallback.
+System state is selected through the profile selector:
 
-`lang-set` with no arguments emits one `current<TAB><language>` row followed by `<language><TAB><non-empty-message-count>` for each available language.
+```text
+state/system/current -> profile/<profile>
+```
+
+The initial tracked profile is `main`. User state is isolated by the current POSIX principal under `state/user/<host-id>-<uid>/`.
+
+The public state resolver is:
+
+```text
+state-path <scope> <owner> <identity> <area> [<state-instance>]
+```
+
+Consumers use `state-path` instead of reconstructing the physical state layout. Package `var/<area>` links are the deliberate exception: they remain system-scoped and follow `state/system/current` so newly started package processes observe the selected system profile.
+
+Package launch HOME is resolved from user package state. RumiAI-managed package configuration lives under the reserved `.m/` namespace inside the package configuration area; for example, launcher environment configuration is read from `<package-conf>/.m/env`.
+
+## Product metadata
+
+The current branded product metadata is stored as scalar files:
+
+```text
+product-name
+product-version
+```
+
+`product-version` is not advanced to `2.0.0` until the Model 2.0 migration, permanent tests, applicable physical validation, and final consistency checks are complete.
+
+## Language and shell configuration locations
+
+The current implementation keeps language catalogs under:
+
+```text
+lang/
+```
+
+and the tracked shell configuration for the initial system profile under:
+
+```text
+state/system/profile/main/sys/shell/conf/
+```
+
+These are current implementation locations. The final generic static-resource layout is deliberately deferred until after the Model 2.0 migration; neither location should be interpreted as fixing a general resource taxonomy before that separate design work is completed.
 
 ## Platform activation
 
@@ -81,6 +139,10 @@ The canonical platform identifier has the form:
 ```
 
 Current native tokens are `linux`, `macos`, `windows` and `arm64`, `x86_64`. `osarch-update` is explicit; the bootstrap does not invoke it automatically.
+
+## Development workspace
+
+`src/` may contain independent local checkouts such as `rumiai-tests` and `rumiai-dev-PoCs`. Its operational contents are ignored by Git and are not runtime dependencies.
 
 ## Portability
 
