@@ -172,6 +172,10 @@ extract_dmg_cleanup()
   then
     command -p -- rmdir "$extract_dmg_mount" 2>/dev/null || :
   fi
+  if [ -n "${extract_dmg_tmp_root-}" ] && [ -d "$extract_dmg_tmp_root" ] && [ ! -L "$extract_dmg_tmp_root" ]
+  then
+    command -p -- rmdir "$extract_dmg_tmp_root" 2>/dev/null || :
+  fi
 
   exit "$extract_cleanup_status"
 }
@@ -181,7 +185,12 @@ extract_dmg_native()
   readpathce extract_dmg_artifact "$extract_artifact" || fatal execution execution-failed operation extract reason artifact-resolution-failed format "$extract_format"
   readpathce extract_dmg_destination "$extract_destination" || fatal execution execution-failed operation extract reason destination-resolution-failed format "$extract_format"
 
-  extract_dmg_mount="$m_TMP_DIR/.extract-dmg-$$"
+  extract_dmg_tmp_root="$(command -- state-path user sys extract tmp)" || fatal execution execution-failed operation extract reason temporary-state-invalid format "$extract_format"
+  umask 077
+  command -p -- mkdir -p -- "$extract_dmg_tmp_root" || fatal execution execution-failed operation extract reason temporary-state-create-failed format "$extract_format"
+  [ -d "$extract_dmg_tmp_root" ] && [ ! -L "$extract_dmg_tmp_root" ] || fatal execution execution-failed operation extract reason temporary-state-invalid format "$extract_format"
+
+  extract_dmg_mount="$extract_dmg_tmp_root/.extract-dmg-$$"
   [ ! -e "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
   command -p -- mkdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-create-failed format "$extract_format"
 
@@ -200,6 +209,7 @@ extract_dmg_native()
   extract_dmg_mounted=0
 
   command -p -- rmdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-cleanup-failed format "$extract_format"
+  command -p -- rmdir "$extract_dmg_tmp_root" 2>/dev/null || :
   trap - 0 HUP INT TERM
 }
 
