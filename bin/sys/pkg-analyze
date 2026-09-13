@@ -8,7 +8,6 @@ pkg_analyze_cleanup()
     if [ -n "${pkg_analyze_work_parent-}" ]
     then
       command -p -- rmdir -- "$pkg_analyze_work_parent" 2>/dev/null || :
-      command -p -- rmdir -- "$m_TMP_DIR/sys" 2>/dev/null || :
     fi
   fi
 }
@@ -22,9 +21,7 @@ pkg_analyze_prompt()
 
 pkg_analyze_make_work()
 {
-  [ -n "${m_TMP_DIR-}" ] || fatal execution execution-failed operation pkg-analyze reason runtime-tmp-missing
-
-  pkg_analyze_work_parent="$m_TMP_DIR/sys/pkg-analyze"
+  pkg_analyze_work_parent="$(command -- state-path user sys pkg-analyze tmp)" || fatal execution execution-failed operation pkg-analyze reason runtime-tmp-missing
   pkg_analyze_work="$pkg_analyze_work_parent/analysis-$$"
 
   umask 077
