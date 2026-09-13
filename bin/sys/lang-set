@@ -1,4 +1,4 @@
-#!/usr/bin/env rumiai-os
+#!/usr/bin/env m
 
 lang_set_count()
 {

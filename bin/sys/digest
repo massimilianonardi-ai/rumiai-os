@@ -1,4 +1,4 @@
-#!/usr/bin/env rumiai-os
+#!/usr/bin/env m
 
 digest_algorithm=
 digest_seen_delimiter=0
