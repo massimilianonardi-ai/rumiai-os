@@ -169,7 +169,7 @@ log()
         "2") printf -- '%s ' "invalid log severity: $@" >&2;;
         "3") printf -- '%s ' "invalid m_LOG_LEVEL: $@" >&2;;
         "4") printf -- '%s ' "invalid log domain: $@" >&2;;
-        "5") printf -- '%s ' "invalid log message id: $@" >&2;;
+        "5") printf -- '%s ' "invalid message id: $@" >&2;;
         "6") printf -- '%s ' "invalid parity check of <field, value> pairs: $@" >&2;;
         "7") printf -- '%s ' "invalid field name: $@" >&2;;
         *) printf -- '%s ' "unknown error: $@" >&2;;
@@ -191,12 +191,14 @@ shell()
   export -- m_SHELL_NAME
   printf -- '%s\n' "$(tput setaf 2)$(tput bold)${m_SHELL_NAME}$(tput sgr0)" >&2
 
+  shell_conf_dir="$(command -- state-path system sys shell conf)" || return 1
+
   : "${m_SHELL_EXT:=}"
   export m_SHELL_EXT
 
   case "${SHELL##*/}" in
     bash)
-      exec "$SHELL" --rcfile "$m_CONF_DIR/sys/shell/bash/bashrc" "$@"
+      exec "$SHELL" --rcfile "$shell_conf_dir/bash/bashrc" "$@"
       ;;
 
     zsh)
@@ -208,14 +210,15 @@ shell()
         export -- m_SHELL_ZDOTDIR
       fi
 
-      shell_zdotdir_init="$m_HOME_DIR/sys/shell/zsh"
+      shell_home_dir="$(command -- state-path user sys shell home)" || return 1
+      shell_zdotdir_init="$shell_home_dir/zsh"
       command -p -- mkdir -p "$shell_zdotdir_init" || return 1
 
       for shell_zdotfile in .zshenv .zprofile .zshrc
       do
         shell_zdottmp="$shell_zdotdir_init/$shell_zdotfile.$$"
 
-        if ! printf -- '. "$m_CONF_DIR/sys/shell/zsh/%s"\n' "$shell_zdotfile" > "$shell_zdottmp"
+        if ! printf -- '. "$(state-path system sys shell conf)/zsh/%s"\n' "$shell_zdotfile" > "$shell_zdottmp"
         then
           command -p -- rm -f "$shell_zdottmp" 2>/dev/null
           return 1
@@ -234,7 +237,7 @@ shell()
       ZDOTDIR="$m_SHELL_ZDOTDIR_INIT"
       export -- ZDOTDIR
 
-      unset shell_zdotdir_init shell_zdotfile shell_zdottmp
+      unset shell_conf_dir shell_home_dir shell_zdotdir_init shell_zdotfile shell_zdottmp
 
       exec "$SHELL" "$@"
       ;;
@@ -243,13 +246,15 @@ shell()
       m_SHELL_ENV="${ENV-}"
       export -- m_SHELL_ENV
 
-      ENV="$m_CONF_DIR/sys/shell/sh/env"
+      ENV="$shell_conf_dir/sh/env"
       export -- ENV
 
+      unset shell_conf_dir
       exec "$SHELL" "$@"
       ;;
 
     *)
+      unset shell_conf_dir
       exec "$SHELL" "$@"
       ;;
   esac

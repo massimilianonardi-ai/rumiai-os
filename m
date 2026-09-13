@@ -126,6 +126,45 @@ export -- m_LOG_LEVEL
 . "$m_LIB_DIR/sys/sh/core.lib.sh"
 
 #-------------------------------------------------------------------------------
+# STATE ROOTS
+#-------------------------------------------------------------------------------
+
+m_STATE_DIR="$m_ROOT/state"
+state_selector="$m_STATE_DIR/system/current"
+[ -L "$state_selector" ] || fatal execution execution-failed operation state-bootstrap reason selector-invalid
+state_selector_target="$(command -p -- readlink -- "$state_selector")" || fatal execution execution-failed operation state-bootstrap reason selector-invalid
+case "$state_selector_target" in
+  profile/*)
+    state_profile=${state_selector_target#profile/}
+    ;;
+  *)
+    fatal execution execution-failed operation state-bootstrap reason selector-invalid
+    ;;
+esac
+case "$state_profile" in
+  "" | */* | [!abcdefghijklmnopqrstuvwxyz0123456789]* | *[!abcdefghijklmnopqrstuvwxyz0123456789._-]* | *[._-])
+    fatal execution execution-failed operation state-bootstrap reason profile-invalid
+    ;;
+esac
+state_profile_dir="$m_STATE_DIR/system/profile/$state_profile"
+[ -d "$state_profile_dir" ] && [ ! -L "$state_profile_dir" ] || fatal execution execution-failed operation state-bootstrap reason profile-invalid
+readpathce m_STATE_SYS_DIR "$state_profile_dir" || fatal execution execution-failed operation state-bootstrap reason profile-invalid
+
+state_host_id="$(
+  . "$m_LIB_DIR/sys/sh/osarch.lib.sh" || exit 1
+  . "$m_LIB_DIR/sys/sh/host-id.lib.sh" || exit 1
+  host_id_get
+)" || fatal execution execution-failed operation state-bootstrap reason host-id-invalid
+state_uid="$(command -p -- id -u 2>/dev/null)" || fatal execution execution-failed operation state-bootstrap reason uid-invalid
+case "$state_uid" in
+  "" | *[!0123456789]*) fatal execution execution-failed operation state-bootstrap reason uid-invalid ;;
+esac
+m_STATE_USER_DIR="$m_STATE_DIR/user/$state_host_id-$state_uid"
+
+export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
+unset state_selector state_selector_target state_profile state_profile_dir state_host_id state_uid
+
+#-------------------------------------------------------------------------------
 # EXECUTE
 #-------------------------------------------------------------------------------
 
