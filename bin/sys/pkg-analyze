@@ -1,4 +1,4 @@
-#!/usr/bin/env rumiai-os
+#!/usr/bin/env m
 
 pkg_analyze_cleanup()
 {
@@ -380,7 +380,7 @@ case "$#" in
     pkg_analyze_artifact=$2
     pkg_analyze_staging="$pkg_analyze_work/staging"
     command -p -- mkdir -- "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason staging-create-failed
-    . "$m_LIB_DIR/sh/pkg-extract.lib.sh" || fatal execution execution-failed operation pkg-analyze reason pkg-extract-load-failed
+    . "$m_LIB_DIR/sys/sh/pkg-extract.lib.sh" || fatal execution execution-failed operation pkg-analyze reason pkg-extract-load-failed
     pkg_extract "$pkg_analyze_artifact" "$pkg_analyze_format" "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason extraction-failed
     readpathce pkg_analyze_root "$pkg_analyze_staging" || fatal execution execution-failed operation pkg-analyze reason staging-resolve-failed
     pkg_analyze_source=artifact
