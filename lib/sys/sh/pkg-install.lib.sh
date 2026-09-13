@@ -1,6 +1,6 @@
-. "$m_LIB_DIR/sh/pkg-download.lib.sh"
-. "$m_LIB_DIR/sh/pkg-extract.lib.sh"
-. "$m_LIB_DIR/sh/pkg-integration.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-download.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-extract.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg-integration.lib.sh"
 
 _pkg_install_error()
 {
@@ -245,11 +245,13 @@ _pkg_install_catalog_snapshot_impl()
 _pkg_install_catalog_snapshot()
 {
   [ "$#" -eq 1 ] || return 2
+  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 1
+  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 1
   _pkg_install_catalog_snapshot_impl \
     "https://github.com/massimilianonardi-ai/pkg-catalog.git" \
     main \
-    "$m_CACHE_DIR/sys/pkg/pkg-catalog" \
-    "$m_RUN_DIR/sys/pkg/pkg-catalog.lock" \
+    "$pkg_install_cache_root/pkg-catalog" \
+    "$pkg_install_run_root/pkg-catalog.lock" \
     "$1"
 }
 
@@ -339,7 +341,7 @@ _pkg_install_repository_adapter()
   case "$pkg_install_repository_type" in
     "" | [!a-z0-9]* | *[!a-z0-9-]* | *-) return 1 ;;
   esac
-  pkg_install_adapter="$m_LIB_DIR/sh/pkg-repository-$pkg_install_repository_type.lib.sh"
+  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg-repository-$pkg_install_repository_type.lib.sh"
   [ -f "$pkg_install_adapter" ] && [ ! -L "$pkg_install_adapter" ] && [ -r "$pkg_install_adapter" ] && [ ! -x "$pkg_install_adapter" ] || return 1
 }
 
@@ -495,24 +497,23 @@ _pkg_install_cleanup()
   then
     command -p -- rm -rf -- "$pkg_install_work" 2>/dev/null || :
     command -p -- rmdir -- "$pkg_install_work_parent" 2>/dev/null || :
-    command -p -- rmdir -- "$m_TMP_DIR/sys" 2>/dev/null || :
   fi
 }
 
 pkg_install()
 (
   [ "$#" -ge 1 ] || return 2
-  [ -d "$m_TMP_DIR" ] && [ ! -L "$m_TMP_DIR" ] || return 1
 
   for pkg_install_operand
   do
     _pkg_install_operand_parse "$pkg_install_operand" || return 2
   done
 
+  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
   umask 077
-  pkg_install_work_parent="$m_TMP_DIR/sys/pkg"
-  pkg_install_work="$pkg_install_work_parent/install-$$"
   command -p -- mkdir -p -- "$pkg_install_work_parent" || return 1
+  [ -d "$pkg_install_work_parent" ] && [ ! -L "$pkg_install_work_parent" ] || return 1
+  pkg_install_work="$pkg_install_work_parent/install-$$"
   [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 1
   command -p -- mkdir -- "$pkg_install_work" || return 1
   trap '_pkg_install_cleanup' 0
