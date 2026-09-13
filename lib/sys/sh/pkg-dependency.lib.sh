@@ -353,7 +353,8 @@ _pkg_dependency_resolve_one()
   pkg_dependency_facility="$1"
   pkg_dependency_constraints="$2"
   pkg_dependency_consumer_osarch="$3"
-  pkg_dependency_facility_dir="$m_DATA_DIR/sys/pkg/providers/$pkg_dependency_facility"
+  pkg_dependency_data_root="$(command -- state-path system sys pkg data)" || return 1
+  pkg_dependency_facility_dir="$pkg_dependency_data_root/providers/$pkg_dependency_facility"
   [ -d "$pkg_dependency_facility_dir" ] && [ ! -L "$pkg_dependency_facility_dir" ] || return 1
 
   pkg_dependency_best_compatibility=""
@@ -409,7 +410,8 @@ _pkg_dependency_resolve()
   fi
 
   _pkg_dependency_file_validate "$pkg_dependency_source" || return 1
-  [ -d "$m_DATA_DIR/sys/pkg/providers" ] && [ ! -L "$m_DATA_DIR/sys/pkg/providers" ] || return 1
+  pkg_dependency_data_root="$(command -- state-path system sys pkg data)" || return 1
+  [ -d "$pkg_dependency_data_root/providers" ] && [ ! -L "$pkg_dependency_data_root/providers" ] || return 1
   pkg_dependency_tab="$(printf '\t')"
 
   while IFS= read -r pkg_dependency_line
