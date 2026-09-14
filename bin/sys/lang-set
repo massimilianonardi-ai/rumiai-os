@@ -15,17 +15,6 @@ lang_set_selector_name()
   printf -- '%s\n' "$lang_set_selector_target"
 }
 
-lang_set_cleanup_new()
-{
-  for lang_set_owner_dir in "$m_RES_DIR"/*
-  do
-    [ -d "$lang_set_owner_dir" ] && [ ! -L "$lang_set_owner_dir" ] || continue
-    lang_set_owner_lang_dir="$lang_set_owner_dir/lang"
-    [ -d "$lang_set_owner_lang_dir" ] && [ ! -L "$lang_set_owner_lang_dir" ] || continue
-    command -p -- rm -f -- "$lang_set_owner_lang_dir/.current.new.$$" 2>/dev/null || :
-  done
-}
-
 lang_set_cleanup_prepared()
 {
   for lang_set_owner_dir in "$m_RES_DIR"/*
