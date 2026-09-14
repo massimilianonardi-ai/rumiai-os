@@ -22,11 +22,13 @@ readpathce()
     then
       cmd="./$1"
     else
-      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%\nx}"
+      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
+x}"
     fi
     [ -e "$cmd" ] || exit 1
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
-    cmd="${cmd%\nx}"
+    cmd="${cmd%
+x}"
     [ -e "$cmd" ] || exit 1
     printf -- '%s' "${cmd}x"
   )"
@@ -86,7 +88,6 @@ export_readonly \
   m_RES_DIR \
   m_LANG_DIR \
   m_SRC_DIR \
-
 
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
