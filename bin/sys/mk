@@ -1,0 +1,25 @@
+#!/usr/bin/env m
+
+[ "$#" -ge 1 ] || {
+  log error execution invalid-arguments operation mk
+  exit 2
+}
+
+mk_command=$1
+shift
+
+case "$mk_command" in
+  materialize)
+    [ "$#" -eq 3 ] || {
+      log error execution invalid-arguments operation mk subcommand materialize
+      exit 2
+    }
+    . "$m_LIB_DIR/sys/sh/mk-materialize.lib.sh"
+    mk_materialize "$@"
+    exit $?
+    ;;
+  *)
+    log error execution invalid-arguments operation mk subcommand "$mk_command"
+    exit 2
+    ;;
+esac
