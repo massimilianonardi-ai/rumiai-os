@@ -91,7 +91,21 @@ System state is selected through the profile selector:
 state/system/current -> profile/<profile>
 ```
 
-The initial tracked profile is `main`. User state is isolated by the current POSIX principal under `state/user/<host-id>-<uid>/`.
+The initial tracked profile is `main`. The bootstrap exposes system and user state as semantic pathnames and does not resolve their selectors.
+
+User state has one global explicit binding pathname:
+
+```text
+state/user/current
+```
+
+When `state/user/current` is a symbolic link, `state-path user ...` preserves that semantic pathname. Without an explicit binding, user state resolves under:
+
+```text
+state/user/default/
+```
+
+The `default` identity is not an authenticated POSIX principal or a security boundary, and `m` does not derive user identity from host-id or UID.
 
 The public state resolver is:
 
