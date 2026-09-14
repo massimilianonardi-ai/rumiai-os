@@ -22,13 +22,11 @@ readpathce()
     then
       cmd="./$1"
     else
-      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
-x}"
+      cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%\nx}"
     fi
     [ -e "$cmd" ] || exit 1
     cmd="$(command -p -- realpath -- "$cmd" 2>/dev/null; printf -- '%s' "x")"
-    cmd="${cmd%
-x}"
+    cmd="${cmd%\nx}"
     [ -e "$cmd" ] || exit 1
     printf -- '%s' "${cmd}x"
   )"
@@ -73,8 +71,8 @@ m_BIN_EXT_DIR="$m_BIN_DIR/ext"
 m_BIN_EXT_OSARCH_DIR="$m_BIN_DIR/ext-osarch"
 m_LIB_DIR="$m_ROOT/lib"
 m_PKG_DIR="$m_ROOT/pkg"
-
-m_LANG_DIR="$m_ROOT/lang"
+m_RES_DIR="$m_ROOT/res"
+m_LANG_DIR="$m_RES_DIR/sys/lang"
 m_SRC_DIR="$m_ROOT/src"
 
 export_readonly \
@@ -85,8 +83,10 @@ export_readonly \
   m_BIN_EXT_OSARCH_DIR \
   m_LIB_DIR \
   m_PKG_DIR \
+  m_RES_DIR \
   m_LANG_DIR \
   m_SRC_DIR \
+
 
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH

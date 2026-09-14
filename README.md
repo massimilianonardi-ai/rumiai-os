@@ -69,6 +69,8 @@ RumiAI-specific libraries use the corresponding `lib/ai/<runtime>/` layer when p
 
 The package store and package catalog belong to the `m` substrate. Package launchers resolve mutable state through `state-path`; they do not depend on legacy top-level `conf`, `data`, `home`, `cache`, `log`, `run`, or `tmp` roots.
 
+Package-owned resources remain inside the managed package tree/version. They are not projected into the global resource root.
+
 ## State
 
 Mutable state is rooted at:
@@ -128,21 +130,37 @@ product-version
 
 `product-version` is `2.0.0`, the first frozen release after completion and validation of the Model 2.0 migration.
 
-## Language and shell configuration locations
+## Resources and language
 
-The current implementation keeps language catalogs under:
+Global product resources are rooted at:
 
 ```text
-lang/
+res/
 ```
 
-and the tracked shell configuration for the initial system profile under:
+and are ownership-qualified. The first concrete resource class is language:
+
+```text
+res/sys/lang/
+res/ai/lang/
+```
+
+The technical `lang` resolver uses only `res/sys/lang`. Both global language trees keep a relative `current` selector and `lang-set` keeps their selection synchronized. Package language resources remain package-local and are not modified by `lang-set`.
+
+The bootstrap exports:
+
+```text
+m_RES_DIR=$m_ROOT/res
+m_LANG_DIR=$m_RES_DIR/sys/lang
+```
+
+The tracked shell configuration for the initial system profile remains under:
 
 ```text
 state/system/profile/main/sys/shell/conf/
 ```
 
-These are current implementation locations. The generic static-resource layout was deliberately deferred until after `2.0.0`; neither location fixes a general resource taxonomy for later work.
+Resources and mutable state remain separate concepts.
 
 ## Platform activation
 
