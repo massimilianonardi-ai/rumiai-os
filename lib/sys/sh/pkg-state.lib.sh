@@ -248,6 +248,9 @@ _pkg_state_validate()
 
     while IFS= read -r pkg_state_path
     do
+      case "$pkg_state_area/$pkg_state_path" in
+        conf/.m | conf/.m/*) return 1 ;;
+      esac
       _pkg_state_source_type_set "$pkg_state_root" "$pkg_state_path" || return 1
       pkg_state_current_type=$pkg_state_source_type
       _pkg_state_existing_validate "$pkg_state_current_area_root" "$pkg_state_path" "$pkg_state_current_type" || return 1
