@@ -2,7 +2,7 @@
 
 RumiAI OS contains the technical `m` substrate and the branded RumiAI product entrypoints built on top of it.
 
-Current implementation status: active Model 2.0 migration on `main`. The technical runtime is `m`; `rumiai-os-sh` is the branded shell entrypoint, and `rumiai-os` currently delegates to the same shell-oriented baseline while its future GUI role remains separate from the technical runtime contract.
+Current product version: `2.0.0`. The Model 2.0 migration is complete. The technical runtime is `m`; `rumiai-os-sh` is the branded shell entrypoint, and `rumiai-os` currently delegates to the same shell-oriented baseline while its future GUI role remains separate from the technical runtime contract.
 
 ## Entrypoints
 
@@ -29,7 +29,7 @@ rumiai-os
 rumiai-os-sh
 ```
 
-`rumiai-os-sh` activates the RumiAI executable layer and enters the shell. `rumiai-os` currently follows the same shell-oriented baseline; this is an implementation state of the migration, not a permanent GUI contract.
+`rumiai-os-sh` activates the RumiAI executable layer and enters the shell. `rumiai-os` currently follows the same shell-oriented baseline; this is an implementation baseline, not a permanent GUI contract.
 
 ## Executable layout
 
@@ -112,7 +112,7 @@ product-name
 product-version
 ```
 
-`product-version` is not advanced to `2.0.0` until the Model 2.0 migration, permanent tests, applicable physical validation, and final consistency checks are complete.
+`product-version` is `2.0.0`, the first frozen release after completion and validation of the Model 2.0 migration.
 
 ## Language and shell configuration locations
 
@@ -128,7 +128,7 @@ and the tracked shell configuration for the initial system profile under:
 state/system/profile/main/sys/shell/conf/
 ```
 
-These are current implementation locations. The final generic static-resource layout is deliberately deferred until after the Model 2.0 migration; neither location should be interpreted as fixing a general resource taxonomy before that separate design work is completed.
+These are current implementation locations. The generic static-resource layout was deliberately deferred until after `2.0.0`; neither location fixes a general resource taxonomy for later work.
 
 ## Platform activation
 
