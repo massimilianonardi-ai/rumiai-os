@@ -47,10 +47,25 @@ srv_paths_prepare()
 
 srv_lock_release()
 {
-  if [ -n "${srv_lock_dir-}" ]
+  if [ -n "${srv_lock_file-}" ]
   then
-    command -p -- rm -rf -- "$srv_lock_dir" 2>/dev/null
-    srv_lock_dir=
+    srv_lock_current_pid=
+    if [ -f "$srv_lock_file" ] && [ ! -L "$srv_lock_file" ]
+    then
+      srv_lock_current_pid="$(command -p -- cat "$srv_lock_file" 2>/dev/null)"
+    fi
+
+    if [ "$srv_lock_current_pid" = "$$" ]
+    then
+      command -p -- rm -f -- "$srv_lock_file" 2>/dev/null
+    fi
+    srv_lock_file=
+  fi
+
+  if [ -n "${srv_lock_owner_file-}" ]
+  then
+    command -p -- rm -f -- "$srv_lock_owner_file" 2>/dev/null
+    srv_lock_owner_file=
   fi
 
   if [ -n "${srv_unpublished_pid-}" ]
@@ -62,35 +77,37 @@ srv_lock_release()
 
 srv_lock_acquire()
 {
-  srv_lock_dir="$srv_run_root/.$srv_name.lock"
+  srv_lock_file="$srv_run_root/.$srv_name.lock"
+  srv_lock_owner_file="$srv_run_root/.$srv_name.lock.$$"
   srv_lock_wait=0
 
-  while ! command -p -- mkdir -- "$srv_lock_dir" 2>/dev/null
+  command -p -- rm -f -- "$srv_lock_owner_file" 2>/dev/null
+  printf -- '%s\n' "$$" > "$srv_lock_owner_file" || \
+    fatal 1 execution execution-failed operation srv reason lock-owner-create-failed service "$srv_name"
+
+  while ! command -p -- ln "$srv_lock_owner_file" "$srv_lock_file" 2>/dev/null
   do
     srv_lock_pid=
-    if [ -f "$srv_lock_dir/pid" ] && [ ! -L "$srv_lock_dir/pid" ]
+    if [ -f "$srv_lock_file" ] && [ ! -L "$srv_lock_file" ]
     then
-      srv_lock_pid="$(command -p -- cat "$srv_lock_dir/pid" 2>/dev/null)"
+      srv_lock_pid="$(command -p -- cat "$srv_lock_file" 2>/dev/null)"
     fi
 
     if srv_pid_valid "$srv_lock_pid" && srv_pid_exists "$srv_lock_pid"
     then
       [ "$srv_lock_wait" -lt 10 ] || \
-        fatal 1 error execution execution-failed operation srv reason busy service "$srv_name"
+        fatal 1 execution execution-failed operation srv reason busy service "$srv_name"
       command -p -- sleep 1
       srv_lock_wait=$((srv_lock_wait + 1))
       continue
     fi
 
-    command -p -- rm -rf -- "$srv_lock_dir" 2>/dev/null || \
-      fatal 1 error execution execution-failed operation srv reason lock-cleanup-failed service "$srv_name"
+    command -p -- rm -f -- "$srv_lock_file" 2>/dev/null || \
+      fatal 1 execution execution-failed operation srv reason lock-cleanup-failed service "$srv_name"
   done
 
-  printf -- '%s\n' "$$" > "$srv_lock_dir/pid" || {
-    command -p -- rm -rf -- "$srv_lock_dir" 2>/dev/null
-    srv_lock_dir=
-    fatal 1 error execution execution-failed operation srv reason lock-create-failed service "$srv_name"
-  }
+  command -p -- rm -f -- "$srv_lock_owner_file" 2>/dev/null
+  srv_lock_owner_file=
 
   trap 'srv_lock_release' 0
   trap 'exit 129' HUP
@@ -159,11 +176,11 @@ srv_runtime_publish()
 
 srv_start()
 {
-  [ "$#" -eq 1 ] || fatal 2 error execution invalid-arguments operation srv subcommand start
+  [ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation srv subcommand start
   srv_name=$1
-  srv_name_valid "$srv_name" || fatal 2 error execution invalid-arguments operation srv subcommand start service "$srv_name"
-  srv_caller_pid_get || fatal 1 error execution execution-failed operation srv reason caller-pid-unavailable service "$srv_name"
-  srv_paths_prepare || fatal 1 error execution execution-failed operation srv reason state-unavailable service "$srv_name"
+  srv_name_valid "$srv_name" || fatal 2 execution invalid-arguments operation srv subcommand start service "$srv_name"
+  srv_caller_pid_get || fatal 1 execution execution-failed operation srv reason caller-pid-unavailable service "$srv_name"
+  srv_paths_prepare || fatal 1 execution execution-failed operation srv reason state-unavailable service "$srv_name"
   srv_lock_acquire
 
   if [ -e "$srv_runtime_dir" ] || [ -L "$srv_runtime_dir" ]
@@ -176,17 +193,17 @@ srv_start()
 
     if srv_runtime_pid_read && srv_pid_exists "$srv_pid"
     then
-      fatal 1 error execution execution-failed operation srv reason live-runtime-state-invalid service "$srv_name" pid "$srv_pid"
+      fatal 1 execution execution-failed operation srv reason live-runtime-state-invalid service "$srv_name" pid "$srv_pid"
     fi
 
-    srv_runtime_remove || fatal 1 error execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
+    srv_runtime_remove || fatal 1 execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
   fi
 
   srv_command_name="$srv_name-start"
   readpathce srv_command "$srv_command_name" || \
-    fatal 127 error execution command-not-found operation srv command "$srv_command_name"
+    fatal 127 execution command-not-found operation srv command "$srv_command_name"
   [ -f "$srv_command" ] && [ -x "$srv_command" ] || \
-    fatal 126 error execution execution-failed operation srv reason command-not-executable command "$srv_command"
+    fatal 126 execution execution-failed operation srv reason command-not-executable command "$srv_command"
 
   command -p -- nohup "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
   srv_pid=$!
@@ -195,10 +212,10 @@ srv_start()
   command -p -- sleep 1
   srv_pid_exists "$srv_pid" || {
     srv_unpublished_pid=
-    fatal 1 error execution execution-failed operation srv reason exited-during-start service "$srv_name" log "$srv_log_file"
+    fatal 1 execution execution-failed operation srv reason exited-during-start service "$srv_name" log "$srv_log_file"
   }
 
-  srv_runtime_publish || fatal 1 error execution execution-failed operation srv reason state-publish-failed service "$srv_name"
+  srv_runtime_publish || fatal 1 execution execution-failed operation srv reason state-publish-failed service "$srv_name"
   srv_unpublished_pid=
 
   printf -- 'srv: %s started pid=%s\n' "$srv_name" "$srv_pid"
@@ -213,11 +230,11 @@ srv_stop()
     shift
   fi
 
-  [ "$#" -eq 1 ] || fatal 2 error execution invalid-arguments operation srv subcommand stop
+  [ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation srv subcommand stop
   srv_name=$1
-  srv_name_valid "$srv_name" || fatal 2 error execution invalid-arguments operation srv subcommand stop service "$srv_name"
-  srv_caller_pid_get || fatal 1 error execution execution-failed operation srv reason caller-pid-unavailable service "$srv_name"
-  srv_paths_prepare || fatal 1 error execution execution-failed operation srv reason state-unavailable service "$srv_name"
+  srv_name_valid "$srv_name" || fatal 2 execution invalid-arguments operation srv subcommand stop service "$srv_name"
+  srv_caller_pid_get || fatal 1 execution execution-failed operation srv reason caller-pid-unavailable service "$srv_name"
+  srv_paths_prepare || fatal 1 execution execution-failed operation srv reason state-unavailable service "$srv_name"
   srv_lock_acquire
 
   if [ ! -e "$srv_runtime_dir" ] && [ ! -L "$srv_runtime_dir" ]
@@ -230,17 +247,17 @@ srv_stop()
   then
     if srv_runtime_pid_read && srv_pid_exists "$srv_pid"
     then
-      fatal 1 error execution execution-failed operation srv reason live-runtime-state-invalid service "$srv_name" pid "$srv_pid"
+      fatal 1 execution execution-failed operation srv reason live-runtime-state-invalid service "$srv_name" pid "$srv_pid"
     fi
 
-    srv_runtime_remove || fatal 1 error execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
+    srv_runtime_remove || fatal 1 execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
     printf -- 'srv: %s not running; stale state removed\n' "$srv_name"
     return 0
   fi
 
   if ! srv_pid_exists "$srv_pid"
   then
-    srv_runtime_remove || fatal 1 error execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
+    srv_runtime_remove || fatal 1 execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
     printf -- 'srv: %s not running; stale state removed\n' "$srv_name"
     return 0
   fi
@@ -256,7 +273,7 @@ srv_stop()
   then
     if srv_pid_exists "$srv_pid"
     then
-      fatal 1 error execution execution-failed operation srv reason signal-failed service "$srv_name" pid "$srv_pid"
+      fatal 1 execution execution-failed operation srv reason signal-failed service "$srv_name" pid "$srv_pid"
     fi
   fi
 
@@ -269,14 +286,14 @@ srv_stop()
 
   if srv_pid_exists "$srv_pid"
   then
-    fatal 1 error execution execution-failed operation srv reason stop-timeout service "$srv_name" pid "$srv_pid"
+    fatal 1 execution execution-failed operation srv reason stop-timeout service "$srv_name" pid "$srv_pid"
   fi
 
-  srv_runtime_remove || fatal 1 error execution execution-failed operation srv reason state-cleanup-failed service "$srv_name"
+  srv_runtime_remove || fatal 1 execution execution-failed operation srv reason state-cleanup-failed service "$srv_name"
   printf -- 'srv: %s stopped\n' "$srv_name"
 }
 
-[ "$#" -ge 1 ] || fatal 2 error execution invalid-arguments operation srv
+[ "$#" -ge 1 ] || fatal 2 execution invalid-arguments operation srv
 
 srv_subcommand=$1
 shift
@@ -289,6 +306,6 @@ case "$srv_subcommand" in
     srv_stop "$@"
     ;;
   *)
-    fatal 2 error execution invalid-arguments operation srv subcommand "$srv_subcommand"
+    fatal 2 execution invalid-arguments operation srv subcommand "$srv_subcommand"
     ;;
 esac
