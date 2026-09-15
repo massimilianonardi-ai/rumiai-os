@@ -398,28 +398,12 @@ EOF_SELECTED
   esac
   pkg_repository_nodejs_digest="$(printf '%s\n' "$pkg_repository_nodejs_digest" | command -p -- tr 'A-F' 'a-f')" || return 1
 
-  pkg_repository_nodejs_listing="$(_pkg_repository_nodejs_dist_get "/$pkg_repository_nodejs_requested/")" || return 1
-  pkg_repository_nodejs_size="$(printf '%s\n' "$pkg_repository_nodejs_listing" | \
-    LC_ALL=C command -p -- awk -v name="$pkg_repository_nodejs_name" '
-index($0, "href=\"" name "\"") {
-  count++
-  for (i=NF; i>=1; i--) {
-    if ($i ~ /^[0-9]+$/) {
-      size=$i
-      break
-    }
-  }
-}
-END {
-  if (count != 1 || size !~ /^[0-9]+$/) exit 1
-  print size
-}
-')" || return 1
+  pkg_repository_nodejs_url="https://nodejs.org/dist/$pkg_repository_nodejs_requested/$pkg_repository_nodejs_name"
+  pkg_repository_nodejs_size="$(http-fetch -l -- "$pkg_repository_nodejs_url")" || return 1
   case "$pkg_repository_nodejs_size" in
-    ''|*[!0-9]*) return 1;;
+    ''|*[!0-9]*|0[0-9]*) return 1;;
   esac
 
-  pkg_repository_nodejs_url="https://nodejs.org/dist/$pkg_repository_nodejs_requested/$pkg_repository_nodejs_name"
   printf -- 'name=%s\n' "$pkg_repository_nodejs_name"
   printf -- 'url=%s\n' "$pkg_repository_nodejs_url"
   printf -- 'size=%s\n' "$pkg_repository_nodejs_size"
