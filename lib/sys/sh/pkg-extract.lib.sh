@@ -113,6 +113,14 @@ _pkg_extract_appimage()
   command -p -- cp -p -- "$1" "$pkg_extract_appimage_target"
 }
 
+_pkg_extract_executable()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_extract_executable_target="$2/${1##*/}"
+  command -p -- cp -p -- "$1" "$pkg_extract_executable_target" || return 1
+  command -p -- chmod +x "$pkg_extract_executable_target"
+}
+
 pkg_extract()
 (
   [ "$#" -eq 3 ] || return 2
@@ -130,6 +138,10 @@ pkg_extract()
   case "$pkg_extract_format" in
     appimage)
       _pkg_extract_appimage "$pkg_extract_artifact" "$pkg_extract_staging"
+      pkg_extract_status=$?
+      ;;
+    executable)
+      _pkg_extract_executable "$pkg_extract_artifact" "$pkg_extract_staging"
       pkg_extract_status=$?
       ;;
     tar|tar.gz|tgz|tar.bz2|tar.bzip2|tbz|tbz2|tar.xz|txz|tar.zst|tzst|gzip|gz|bzip|bzip2|bz2|xz|zstd|zst|zip|jar|war|7z|7zip|dmg|deb)
