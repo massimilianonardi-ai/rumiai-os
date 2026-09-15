@@ -81,6 +81,11 @@ pkg_download()
             pkg_download_digest=${pkg_download_value#sha256:}
             pkg_download_digest_length=64
             ;;
+          sha512:*)
+            pkg_download_digest_algorithm=sha512
+            pkg_download_digest=${pkg_download_value#sha512:}
+            pkg_download_digest_length=128
+            ;;
           md5:*)
             pkg_download_digest_algorithm=md5
             pkg_download_digest=${pkg_download_value#md5:}
