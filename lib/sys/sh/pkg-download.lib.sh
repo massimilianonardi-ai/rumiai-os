@@ -14,6 +14,7 @@ pkg_download()
   pkg_download_name=
   pkg_download_url=
   pkg_download_size=
+  pkg_download_digest_algorithm=
   pkg_download_digest=
   pkg_download_seen_name=0
   pkg_download_seen_url=0
@@ -75,10 +76,19 @@ pkg_download()
       digest)
         [ "$pkg_download_seen_digest" -eq 0 ] || { _pkg_download_error descriptor-duplicate-field; return 1; }
         case "$pkg_download_value" in
-          sha256:*) pkg_download_digest=${pkg_download_value#sha256:};;
+          sha256:*)
+            pkg_download_digest_algorithm=sha256
+            pkg_download_digest=${pkg_download_value#sha256:}
+            pkg_download_digest_length=64
+            ;;
+          md5:*)
+            pkg_download_digest_algorithm=md5
+            pkg_download_digest=${pkg_download_value#md5:}
+            pkg_download_digest_length=32
+            ;;
           *) _pkg_download_error artifact-digest-invalid; return 1;;
         esac
-        [ "${#pkg_download_digest}" -eq 64 ] || { _pkg_download_error artifact-digest-invalid; return 1; }
+        [ "${#pkg_download_digest}" -eq "$pkg_download_digest_length" ] || { _pkg_download_error artifact-digest-invalid; return 1; }
         case "$pkg_download_digest" in
           *[!0-9A-Fa-f]*) _pkg_download_error artifact-digest-invalid; return 1;;
         esac
@@ -127,7 +137,7 @@ pkg_download()
 
   if [ "$pkg_download_seen_digest" -eq 1 ]
   then
-    pkg_download_actual_digest="$(digest -a sha256 -- "$pkg_download_target")"
+    pkg_download_actual_digest="$(digest -a "$pkg_download_digest_algorithm" -- "$pkg_download_target")"
     pkg_download_digest_status=$?
     if [ "$pkg_download_digest_status" -ne 0 ]
     then
@@ -139,7 +149,7 @@ pkg_download()
     if [ "$pkg_download_actual_digest" != "$pkg_download_digest" ]
     then
       command -p -- rm -f -- "$pkg_download_target" 2>/dev/null
-      log error execution execution-failed operation pkg-download reason digest-mismatch expected-digest "sha256:$pkg_download_digest" actual-digest "sha256:$pkg_download_actual_digest"
+      log error execution execution-failed operation pkg-download reason digest-mismatch expected-digest "$pkg_download_digest_algorithm:$pkg_download_digest" actual-digest "$pkg_download_digest_algorithm:$pkg_download_actual_digest"
       return 1
     fi
   fi
