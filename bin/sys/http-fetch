@@ -3,10 +3,52 @@
 http_fetch_timeout=30
 http_fetch_output=
 http_fetch_headers=
+http_fetch_length="0"
 http_fetch_lf='
 '
 http_fetch_cr="$(printf '\r')"
 http_fetch_seen_delimiter=0
+
+http_fetch_content_length()
+{
+  LC_ALL=C command -p -- awk '
+function reset_response() {
+  content_length_count=0
+  content_length=""
+  content_length_invalid=0
+}
+{
+  line=$0
+  sub(/\r$/, "", line)
+  sub(/^[[:space:]]+/, "", line)
+
+  if (line ~ /^HTTP\/[0-9.]+[[:space:]]+[0-9][0-9][0-9]([[:space:]]|$)/) {
+    response_seen=1
+    reset_response()
+    next
+  }
+
+  if (!response_seen) next
+
+  lower=tolower(line)
+  if (lower ~ /^content-length:[[:space:]]*/) {
+    value=line
+    sub(/^[^:]*:[[:space:]]*/, "", value)
+    sub(/[[:space:]]+$/, "", value)
+    if (value !~ /^(0|[1-9][0-9]*)$/) {
+      content_length_invalid=1
+      next
+    }
+    content_length_count++
+    content_length=value
+  }
+}
+END {
+  if (!response_seen || content_length_invalid || content_length_count != 1) exit 1
+  print content_length
+}
+'
+}
 
 while [ "$#" -gt 0 ]
 do
@@ -29,6 +71,10 @@ do
         http_fetch_headers=$http_fetch_header
       fi
       shift 2
+      ;;
+    -l)
+      http_fetch_length="1"
+      shift
       ;;
     -o)
       [ "$#" -ge 2 ] || fatal 2 execution invalid-arguments operation http-fetch
@@ -55,6 +101,7 @@ done
 
 [ "$http_fetch_seen_delimiter" -eq 1 ] || fatal 2 execution invalid-arguments operation http-fetch
 [ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation http-fetch
+[ "$http_fetch_length" -eq "0" ] || [ -z "$http_fetch_output" ] || fatal 2 execution invalid-arguments operation http-fetch
 http_fetch_url=$1
 
 case "$http_fetch_url" in
@@ -76,7 +123,10 @@ then
     --proto '=http,https' \
     --proto-redir '=http,https'
 
-  if [ -n "$http_fetch_output" ]
+  if [ "$http_fetch_length" -eq "1" ]
+  then
+    set -- "$@" --head
+  elif [ -n "$http_fetch_output" ]
   then
     set -- "$@" --output "$http_fetch_output"
   fi
@@ -95,9 +145,24 @@ then
   fi
 
   set -- "$@" -- "$http_fetch_url"
+
+  if [ "$http_fetch_length" -eq "1" ]
+  then
+    http_fetch_response="$(command -- curl "$@" 2>&1)"
+    http_fetch_status="$?"
+    if [ "$http_fetch_status" -ne "0" ]
+    then
+      [ -z "$http_fetch_response" ] || printf -- '%s\n' "$http_fetch_response" >&2
+      exit "1"
+    fi
+    printf -- '%s\n' "$http_fetch_response" | http_fetch_content_length
+    [ "$?" -eq "0" ] && exit "0"
+    exit "1"
+  fi
+
   command -- curl "$@"
-  [ "$?" -eq 0 ] && exit 0
-  exit 1
+  [ "$?" -eq "0" ] && exit "0"
+  exit "1"
 fi
 
 http_fetch_wget_version="$(LC_ALL=C command -- wget --version 2>/dev/null)" || http_fetch_wget_version=
@@ -112,7 +177,10 @@ then
         --timeout="$http_fetch_timeout" \
         --max-redirect=20
 
-      if [ -n "$http_fetch_output" ]
+      if [ "$http_fetch_length" -eq "1" ]
+      then
+        set -- "$@" --spider --server-response
+      elif [ -n "$http_fetch_output" ]
       then
         set -- "$@" --output-document="$http_fetch_output"
       else
@@ -133,9 +201,24 @@ then
       fi
 
       set -- "$@" -- "$http_fetch_url"
+
+      if [ "$http_fetch_length" -eq "1" ]
+      then
+        http_fetch_response="$(command -- wget "$@" 2>&1)"
+        http_fetch_status="$?"
+        if [ "$http_fetch_status" -ne "0" ]
+        then
+          [ -z "$http_fetch_response" ] || printf -- '%s\n' "$http_fetch_response" >&2
+          exit "1"
+        fi
+        printf -- '%s\n' "$http_fetch_response" | http_fetch_content_length
+        [ "$?" -eq "0" ] && exit "0"
+        exit "1"
+      fi
+
       command -- wget "$@"
-      [ "$?" -eq 0 ] && exit 0
-      exit 1
+      [ "$?" -eq "0" ] && exit "0"
+      exit "1"
       ;;
   esac
 fi
