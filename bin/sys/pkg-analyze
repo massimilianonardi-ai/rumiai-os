@@ -266,7 +266,7 @@ EOF_RECORD
   pkg_analyze_probe_meta="$pkg_analyze_work/probe-$pkg_analyze_probe_id-report"
   command -p -- mkdir -- "$pkg_analyze_probe_state" "$pkg_analyze_probe_meta" || return 1
 
-  for pkg_analyze_probe_area in home xdg-config xdg-data xdg-cache xdg-state xdg-runtime tmp
+  for pkg_analyze_probe_area in home xdg-config xdg-data xdg-cache xdg-state tmp
   do
     command -p -- mkdir -- "$pkg_analyze_probe_state/$pkg_analyze_probe_area" || return 1
   done
@@ -277,6 +277,12 @@ EOF_RECORD
   then
     pkg_analyze_snapshot_paths "$pkg_analyze_original_home" "$pkg_analyze_probe_meta/home.before" || return 1
     pkg_analyze_probe_home_available=1
+  fi
+  pkg_analyze_probe_runtime_available=0
+  if [ -n "$pkg_analyze_original_xdg_runtime_dir" ] && [ -d "$pkg_analyze_original_xdg_runtime_dir" ] && [ ! -L "$pkg_analyze_original_xdg_runtime_dir" ]
+  then
+    pkg_analyze_snapshot_paths "$pkg_analyze_original_xdg_runtime_dir" "$pkg_analyze_probe_meta/xdg-runtime.before" || return 1
+    pkg_analyze_probe_runtime_available=1
   fi
   pkg_analyze_snapshot_paths "$pkg_analyze_probe_state" "$pkg_analyze_probe_meta/isolation.before" || return 1
 
@@ -297,11 +303,10 @@ EOF_RECORD
       XDG_DATA_HOME="$pkg_analyze_probe_state/xdg-data"
       XDG_CACHE_HOME="$pkg_analyze_probe_state/xdg-cache"
       XDG_STATE_HOME="$pkg_analyze_probe_state/xdg-state"
-      XDG_RUNTIME_DIR="$pkg_analyze_probe_state/xdg-runtime"
       TMPDIR="$pkg_analyze_probe_state/tmp"
       TMP="$pkg_analyze_probe_state/tmp"
       TEMP="$pkg_analyze_probe_state/tmp"
-      export HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME XDG_RUNTIME_DIR TMPDIR TMP TEMP
+      export HOME XDG_CONFIG_HOME XDG_DATA_HOME XDG_CACHE_HOME XDG_STATE_HOME TMPDIR TMP TEMP
 
       cd -- "$pkg_analyze_root" || exit 125
       if [ -t 3 ]
@@ -329,6 +334,10 @@ EOF_RECORD
   then
     pkg_analyze_snapshot_paths "$pkg_analyze_original_home" "$pkg_analyze_probe_meta/home.after" || return 1
   fi
+  if [ "$pkg_analyze_probe_runtime_available" -eq 1 ]
+  then
+    pkg_analyze_snapshot_paths "$pkg_analyze_original_xdg_runtime_dir" "$pkg_analyze_probe_meta/xdg-runtime.after" || return 1
+  fi
 
   pkg_analyze_print_delta '  package-root path delta:' "$pkg_analyze_probe_meta/root.before" "$pkg_analyze_probe_meta/root.after" || return 1
   pkg_analyze_print_delta '  redirected-environment path delta:' "$pkg_analyze_probe_meta/isolation.before" "$pkg_analyze_probe_meta/isolation.after" || return 1
@@ -338,6 +347,12 @@ EOF_RECORD
   else
     printf -- '  original-HOME path delta: unavailable\n'
   fi
+  if [ "$pkg_analyze_probe_runtime_available" -eq 1 ]
+  then
+    pkg_analyze_print_delta '  original-XDG_RUNTIME_DIR path delta:' "$pkg_analyze_probe_meta/xdg-runtime.before" "$pkg_analyze_probe_meta/xdg-runtime.after" || return 1
+  else
+    printf -- '  original-XDG_RUNTIME_DIR path delta: unavailable\n'
+  fi
 }
 
 pkg_analyze_probe_selected()
@@ -346,6 +361,7 @@ pkg_analyze_probe_selected()
 
   printf -- '\nWARNING: dynamic probing is diagnostic only; it is not a sandbox.\n' >&2
   printf -- 'Selected upstream programs run with your user permissions and may ignore redirected environment variables, access the network, or modify other files.\n' >&2
+  printf -- 'XDG_RUNTIME_DIR is preserved so graphical/session services remain reachable; its path changes are observed separately when available.\n' >&2
   pkg_analyze_prompt 'Run the selected candidates? [y/N] ' || fatal execution execution-failed operation pkg-analyze reason input-ended
   case "$pkg_analyze_reply" in
     y|Y|yes|YES|Yes) :;;
@@ -364,6 +380,7 @@ pkg_analyze_probe_selected()
 exec 3<&0
 pkg_analyze_make_work
 pkg_analyze_original_home=${HOME-}
+pkg_analyze_original_xdg_runtime_dir=${XDG_RUNTIME_DIR-}
 
 case "$#" in
   1)
