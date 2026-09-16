@@ -47,40 +47,41 @@ extract_tar_stream()
 extract_compressed_tar()
 {
   extract_compressor=$1
+  extract_7z_fallback=
 
   if [ "$extract_compressor" = bzip2 ] && ! extract_have bzip2
   then
-    extract_require tar
-    (
-      cd -- "$extract_destination" || exit 1
-      TAR_OPTIONS= BZIP2= BZIP= command -- tar -xf "$extract_artifact"
-    ) || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
-    return 0
+    extract_7z_fallback="$(extract_7z_command)" || fatal execution command-not-found operation extract command 7z format "$extract_format"
+  else
+    extract_require "$extract_compressor"
   fi
-
-  extract_require "$extract_compressor"
   extract_require tar
 
   extract_tmp="$extract_destination/.extract-$$.tar"
   [ ! -e "$extract_tmp" ] && [ ! -L "$extract_tmp" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
 
-  case "$extract_compressor" in
-    gzip)
-      GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_tmp"
-      ;;
-    bzip2)
-      BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_tmp"
-      ;;
-    xz)
-      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_tmp"
-      ;;
-    zstd)
-      command -- zstd -dcq < "$extract_artifact" > "$extract_tmp"
-      ;;
-    *)
-      fatal 2 execution invalid-arguments operation extract
-      ;;
-  esac
+  if [ -n "$extract_7z_fallback" ]
+  then
+    command -- "$extract_7z_fallback" x -so -- "$extract_artifact" > "$extract_tmp"
+  else
+    case "$extract_compressor" in
+      gzip)
+        GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_tmp"
+        ;;
+      bzip2)
+        BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_tmp"
+        ;;
+      xz)
+        XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_tmp"
+        ;;
+      zstd)
+        command -- zstd -dcq < "$extract_artifact" > "$extract_tmp"
+        ;;
+      *)
+        fatal 2 execution invalid-arguments operation extract
+        ;;
+    esac
+  fi
   extract_status=$?
   if [ "$extract_status" -ne 0 ]
   then
