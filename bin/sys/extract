@@ -47,11 +47,11 @@ extract_tar_stream()
 extract_compressed_tar()
 {
   extract_compressor=$1
-  extract_7z_fallback=
+  extract_bzip2_method=
 
-  if [ "$extract_compressor" = bzip2 ] && ! extract_have bzip2
+  if [ "$extract_compressor" = bzip2 ]
   then
-    extract_7z_fallback="$(extract_7z_command)" || fatal execution command-not-found operation extract command 7z format "$extract_format"
+    extract_bzip2_method="$(extract_bzip2_method)" || fatal execution command-not-found operation extract command python3 format "$extract_format"
   else
     extract_require "$extract_compressor"
   fi
@@ -60,28 +60,23 @@ extract_compressed_tar()
   extract_tmp="$extract_destination/.extract-$$.tar"
   [ ! -e "$extract_tmp" ] && [ ! -L "$extract_tmp" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
 
-  if [ -n "$extract_7z_fallback" ]
-  then
-    command -- "$extract_7z_fallback" x -so -- "$extract_artifact" > "$extract_tmp"
-  else
-    case "$extract_compressor" in
-      gzip)
-        GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_tmp"
-        ;;
-      bzip2)
-        BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_tmp"
-        ;;
-      xz)
-        XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_tmp"
-        ;;
-      zstd)
-        command -- zstd -dcq < "$extract_artifact" > "$extract_tmp"
-        ;;
-      *)
-        fatal 2 execution invalid-arguments operation extract
-        ;;
-    esac
-  fi
+  case "$extract_compressor" in
+    gzip)
+      GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_tmp"
+      ;;
+    bzip2)
+      extract_bzip2_decompress "$extract_bzip2_method" > "$extract_tmp"
+      ;;
+    xz)
+      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_tmp"
+      ;;
+    zstd)
+      command -- zstd -dcq < "$extract_artifact" > "$extract_tmp"
+      ;;
+    *)
+      fatal 2 execution invalid-arguments operation extract
+      ;;
+  esac
   extract_status=$?
   if [ "$extract_status" -ne 0 ]
   then
@@ -110,7 +105,14 @@ extract_compressed_tar()
 extract_stream()
 {
   extract_compressor=$1
-  extract_require "$extract_compressor"
+  extract_bzip2_method=
+
+  if [ "$extract_compressor" = bzip2 ]
+  then
+    extract_bzip2_method="$(extract_bzip2_method)" || fatal execution command-not-found operation extract command python3 format "$extract_format"
+  else
+    extract_require "$extract_compressor"
+  fi
 
   extract_stream_base=${extract_artifact##*/}
   extract_stream_name="$(extract_stream_target "$extract_stream_base" "$extract_format")" || fatal execution execution-failed operation extract reason output-name-invalid format "$extract_format"
@@ -122,7 +124,7 @@ extract_stream()
       GZIP= command -- gzip -dc < "$extract_artifact" > "$extract_stream_output"
       ;;
     bzip2)
-      BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact" > "$extract_stream_output"
+      extract_bzip2_decompress "$extract_bzip2_method" > "$extract_stream_output"
       ;;
     xz)
       XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract_artifact" > "$extract_stream_output"
@@ -159,6 +161,45 @@ extract_7z_command()
     fi
   done
   return 1
+}
+
+extract_bzip2_method()
+{
+  if extract_have bzip2
+  then
+    printf -- '%s\n' bzip2
+    return 0
+  fi
+
+  extract_7z_command && return 0
+
+  if extract_have python3
+  then
+    printf -- '%s\n' python3
+    return 0
+  fi
+
+  return 1
+}
+
+extract_bzip2_decompress()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  case "$1" in
+    bzip2)
+      BZIP2= BZIP= command -- bzip2 -dc < "$extract_artifact"
+      ;;
+    7zz|7z|7za)
+      command -- "$1" x -so -- "$extract_artifact"
+      ;;
+    python3)
+      command -- python3 -c 'import bz2, shutil, sys; source=bz2.open(sys.argv[1], "rb"); shutil.copyfileobj(source, sys.stdout.buffer); source.close()' "$extract_artifact"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
 }
 
 extract_7z()
