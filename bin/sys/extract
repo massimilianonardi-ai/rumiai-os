@@ -47,6 +47,17 @@ extract_tar_stream()
 extract_compressed_tar()
 {
   extract_compressor=$1
+
+  if [ "$extract_compressor" = bzip2 ] && ! extract_have bzip2
+  then
+    extract_require tar
+    (
+      cd -- "$extract_destination" || exit 1
+      TAR_OPTIONS= BZIP2= BZIP= command -- tar -xf "$extract_artifact"
+    ) || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+    return 0
+  fi
+
   extract_require "$extract_compressor"
   extract_require tar
 
