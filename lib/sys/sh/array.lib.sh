@@ -87,9 +87,6 @@
 #   failures. Mutations are not transactional against such external interference.
 
 
-. arg.lib.sh
-
-
 _array_name_valid()
 {
   case "$1" in
