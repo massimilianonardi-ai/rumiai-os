@@ -1,0 +1,92 @@
+NAME
+    pkg - manage packages in the m package subsystem
+
+SYNOPSIS
+    pkg install <package-spec>...
+    pkg uninstall <package-spec>...
+    pkg versions <package-class>
+    pkg default [-u] [--] <package-spec>
+
+DESCRIPTION
+    pkg is the public package command of the technical m layer. Package catalog
+    data is obtained from the current pkg-catalog source; installed package content
+    is managed beneath $m_PKG_DIR.
+
+    Package operations use the real package pipeline for catalog/repository
+    resolution, artifact integrity, download, extraction, integration, defaults,
+    and launch/state integration as applicable.
+
+PACKAGE OPERANDS
+    Package operands use the current forms:
+
+        <package>
+        <package>@<version>
+        <package>!<osarch>
+        <package>@<version>!<osarch>
+
+    A version or osarch suffix is optional where the selected subcommand permits
+    it. When installation omits a version, pkg resolves the applicable version from
+    the current catalog for the requested package/platform class.
+
+COMMANDS
+    install <package-spec>...
+        Install one or more requested packages through the current catalog and
+        package integration pipeline.
+
+    uninstall <package-spec>...
+        Remove one or more installed package versions. When a version is omitted,
+        the current/default version is selected when available; a single installed
+        version may also be resolved directly.
+
+    versions <package-class>
+        List installed concrete package identities for one package/platform class.
+        A version suffix is not accepted for this query.
+
+    default <package-spec>
+        With an explicit version, select that installed version as the current
+        default for the package/platform class. Without a version, print the
+        current concrete default identity.
+
+    default -u [--] <package-class>
+        Clear the current default binding for the package/platform class. A version
+        suffix is not accepted when -u is used.
+
+STATE
+    Mutable package state is resolved through state-path rather than reconstructed
+    by callers. Package HOME and configuration used at launch are user-scoped state.
+
+    RumiAI-managed package configuration uses the reserved .m subnamespace inside
+    the package conf area.
+
+FILES
+    $m_PKG_DIR
+        Managed package store root.
+
+EXIT STATUS
+    0   The requested operation succeeded.
+    1   The requested package operation could not be completed or the requested
+        installed class/default could not be resolved where required.
+    2   The command, subcommand, option, or package operand is invalid.
+
+    Individual package execution launched after integration has its own exit status;
+    that is not the exit status of this pkg management command.
+
+EXAMPLES
+    Install the catalog-selected version of a package:
+
+        pkg install nodejs
+
+    List installed versions for the current platform class:
+
+        pkg versions nodejs
+
+    Query the current default concrete identity:
+
+        pkg default nodejs
+
+    Clear the default binding:
+
+        pkg default -u nodejs
+
+SEE ALSO
+    state-path
