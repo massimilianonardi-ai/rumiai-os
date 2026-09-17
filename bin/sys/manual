@@ -33,6 +33,39 @@ manual_discover()
   } | LC_ALL=C command -p -- sort
 }
 
+manual_search()
+{
+  [ "$#" -eq 1 ] || return 1
+  manual_search_topic=$1
+
+  [ -d "$m_RES_DIR" ] && [ ! -L "$m_RES_DIR" ] || return 1
+
+  {
+    for manual_owner_dir in "$m_RES_DIR"/*
+    do
+      [ -d "$manual_owner_dir" ] && [ ! -L "$manual_owner_dir" ] || continue
+      manual_owner=${manual_owner_dir##*/}
+      manual_name_valid "$manual_owner" || continue
+
+      manual_dir="$manual_owner_dir/manual"
+      [ -d "$manual_dir" ] && [ ! -L "$manual_dir" ] || continue
+
+      for manual_topic_path in "$manual_dir"/*
+      do
+        [ -f "$manual_topic_path" ] && [ ! -L "$manual_topic_path" ] || continue
+        manual_candidate_topic=${manual_topic_path##*/}
+        manual_name_valid "$manual_candidate_topic" || continue
+
+        case "$manual_candidate_topic" in
+          *"$manual_search_topic"*)
+            printf -- '%s %s\n' "$manual_owner" "$manual_candidate_topic" || return 1
+            ;;
+        esac
+      done
+    done
+  } | LC_ALL=C command -p -- sort
+}
+
 manual_ambiguity_print()
 {
   [ "$#" -eq 1 ] || return 1
@@ -103,6 +136,16 @@ then
 
   case "$manual_match_count" in
     0)
+      manual_search_output="$(manual_search "$manual_topic")" || \
+        fatal 4 execution execution-failed operation manual reason search-failed topic "$manual_topic"
+
+      if [ -n "$manual_search_output" ]
+      then
+        printf -- '%s\n' "$manual_search_output" || \
+          fatal 4 execution execution-failed operation manual reason search-output-failed topic "$manual_topic"
+        exit 0
+      fi
+
       fatal 2 execution execution-failed operation manual reason topic-not-found topic "$manual_topic"
       ;;
     1)
