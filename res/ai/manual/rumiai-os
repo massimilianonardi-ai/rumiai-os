@@ -1,0 +1,23 @@
+NAME
+    rumiai-os - activate the branded RumiAI shell environment
+
+SYNOPSIS
+    rumiai-os [<shell-argument> ...]
+
+DESCRIPTION
+    rumiai-os is a branded root entrypoint. In the current revision it resolves
+    to the shared rumiai-os-sh implementation.
+
+    The entrypoint bootstraps through m, prepends the branded ai platform and
+    generic command directories to PATH, and starts the managed shell facility.
+    Arguments are forwarded to that shell.
+
+    This current shell-oriented entrypoint does not define the eventual RumiAI
+    graphical interface architecture.
+
+EXIT STATUS
+    On success the entrypoint transfers control to the managed shell.
+    Non-zero status indicates bootstrap, activation or shell startup failure.
+
+SEE ALSO
+    rumiai-os-sh

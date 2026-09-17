@@ -1,0 +1,22 @@
+NAME
+    rumiai-os-sh - bootstrap the branded RumiAI shell environment
+
+SYNOPSIS
+    rumiai-os-sh [<shell-argument> ...]
+
+DESCRIPTION
+    rumiai-os-sh is the current shell-oriented branded entrypoint.
+
+    When invoked outside an initialized m runtime it resolves its installation
+    root and re-enters through the technical m bootstrap. Inside m it prepends
+    the branded ai-osarch and ai command directories to PATH and starts the
+    managed shell facility.
+
+    Arguments are forwarded to the selected shell.
+
+EXIT STATUS
+    On success the entrypoint transfers control to the managed shell.
+    Non-zero status indicates root/bootstrap, activation or shell startup failure.
+
+SEE ALSO
+    rumiai-os

@@ -1,0 +1,32 @@
+NAME
+    pkg-analyze - inspect an unpacked or packaged upstream software tree
+
+SYNOPSIS
+    pkg-analyze <directory>
+    pkg-analyze <format> <artifact>
+
+DESCRIPTION
+    pkg-analyze inspects an existing directory or extracts an artifact into a
+    temporary staging tree, reports candidate launch files and interactively
+    allows candidates to be selected for optional probing.
+
+    The dynamic probe is diagnostic only and is not a sandbox. Selected upstream
+    programs run with the caller's user permissions. HOME and common XDG/state
+    and temporary paths are redirected for the probe, while XDG_RUNTIME_DIR is
+    preserved when present. The report shows observed pathname deltas.
+
+    Temporary analysis state is created under the user sys pkg-analyze state
+    area and is cleaned up on ordinary exit.
+
+OPERANDS
+    <directory>
+        Existing directory to inspect directly.
+    <format> <artifact>
+        Artifact format and artifact consumed through the package extraction
+        facility before analysis.
+
+EXIT STATUS
+    0   Analysis completed.
+    2   Invalid invocation.
+    Other non-zero status indicates input, extraction, scan, interaction or probe
+        failure.

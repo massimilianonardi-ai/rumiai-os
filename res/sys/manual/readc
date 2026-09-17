@@ -1,0 +1,21 @@
+NAME
+    readc - read one character or terminal key from the controlling terminal
+
+SYNOPSIS
+    readc
+
+DESCRIPTION
+    readc is a standalone POSIX-shell terminal reader. It reads one key from
+    /dev/tty, using terminfo for terminal key sequences, and restores the
+    terminal state before returning.
+
+    Named keys such as arrows, Home, End, Insert, Delete, PageUp/PageDown,
+    function keys, Enter, Backspace, Tab and Escape are written as symbolic
+    names. Printable ASCII and valid UTF-8 characters are written directly.
+
+    The current implementation defines no command-line options.
+
+EXIT STATUS
+    0   A supported key or character was read.
+    1   Terminal, terminfo or I/O/setup failure.
+    2   Unsupported, invalid or incomplete input.

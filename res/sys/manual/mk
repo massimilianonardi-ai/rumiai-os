@@ -1,0 +1,29 @@
+NAME
+    mk - execute the current m development materialization capability
+
+SYNOPSIS
+    mk materialize <source-root> <definition-root> <useful-root>
+
+DESCRIPTION
+    mk is the technical development-lifecycle command. The currently implemented
+    public operation is materialize.
+
+    materialize transforms an existing source tree according to an existing
+    declarative definition root and publishes the result at a requested useful
+    root that does not already exist.
+
+    The current definition requires a scalar type file. The currently supported
+    materialization type is copy.
+
+OPERANDS
+    <source-root>
+        Existing source directory.
+    <definition-root>
+        Existing declarative materialization definition directory.
+    <useful-root>
+        Destination pathname whose parent already exists and whose leaf does not.
+
+EXIT STATUS
+    0   Success.
+    1   Operational, filesystem, definition or materialization failure.
+    2   Invalid CLI invocation.

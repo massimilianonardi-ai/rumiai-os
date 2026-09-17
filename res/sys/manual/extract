@@ -1,0 +1,47 @@
+NAME
+    extract - extract an archive or decompress a supported artifact
+
+SYNOPSIS
+    extract <format> <artifact> <destination>
+
+DESCRIPTION
+    extract reads one supported artifact and materializes its contents under an
+    existing destination directory.
+
+    Supported archive formats are:
+        tar
+        tar.gz  tgz
+        tar.bz2 tar.bzip2 tbz tbz2
+        tar.xz  txz
+        tar.zst tzst
+        zip jar war
+        7z 7zip
+        dmg
+        deb
+
+    Supported single-stream compression formats are:
+        gzip gz
+        bzip bzip2 bz2
+        xz
+        zstd zst
+
+    A single-stream format creates one decompressed file in the destination,
+    deriving its name from the artifact basename and compression suffix. The
+    output pathname must not already exist.
+
+    Backend utilities are selected according to the requested format and host
+    capabilities. Missing required backends cause failure.
+
+OPERANDS
+    <format>
+        Explicit artifact format.
+    <artifact>
+        Existing readable regular file.
+    <destination>
+        Existing real directory receiving extracted material.
+
+EXIT STATUS
+    0   Success.
+    2   Invalid invocation or unsupported format.
+    Other non-zero status indicates artifact, destination, backend or extraction
+        failure.

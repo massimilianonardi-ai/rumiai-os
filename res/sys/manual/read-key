@@ -1,0 +1,22 @@
+NAME
+    read-key - read and normalize one key from the controlling terminal
+
+SYNOPSIS
+    read-key
+
+DESCRIPTION
+    read-key is a standalone POSIX-shell terminal utility. It reads one key from
+    /dev/tty in non-canonical no-echo mode and restores terminal state before
+    returning.
+
+    Recognized terminal keys are written as symbolic names, including arrows,
+    Home, End, Insert, Delete, PageUp/PageDown, function keys f1 through f20,
+    Enter, Backspace, Tab, Backtab, Escape and NUL.
+
+    Printable ASCII and one valid UTF-8 character are returned as themselves.
+    Terminal-specific key sequences are obtained from terminfo when available.
+
+EXIT STATUS
+    0   A supported key or character was read.
+    1   Controlling-terminal, terminfo or I/O/setup failure.
+    2   Invalid invocation or unsupported/invalid/incomplete input.

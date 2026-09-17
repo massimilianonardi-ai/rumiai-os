@@ -1,0 +1,34 @@
+NAME
+    menu-ext-adv-fs - browse a filesystem tree with configurable action keys
+
+SYNOPSIS
+    menu-ext-adv-fs [-H <header>] [-F <footer>] [-B <bottom-footer>]
+                    -K <key> [-K <key> ...] [-n] [-m] -- <path>
+
+DESCRIPTION
+    menu-ext-adv-fs presents an interactive directory browser built on
+    menu-ext-adv.
+
+    The starting path is canonicalized to an accessible directory. Enter moves
+    into the selected directory. A configured action key returns:
+        <key>@:=<absolute-selected-path>
+
+    Escape cancels. Navigation keys and Enter are reserved. At least one custom
+    -K key is required.
+
+OPTIONS
+    -H <header>         Header displayed above the current path.
+    -F <footer>         Footer after the visible entries.
+    -B <bottom-footer>  Footer anchored at the bottom.
+    -K <key>            Configure an action key; may be repeated.
+    -n                  Hide hidden directory entries.
+    -m                  Mix directories and other entries in one lexical list.
+    -h                  Write command usage.
+
+EXIT STATUS
+    0   A configured action key selected a path.
+    1   The browser was cancelled.
+    2   Invalid invocation, inaccessible path or dependency/setup failure.
+
+SEE ALSO
+    menu-ext-adv

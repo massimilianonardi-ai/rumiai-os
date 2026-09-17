@@ -1,0 +1,36 @@
+NAME
+    menu-ext-adv - interactive terminal menu with configurable action keys
+
+SYNOPSIS
+    menu-ext-adv [-H <header>] [-F <footer>] [-B <bottom-footer>]
+                 -K <key> [-K <key> ...] -- <item> ...
+
+DESCRIPTION
+    menu-ext-adv renders its UI on /dev/tty and reserves standard output for
+    the result.
+
+    Items use:
+        <text>
+        <value>@:=<text>
+
+    At least one -K action key is required. Pressing a configured action key
+    returns:
+        <key>@:=<selected-value>
+
+    Escape cancels. Arrow Up/Down, PageUp/PageDown, Home and End are reserved
+    navigation keys.
+
+    Configurable keys include one printable ASCII character, space, tab, enter,
+    backspace, delete, insert, arrow_left, arrow_right and f1 through f20.
+
+OPTIONS
+    -H <header>         Header at the top of the terminal.
+    -F <footer>         Footer after the last visible item.
+    -B <bottom-footer>  Footer anchored at the bottom.
+    -K <key>            Configure an action key; may be repeated.
+    -h                  Write command usage.
+
+EXIT STATUS
+    0   A configured action key selected the current item.
+    1   The menu was cancelled.
+    2   Invalid invocation or terminal/setup failure.

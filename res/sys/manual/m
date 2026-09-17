@@ -1,0 +1,30 @@
+NAME
+    m - bootstrap the technical m runtime and dispatch integrated commands
+
+SYNOPSIS
+    m
+    m <command> [argument ...]
+
+DESCRIPTION
+    m resolves the RumiAI OS technical root, initializes the relocatable m
+    runtime environment, exposes technical command paths, loads the core shell
+    facilities and establishes the current state/resource roots.
+
+    With no command operand, m starts the managed shell through the shell
+    facility.
+
+    With a command operand, m resolves that command through the active command
+    path, exports its resolved pathname as m_COMMAND_BIN, removes the command
+    operand from the argument vector and executes the command body inside the
+    initialized m runtime.
+
+    The bootstrap refuses to dispatch itself recursively as a command.
+
+EXIT STATUS
+    With a dispatched command, m returns that command's status.
+    Bootstrap, root-resolution or command-resolution failures return non-zero.
+
+SEE ALSO
+    shell
+    rumiai-os
+    rumiai-os-sh
