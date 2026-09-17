@@ -19,35 +19,45 @@ DESCRIPTION
     are always owner-qualified in discovery output, even when a topic name is
     globally unique.
 
-    With one topic operand, manual searches all materialized global owners. A
-    unique match is presented, no match fails, and multiple matches fail as
-    ambiguous while listing the owner-qualified invocations that resolve the
-    ambiguity.
+    With one topic operand, manual first searches all materialized global owners
+    for an exact topic-name match. One exact match is presented; multiple exact
+    matches fail as ambiguous while listing the owner-qualified invocations that
+    resolve the ambiguity.
+
+    If no exact topic exists, manual searches topic names for the operand as a
+    literal substring, equivalent to *<topic>*. When one or more substring matches
+    exist, manual writes their owner-qualified identities to standard output,
+    sorted lexically by owner and then topic. This result list is discovery output
+    and is not sent through the pager. If the substring search is also empty, the
+    request fails as not found.
 
     With owner and topic operands, manual resolves only that exact owner-local
-    topic and does not fall back to another owner.
+    topic and does not perform substring fallback or fall back to another owner.
 
 OPTIONS
     --no-pager
-        Write the selected topic directly to standard output instead of invoking
-        the normal pager. This option is valid only when a topic is requested.
+        Write an exactly selected topic directly to standard output instead of
+        invoking the normal pager. This option is valid only when a topic is
+        requested. Substring-search result lists are always written directly.
 
 PRESENTATION
-    When --no-pager is absent, manual delegates presentation to the technical
-    pager command. pager owns terminal detection and host-specific viewer
-    selection.
+    When --no-pager is absent and an exact topic is selected, manual delegates
+    presentation to the technical pager command. pager owns terminal detection
+    and host-specific viewer selection.
 
-    --no-pager bypasses pager and writes the topic directly to standard output.
+    --no-pager bypasses pager and writes an exactly selected topic directly to
+    standard output. Discovery and substring-search result lists never invoke
+    pager.
 
 FILES
     res/<owner>/manual/<topic>
         Owner-qualified global operational manual topic.
 
 EXIT STATUS
-    0   Success.
+    0   Success, including a non-empty substring-search result list.
     1   Invalid invocation or invalid owner/topic identifier.
-    2   Requested topic not found.
-    3   Unqualified topic is ambiguous.
+    2   Requested topic not found and no substring matches found.
+    3   Exact unqualified topic is ambiguous.
     4   Execution or presentation failure, including pager failure.
 
 EXAMPLES
@@ -55,11 +65,15 @@ EXAMPLES
 
         manual
 
-    Present a globally unique topic:
+    Present a globally unique exact topic:
 
         manual state-path
 
-    Resolve an ambiguous topic explicitly:
+    Search topic names when no exact topic exists:
+
+        manual state
+
+    Resolve an ambiguous exact topic explicitly:
 
         manual ai pkg
         manual sys pkg
