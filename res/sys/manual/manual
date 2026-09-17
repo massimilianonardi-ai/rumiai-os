@@ -1,0 +1,71 @@
+NAME
+    manual - discover and present RumiAI operational manual topics
+
+SYNOPSIS
+    manual
+    manual [--no-pager] <topic>
+    manual [--no-pager] <owner> <topic>
+
+DESCRIPTION
+    manual accesses revision-coupled operational documentation distributed with
+    the current RumiAI OS product revision.
+
+    With no operands, manual discovers all materialized global manual topics and
+    writes one owner-qualified identity per line:
+
+        <owner> <topic>
+
+    Discovery output is sorted lexically by owner and then topic. Topic identities
+    are always owner-qualified in discovery output, even when a topic name is
+    globally unique.
+
+    With one topic operand, manual searches all materialized global owners. A
+    unique match is presented, no match fails, and multiple matches fail as
+    ambiguous while listing the owner-qualified invocations that resolve the
+    ambiguity.
+
+    With owner and topic operands, manual resolves only that exact owner-local
+    topic and does not fall back to another owner.
+
+OPTIONS
+    --no-pager
+        Write the selected topic directly to standard output instead of invoking
+        the normal pager. This option is valid only when a topic is requested.
+
+PRESENTATION
+    Normal topic presentation delegates to the POSIX more utility. When standard
+    output is not a terminal, POSIX more copies the topic to standard output.
+
+    --no-pager bypasses more and writes the topic directly to standard output.
+
+FILES
+    res/<owner>/manual/<topic>
+        Owner-qualified global operational manual topic.
+
+EXIT STATUS
+    0   Success.
+    1   Invalid invocation or invalid owner/topic identifier.
+    2   Requested topic not found.
+    3   Unqualified topic is ambiguous.
+    4   Execution or presentation failure, including pager failure.
+
+EXAMPLES
+    Discover all available topics:
+
+        manual
+
+    Present a globally unique topic:
+
+        manual state-path
+
+    Resolve an ambiguous topic explicitly:
+
+        manual sys pkg
+        manual ai pkg
+
+    Write a selected topic directly without paging:
+
+        manual --no-pager sys pkg
+
+SEE ALSO
+    more
