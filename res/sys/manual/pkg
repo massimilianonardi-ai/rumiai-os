@@ -31,7 +31,9 @@ PACKAGE OPERANDS
 COMMANDS
     install <package-spec>...
         Install one or more requested packages through the current catalog and
-        package integration pipeline.
+        package integration pipeline. After all package operands pass syntax
+        validation, materialize $m_PKG_DIR on demand when it does not yet exist.
+        Invalid package operands do not create the package store.
 
     uninstall <package-spec>...
         Remove one or more installed package versions. When a version is omitted,
@@ -60,7 +62,8 @@ STATE
 
 FILES
     $m_PKG_DIR
-        Managed package store root.
+        Managed package store root. pkg install creates this directory on demand
+        after package operands have passed syntax validation.
 
 EXIT STATUS
     0   The requested operation succeeded.

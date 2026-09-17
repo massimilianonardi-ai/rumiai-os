@@ -509,8 +509,11 @@ pkg_install()
     _pkg_install_operand_parse "$pkg_install_operand" || return 2
   done
 
-  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
   umask 077
+  command -p -- mkdir -p -- "$m_PKG_DIR" || return 1
+  [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
+
+  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
   command -p -- mkdir -p -- "$pkg_install_work_parent" || return 1
   [ -d "$pkg_install_work_parent" ] && [ ! -L "$pkg_install_work_parent" ] || return 1
   pkg_install_work="$pkg_install_work_parent/install-$$"
