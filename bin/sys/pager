@@ -20,14 +20,10 @@ fi
 
 case "$m_OSARCH_OS" in
   linux)
-    if command -v -- less >/dev/null 2>&1
-    then
-      LESS= LESSOPEN= LESSCLOSE= command -- less "$pager_file" || \
-        fatal 1 execution execution-failed operation pager reason backend-failed backend less path "$pager_source"
-    else
-      command -p more "$pager_file" || \
-        fatal 1 execution execution-failed operation pager reason backend-failed backend more path "$pager_source"
-    fi
+    command -v -- less >/dev/null 2>&1 || \
+      fatal 1 execution execution-failed operation pager reason backend-unavailable backend less path "$pager_source"
+    LESS= LESSOPEN= LESSCLOSE= command -- less "$pager_file" || \
+      fatal 1 execution execution-failed operation pager reason backend-failed backend less path "$pager_source"
     ;;
   *)
     command -p more "$pager_file" || \
