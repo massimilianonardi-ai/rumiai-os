@@ -13,28 +13,111 @@ jobs:
       - name: Checkout exact rumiai-os revision
         uses: actions/checkout@v4
         with:
-          ref: b18ae4439519bfe4081035a7d6d0a29423a81709
+          ref: 14e413342261b23df840f40b355166c4d55f1b41
           path: source
           fetch-depth: 1
+          persist-credentials: false
 
-      - name: Verify revision and create archives
+      - name: Checkout exact pkg-catalog revision
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/pkg-catalog
+          ref: dd96a82e9022fb7c6f926d2b4b81f4718e824bb6
+          path: catalog
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Verify revisions and create repository archives
         shell: bash
         run: |
           set -euo pipefail
-          test "$(git -C source rev-parse HEAD)" = "b18ae4439519bfe4081035a7d6d0a29423a81709"
-          git -C source archive --format=zip --output="$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip" HEAD
-          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.tar" HEAD
-          sha256sum "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip" > "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip.sha256"
-          sha256sum "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.tar" > "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.tar.sha256"
 
-      - name: Upload archives
+          test "$(git -C source rev-parse HEAD)" = "14e413342261b23df840f40b355166c4d55f1b41"
+          git -C source archive --format=zip --output="$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip" HEAD
+          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar" HEAD
+
+          test "$(git -C catalog rev-parse HEAD)" = "dd96a82e9022fb7c6f926d2b4b81f4718e824bb6"
+          git -C catalog switch -C main
+          git -C catalog remote set-url origin https://github.com/massimilianonardi-ai/pkg-catalog.git
+          test "$(git -C catalog symbolic-ref --quiet --short HEAD)" = main
+          test "$(git -C catalog remote get-url origin)" = https://github.com/massimilianonardi-ai/pkg-catalog.git
+          test -z "$(git -C catalog status --porcelain=v1 --untracked-files=all)"
+          tar -C catalog -cf "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar" .
+
+          sha256sum "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip" > "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip.sha256"
+          sha256sum "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar" > "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar.sha256"
+          sha256sum "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar" > "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar.sha256"
+
+      - name: Capture real jq upstream release and artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p upstream
+          curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            -H 'Accept: application/vnd.github+json' \
+            -H 'X-GitHub-Api-Version: 2026-03-10' \
+            --output upstream/release.json \
+            -- https://api.github.com/repos/jqlang/jq/releases/tags/jq-1.8.2
+
+          python3 - <<'PY'
+          import json
+          from pathlib import Path
+
+          data = json.loads(Path('upstream/release.json').read_text())
+          assert data['tag_name'] == 'jq-1.8.2'
+          assert data['draft'] is False
+          assert data['prerelease'] is False
+          assets = [a for a in data['assets'] if a['name'] == 'jq-linux-amd64']
+          assert len(assets) == 1
+          asset = assets[0]
+          assert asset['state'] == 'uploaded'
+          assert isinstance(asset['size'], int) and asset['size'] > 0
+          assert isinstance(asset['digest'], str) and asset['digest'].startswith('sha256:')
+          assert isinstance(asset['browser_download_url'], str) and asset['browser_download_url'].startswith('https://')
+          Path('upstream/asset.url').write_text(asset['browser_download_url'] + '\n')
+          Path('upstream/asset.size').write_text(str(asset['size']) + '\n')
+          Path('upstream/asset.sha256').write_text(asset['digest'][len('sha256:'):] + '\n')
+          PY
+
+          asset_url=$(cat upstream/asset.url)
+          curl --fail --silent --show-error --location \
+            --proto '=https' --tlsv1.2 \
+            --output upstream/jq-linux-amd64 \
+            -- "$asset_url"
+
+          test "$(wc -c < upstream/jq-linux-amd64 | tr -d ' ')" = "$(cat upstream/asset.size)"
+          printf '%s  %s\n' "$(cat upstream/asset.sha256)" upstream/jq-linux-amd64 | sha256sum -c -
+          sha256sum upstream/release.json > upstream/release.json.sha256
+
+          {
+            printf 'rumiai-os=%s\n' 14e413342261b23df840f40b355166c4d55f1b41
+            printf 'pkg-catalog=%s\n' dd96a82e9022fb7c6f926d2b4b81f4718e824bb6
+            printf 'package=%s\n' jq
+            printf 'version=%s\n' jq-1.8.2
+            printf 'asset=%s\n' jq-linux-amd64
+            printf 'asset-url=%s\n' "$(cat upstream/asset.url)"
+            printf 'asset-size=%s\n' "$(cat upstream/asset.size)"
+            printf 'asset-sha256=%s\n' "$(cat upstream/asset.sha256)"
+          } > upstream/manifest.txt
+
+      - name: Upload VM bundle
         uses: actions/upload-artifact@v4
         with:
-          name: rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709
+          name: rumiai-pkg-install-vm-bundle-14e413-dd96
           path: |
-            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip
-            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip.sha256
-            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.tar
-            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.tar.sha256
+            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip
+            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip.sha256
+            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar
+            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar.sha256
+            pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar
+            pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar.sha256
+            upstream/release.json
+            upstream/release.json.sha256
+            upstream/asset.url
+            upstream/asset.size
+            upstream/asset.sha256
+            upstream/jq-linux-amd64
+            upstream/manifest.txt
           if-no-files-found: error
           compression-level: 0
