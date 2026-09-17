@@ -6,118 +6,128 @@ on:
     branches:
       - tmp/pkg-install-vm-transfer-20260917
 
+permissions:
+  contents: write
+
 jobs:
-  package:
+  apply:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout exact rumiai-os revision
+      - name: Checkout exact current main
         uses: actions/checkout@v4
         with:
-          ref: 14e413342261b23df840f40b355166c4d55f1b41
-          path: source
-          fetch-depth: 1
-          persist-credentials: false
+          ref: main
+          fetch-depth: 0
 
-      - name: Checkout exact pkg-catalog revision
-        uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/pkg-catalog
-          ref: dd96a82e9022fb7c6f926d2b4b81f4718e824bb6
-          path: catalog
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Verify revisions and create repository archives
+      - name: Patch and fast-forward main
         shell: bash
         run: |
           set -euo pipefail
-
-          test "$(git -C source rev-parse HEAD)" = "14e413342261b23df840f40b355166c4d55f1b41"
-          git -C source archive --format=zip --output="$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip" HEAD
-          git -C source archive --format=tar --output="$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar" HEAD
-
-          test "$(git -C catalog rev-parse HEAD)" = "dd96a82e9022fb7c6f926d2b4b81f4718e824bb6"
-          git -C catalog switch -C main
-          git -C catalog remote set-url origin https://github.com/massimilianonardi-ai/pkg-catalog.git
-          test "$(git -C catalog symbolic-ref --quiet --short HEAD)" = main
-          test "$(git -C catalog remote get-url origin)" = https://github.com/massimilianonardi-ai/pkg-catalog.git
-          test -z "$(git -C catalog status --porcelain=v1 --untracked-files=all)"
-          tar -C catalog -cf "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar" .
-
-          sha256sum "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip" > "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip.sha256"
-          sha256sum "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar" > "$GITHUB_WORKSPACE/rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar.sha256"
-          sha256sum "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar" > "$GITHUB_WORKSPACE/pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar.sha256"
-
-      - name: Capture real jq upstream release and artifact
-        shell: bash
-        run: |
-          set -euo pipefail
-          mkdir -p upstream
-          curl --fail --silent --show-error --location \
-            --proto '=https' --tlsv1.2 \
-            -H 'Accept: application/vnd.github+json' \
-            -H 'X-GitHub-Api-Version: 2026-03-10' \
-            --output upstream/release.json \
-            -- https://api.github.com/repos/jqlang/jq/releases/tags/jq-1.8.2
+          expected=14e413342261b23df840f40b355166c4d55f1b41
+          git fetch --quiet origin main
+          test "$(git rev-parse HEAD)" = "$expected"
+          test "$(git rev-parse origin/main)" = "$expected"
 
           python3 - <<'PY'
-          import json
           from pathlib import Path
 
-          data = json.loads(Path('upstream/release.json').read_text())
-          assert data['tag_name'] == 'jq-1.8.2'
-          assert data['draft'] is False
-          assert data['prerelease'] is False
-          assets = [a for a in data['assets'] if a['name'] == 'jq-linux-amd64']
-          assert len(assets) == 1
-          asset = assets[0]
-          assert asset['state'] == 'uploaded'
-          assert isinstance(asset['size'], int) and asset['size'] > 0
-          assert isinstance(asset['digest'], str) and asset['digest'].startswith('sha256:')
-          assert isinstance(asset['browser_download_url'], str) and asset['browser_download_url'].startswith('https://')
-          Path('upstream/asset.url').write_text(asset['browser_download_url'] + '\n')
-          Path('upstream/asset.size').write_text(str(asset['size']) + '\n')
-          Path('upstream/asset.sha256').write_text(asset['digest'][len('sha256:'):] + '\n')
+          path = Path('lib/sys/sh/pkg-install.lib.sh')
+          text = path.read_text()
+          old = '''  for pkg_install_operand
+          do
+            _pkg_install_operand_parse "$pkg_install_operand" || return 2
+          done
+
+          pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
+          umask 077
+'''
+          new = '''  for pkg_install_operand
+          do
+            _pkg_install_operand_parse "$pkg_install_operand" || return 2
+          done
+
+          umask 077
+          command -p -- mkdir -p -- "$m_PKG_DIR" || return 1
+          [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
+
+          pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
+'''
+          if text.count(old) != 1:
+              raise SystemExit('unexpected pkg_install source shape')
+          path.write_text(text.replace(old, new, 1))
+
+          path = Path('res/sys/manual/pkg')
+          text = path.read_text()
+          old = '''    install <package-spec>...
+        Install one or more requested packages through the current catalog and
+        package integration pipeline.
+'''
+          new = '''    install <package-spec>...
+        Install one or more requested packages through the current catalog and
+        package integration pipeline. After all package operands pass syntax
+        validation, materialize $m_PKG_DIR on demand when it does not yet exist.
+        Invalid package operands do not create the package store.
+'''
+          if text.count(old) != 1:
+              raise SystemExit('unexpected pkg manual shape')
+          text = text.replace(old, new, 1)
+          old = '''    $m_PKG_DIR
+        Managed package store root.
+'''
+          new = '''    $m_PKG_DIR
+        Managed package store root. pkg install creates this directory on demand
+        after package operands have passed syntax validation.
+'''
+          if text.count(old) != 1:
+              raise SystemExit('unexpected pkg manual FILES shape')
+          path.write_text(text.replace(old, new, 1))
           PY
 
-          asset_url=$(cat upstream/asset.url)
-          curl --fail --silent --show-error --location \
-            --proto '=https' --tlsv1.2 \
-            --output upstream/jq-linux-amd64 \
-            -- "$asset_url"
+          cat > res/sys/manual/pkg-install.lib.sh <<'EOF'
+          NAME
+              pkg-install.lib.sh - orchestrate package installation
 
-          test "$(wc -c < upstream/jq-linux-amd64 | tr -d ' ')" = "$(cat upstream/asset.size)"
-          printf '%s  %s\n' "$(cat upstream/asset.sha256)" upstream/jq-linux-amd64 | sha256sum -c -
-          sha256sum upstream/release.json > upstream/release.json.sha256
+          DESCRIPTION
+              pkg-install.lib.sh implements the installation orchestration used by the
+              public pkg install command. It validates every package operand before
+              installation side effects, materializes the managed package store on demand,
+              snapshots the package catalog, resolves package repository metadata and
+              artifacts, downloads and verifies artifacts, extracts/materializes them, and
+              delegates final package integration to the package integration facilities.
 
-          {
-            printf 'rumiai-os=%s\n' 14e413342261b23df840f40b355166c4d55f1b41
-            printf 'pkg-catalog=%s\n' dd96a82e9022fb7c6f926d2b4b81f4718e824bb6
-            printf 'package=%s\n' jq
-            printf 'version=%s\n' jq-1.8.2
-            printf 'asset=%s\n' jq-linux-amd64
-            printf 'asset-url=%s\n' "$(cat upstream/asset.url)"
-            printf 'asset-size=%s\n' "$(cat upstream/asset.size)"
-            printf 'asset-sha256=%s\n' "$(cat upstream/asset.sha256)"
-          } > upstream/manifest.txt
+          FUNCTIONS
+              pkg_install <package-spec>...
+                  Install one or more package specifications through the real package
+                  pipeline. Every operand is validated before the package store or temporary
+                  installation state is materialized. If $m_PKG_DIR does not exist after
+                  validation, it is created before package integration begins. An existing
+                  $m_PKG_DIR must be a real directory rather than a symbolic link.
 
-      - name: Upload VM bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: rumiai-pkg-install-vm-bundle-14e413-dd96
-          path: |
-            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip
-            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.zip.sha256
-            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar
-            rumiai-os-14e413342261b23df840f40b355166c4d55f1b41.tar.sha256
-            pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar
-            pkg-catalog-dd96a82e9022fb7c6f926d2b4b81f4718e824bb6-git.tar.sha256
-            upstream/release.json
-            upstream/release.json.sha256
-            upstream/asset.url
-            upstream/asset.size
-            upstream/asset.sha256
-            upstream/jq-linux-amd64
-            upstream/manifest.txt
-          if-no-files-found: error
-          compression-level: 0
+                  Returns 0 when all requested packages are installed, 1 when installation
+                  cannot be completed, and 2 when the invocation or a package operand is
+                  invalid.
+
+          DEPENDENCIES
+              The library runs inside the m bootstrap environment and uses the package
+              download, extraction and integration libraries together with state-path,
+              repository adapters and the external pkg-catalog source.
+
+          SEE ALSO
+              pkg
+              state-path
+          EOF
+          sed -i 's/^          //' res/sys/manual/pkg-install.lib.sh
+
+          sh -n lib/sys/sh/pkg-install.lib.sh
+          git diff --check
+          test "$(grep -c '^pkg_install()' lib/sys/sh/pkg-install.lib.sh)" -eq 1
+          if grep -E '^[[:space:]]*_[A-Za-z0-9_]+\(' res/sys/manual/pkg-install.lib.sh; then
+            exit 1
+          fi
+
+          git config user.name 'RumiAI task automation'
+          git config user.email 'actions@users.noreply.github.com'
+          git add -- lib/sys/sh/pkg-install.lib.sh res/sys/manual/pkg res/sys/manual/pkg-install.lib.sh
+          test "$(git diff --cached --name-only | wc -l)" -eq 3
+          git commit -m 'Materialize package store during install'
+          git push origin HEAD:main
