@@ -1,0 +1,35 @@
+name: vm-transfer-rumiai-os
+
+on:
+  push:
+    branches:
+      - tmp/pkg-install-vm-transfer-20260917
+
+jobs:
+  package:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout exact rumiai-os revision
+        uses: actions/checkout@v4
+        with:
+          ref: b18ae4439519bfe4081035a7d6d0a29423a81709
+          path: source
+          fetch-depth: 1
+
+      - name: Verify revision and create archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          test "$(git -C source rev-parse HEAD)" = "b18ae4439519bfe4081035a7d6d0a29423a81709"
+          git -C source archive --format=zip --output="$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip" HEAD
+          sha256sum "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip" > "$GITHUB_WORKSPACE/rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip.sha256"
+
+      - name: Upload archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709
+          path: |
+            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip
+            rumiai-os-b18ae4439519bfe4081035a7d6d0a29423a81709.zip.sha256
+          if-no-files-found: error
+          compression-level: 0
