@@ -1,0 +1,33 @@
+NAME
+    pager - present a file through the RumiAI technical pager abstraction
+
+SYNOPSIS
+    pager <file>
+
+DESCRIPTION
+    pager provides the technical paging boundary used by commands that need
+    terminal presentation without embedding host-specific pager logic.
+
+    Exactly one file operand is accepted. The file pathname is resolved through
+    the runtime path-resolution facility and must identify a readable regular
+    file.
+
+    When standard output is not a terminal, pager copies the file directly to
+    standard output so pipelines and redirections remain non-interactive.
+
+    At this separation checkpoint, terminal presentation delegates to the POSIX
+    more utility. Host-specific backend normalization is implemented inside pager
+    rather than in its consumers.
+
+OPERANDS
+    <file>
+        Existing readable regular file to present.
+
+EXIT STATUS
+    0   Success.
+    1   File resolution/access or presentation failure.
+    2   Invalid invocation.
+
+SEE ALSO
+    manual
+    more

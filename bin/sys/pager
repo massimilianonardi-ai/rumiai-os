@@ -1,0 +1,21 @@
+#!/usr/bin/env m
+
+[ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation pager
+
+pager_source=$1
+readpathce pager_file "$pager_source" || \
+  fatal 1 execution execution-failed operation pager reason file-resolution-failed path "$pager_source"
+
+[ -f "$pager_file" ] && [ -r "$pager_file" ] || \
+  fatal 1 execution execution-failed operation pager reason file-unavailable path "$pager_source"
+
+if [ -t 1 ]
+then
+  command -p more "$pager_file" || \
+    fatal 1 execution execution-failed operation pager reason backend-failed backend more path "$pager_source"
+else
+  command -p cat "$pager_file" || \
+    fatal 1 execution execution-failed operation pager reason output-failed path "$pager_source"
+fi
+
+exit 0

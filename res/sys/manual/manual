@@ -33,15 +33,11 @@ OPTIONS
         the normal pager. This option is valid only when a topic is requested.
 
 PRESENTATION
-    When --no-pager is absent and standard output is a terminal, manual delegates
-    presentation to the POSIX more utility.
+    When --no-pager is absent, manual delegates presentation to the technical
+    pager command. pager owns terminal detection and host-specific viewer
+    selection.
 
-    When standard output is not a terminal, manual writes the selected topic
-    directly to standard output so that pipelines and redirections are
-    non-interactive and deterministic.
-
-    --no-pager also writes the topic directly to standard output, including when
-    standard output is a terminal.
+    --no-pager bypasses pager and writes the topic directly to standard output.
 
 FILES
     res/<owner>/manual/<topic>
@@ -73,4 +69,4 @@ EXAMPLES
         manual --no-pager sys pkg
 
 SEE ALSO
-    more
+    pager
