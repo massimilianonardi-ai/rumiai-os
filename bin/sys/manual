@@ -135,7 +135,7 @@ else
     fatal 2 execution execution-failed operation manual reason topic-not-found owner "$manual_owner" topic "$manual_topic"
 fi
 
-if [ "$manual_no_pager" -eq 1 ]
+if [ "$manual_no_pager" -eq 1 ] || ! [ -t 1 ]
 then
   command -p -- cat "$manual_topic_path" || \
     fatal 4 execution execution-failed operation manual reason output-failed topic "$manual_topic"

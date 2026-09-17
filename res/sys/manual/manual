@@ -33,10 +33,15 @@ OPTIONS
         the normal pager. This option is valid only when a topic is requested.
 
 PRESENTATION
-    Normal topic presentation delegates to the POSIX more utility. When standard
-    output is not a terminal, POSIX more copies the topic to standard output.
+    When --no-pager is absent and standard output is a terminal, manual delegates
+    presentation to the POSIX more utility.
 
-    --no-pager bypasses more and writes the topic directly to standard output.
+    When standard output is not a terminal, manual writes the selected topic
+    directly to standard output so that pipelines and redirections are
+    non-interactive and deterministic.
+
+    --no-pager also writes the topic directly to standard output, including when
+    standard output is a terminal.
 
 FILES
     res/<owner>/manual/<topic>
@@ -60,8 +65,8 @@ EXAMPLES
 
     Resolve an ambiguous topic explicitly:
 
-        manual sys pkg
         manual ai pkg
+        manual sys pkg
 
     Write a selected topic directly without paging:
 
