@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  pkg-install-live:
+  fixture-consumers:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact rumiai-os revision
@@ -28,19 +28,31 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Validate exact revisions
-        shell: sh
-        run: |
-          set -eu
-          test "$(git -C product rev-parse HEAD)" = "bc847264d33cbb838d8cdd014f7b15a888d32c8e"
-          test "$(git -C suite rev-parse HEAD)" = "455fd4688b06996ba44f952c6f84e72024b2fced"
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          sh -n suite/lib/rumiai-os-fixture.lib
-          sh -n suite/tests/rumiai-os/pkg/install-live.test
-
-      - name: Run real pkg install test
+      - name: Run fixture helper consumers
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
           TMPDIR: ${{ runner.temp }}
-        run: suite/tests/rumiai-os/pkg/install-live.test
+        run: |
+          set -u
+          test "$(git -C product rev-parse HEAD)" = "bc847264d33cbb838d8cdd014f7b15a888d32c8e" || exit 1
+          test "$(git -C suite rev-parse HEAD)" = "455fd4688b06996ba44f952c6f84e72024b2fced" || exit 1
+          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          consumers=$(grep -rl --include='*.test' 'rumiai_test_fixture_rumiai_os_create' suite/tests | LC_ALL=C sort)
+          test -n "$consumers" || exit 1
+          printf '%s\n' 'fixture-consumers:'
+          printf '%s\n' "$consumers"
+          failed=0
+          for test_path in $consumers
+          do
+            printf '%s\n' "running=$test_path"
+            "$test_path"
+            status=$?
+            printf '%s\n' "status=$status test=$test_path"
+            case "$status" in
+              0) : ;;
+              2) printf '%s\n' "skipped=$test_path" ;;
+              *) failed=1 ;;
+            esac
+          done
+          exit "$failed"
