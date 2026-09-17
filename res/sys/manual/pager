@@ -15,9 +15,23 @@ DESCRIPTION
     When standard output is not a terminal, pager copies the file directly to
     standard output so pipelines and redirections remain non-interactive.
 
-    At this separation checkpoint, terminal presentation delegates to the POSIX
-    more utility. Host-specific backend normalization is implemented inside pager
-    rather than in its consumers.
+    When standard output is a terminal, pager selects the viewer according to
+    the current host policy.
+
+HOST POLICY
+    Linux
+        Prefer less. The common util-linux more implementation does not provide
+        the preferred bidirectional stay-at-end interaction in its normal host
+        configuration.
+
+        If less is unavailable, fall back to more so paging remains usable.
+
+    Other hosts
+        Use more until a concrete host divergence requires a dedicated adapter.
+
+    When less is used, LESS, LESSOPEN and LESSCLOSE are neutralized for the
+    viewer invocation so caller configuration does not silently alter pager
+    behavior.
 
 OPERANDS
     <file>
@@ -30,4 +44,5 @@ EXIT STATUS
 
 SEE ALSO
     manual
+    less
     more
