@@ -20,13 +20,13 @@ DESCRIPTION
 
 HOST POLICY
     Linux
-        Use less. The common util-linux more implementation does not provide the
-        preferred bidirectional stay-at-end interaction in its normal host
+        Prefer less. The common util-linux more implementation does not provide
+        the preferred bidirectional stay-at-end interaction in its normal host
         configuration.
 
-        less is therefore a required Linux host capability for interactive
-        paging. If it is unavailable, pager fails explicitly instead of falling
-        back to the anomalous more behavior.
+        If less is unavailable, fall back to more. This deliberately accepts a
+        less capable interaction rather than failing only because the preferred
+        Linux viewer is unavailable.
 
     Other hosts
         Use more until a concrete host divergence requires a dedicated adapter.
@@ -41,8 +41,7 @@ OPERANDS
 
 EXIT STATUS
     0   Success.
-    1   File resolution/access, required-backend availability or presentation
-        failure.
+    1   File resolution/access or presentation/backend failure.
     2   Invalid invocation.
 
 SEE ALSO
