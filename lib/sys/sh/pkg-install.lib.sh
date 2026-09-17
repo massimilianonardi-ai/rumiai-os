@@ -158,7 +158,7 @@ _pkg_install_catalog_validate()
   [ "$pkg_install_catalog_validate_origin" = "$pkg_install_catalog_remote" ] || return 1
 
   pkg_install_catalog_validate_branch_actual="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_validate_branch" ] || return 1
+  [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_branch" ] || return 1
 
   pkg_install_catalog_validate_dirty="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" status --porcelain=v1 --untracked-files=all 2>/dev/null)" || return 1
   [ -z "$pkg_install_catalog_validate_dirty" ] || return 1
@@ -262,7 +262,7 @@ _pkg_install_stream_select()
   pkg_install_pkg=$2
   pkg_install_target=$3
   pkg_install_package_dir="$pkg_install_catalog/$pkg_install_pkg"
-  pkg_install_target_stream="$pkg_install_package_dir/catalog-$pkg_install_target"
+  pkg_install_target_stream="$pkg_install_package_dir/$pkg_install_target"
   pkg_install_generic_stream="$pkg_install_package_dir/catalog"
   [ -d "$pkg_install_package_dir" ] && [ ! -L "$pkg_install_package_dir" ] || return 1
 
