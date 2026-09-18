@@ -11,6 +11,24 @@ DESCRIPTION
     provider selector followed by newline.
 
 FUNCTIONS
+    pkg_provider_effective_selector <consumer> <facility>
+        Print the effective configured selector for the consumer/facility pair:
+        the explicit consumer binding when present, otherwise the system facility
+        default. Returns 1 when neither selector is configured or configured state
+        is invalid.
+
+    pkg_provider_selector_resolve <provider-selector> [<consumer-osarch>]
+        Resolve selector intent to one installed concrete package identity. A
+        selector without version follows the provider package default. A selector
+        with version is pinned. When consumer-osarch is supplied, a matching
+        platform-specific provider is preferred and a generic provider may satisfy
+        a selector that did not explicitly pin another osarch.
+
+    pkg_provider_concrete_referenced <concrete-provider>
+        Return 0 when the concrete provider is currently selected by a system
+        facility default or a system consumer binding, 1 when it is not referenced,
+        and 2 when the request or authoritative configuration cannot be validated.
+
     pkg_provider default <facility>
         Print the configured system default provider selector for the facility.
 
