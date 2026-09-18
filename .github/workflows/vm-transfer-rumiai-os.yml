@@ -1,4 +1,4 @@
-name: pkg-install-current-regression
+name: pkg-install-chromium-sandbox-env
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  regression:
+  chromium:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,29 +17,37 @@ jobs:
           path: product
           fetch-depth: 1
           persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-tests
-          ref: 7529f88269b1c8b60e58e56235dfd4ff64aca1f2
-          path: suite
-          fetch-depth: 1
-          persist-credentials: false
-      - name: Package regression
+
+      - name: Install and validate Chromium sandbox environment
         shell: sh
-        env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          for test_path in suite/tests/rumiai-os/pkg/*.test
-          do
-            printf 'RUN %s\n' "$test_path"
-            "$test_path"
-          done
-          for test_path in suite/tests/rumiai-os/pkg-repository-chrome/*.test
-          do
-            printf 'RUN %s\n' "$test_path"
-            "$test_path"
-          done
-          printf '%s\n' 'RUN suite/tests/rumiai-os/pkg-integration/contract.test'
-          suite/tests/rumiai-os/pkg-integration/contract.test
+          cd product
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          test "$(git rev-parse HEAD)" = 8177082a4254774db96d94aff2aff3d971da659f
+          ./m "$PWD/bin/sys/osarch-update"
+          test "$(readlink bin/ext-osarch)" = ext-linux-x86_64
+
+          ./m pkg install chromium
+          identity=$(./m pkg default chromium)
+          [ -n "$identity" ]
+          concrete="$PWD/pkg/$identity"
+          sandbox="$concrete/root/chrome_sandbox"
+
+          [ -f "$sandbox" ] && [ ! -L "$sandbox" ] && [ -x "$sandbox" ]
+          listing=$(LC_ALL=C ls -ldn "$sandbox")
+          set -- $listing
+          [ "$#" -ge 4 ]
+          [ "$3" = 0 ] && [ "$4" = 0 ]
+          mode_match=$(find "$sandbox" -prune -perm 4755 -print)
+          [ "$mode_match" = "$sandbox" ]
+
+          [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+          m_COMMAND_BIN="$concrete/cmd/chromium"
+          export m_COMMAND_BIN
+          . "$concrete/env"
+          [ "$CHROME_DEVEL_SANDBOX" = "$sandbox" ]
+          export CHROME_DEVEL_SANDBOX
+
+          ./m chromium --version
+          printf 'PASS package=chromium identity=%s sandbox=%s\n' "$identity" "$CHROME_DEVEL_SANDBOX"
