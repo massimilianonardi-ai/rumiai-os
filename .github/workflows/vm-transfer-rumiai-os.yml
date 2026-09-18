@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  package-current-checkouts:
+  final-current-pkg-regression:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -20,32 +20,21 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 85dba298afcc4824604ddad66968b44ad1f3a14f
+          ref: b180c43c27db969c61476f02eb230fcc60a6806e
           path: suite
           fetch-depth: 1
           persist-credentials: false
-      - name: Normalize origins and archive complete checkouts
+      - name: Current package regression
         shell: sh
+        env:
+          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
-          test "$(git -C product rev-parse HEAD)" = 5e47a3f0a242a57f8431fece2357532c19342cd9
-          test "$(git -C suite rev-parse HEAD)" = 85dba298afcc4824604ddad66968b44ad1f3a14f
-          tar -C product -cpf rumiai-os-5e47a3f0-git.tar .
-          tar -C suite -cpf rumiai-tests-85dba298-git.tar .
-          sha256sum rumiai-os-5e47a3f0-git.tar rumiai-tests-85dba298-git.tar > checkout-sha256.txt
-          printf '%s\n' \
-            'rumiai-os=5e47a3f0a242a57f8431fece2357532c19342cd9' \
-            'rumiai-tests=85dba298afcc4824604ddad66968b44ad1f3a14f' \
-            'pkg-catalog=dd96a82e9022fb7c6f926d2b4b81f4718e824bb6' > revisions.txt
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pkg-install-debian-current
-          path: |
-            rumiai-os-5e47a3f0-git.tar
-            rumiai-tests-85dba298-git.tar
-            checkout-sha256.txt
-            revisions.txt
-          if-no-files-found: error
-          retention-days: 1
+          for test_path in suite/tests/rumiai-os/pkg/*.test
+          do
+            printf 'RUN %s\n' "$test_path"
+            "$test_path"
+          done
+          suite/tests/rumiai-os/pkg-integration/contract.test
+          suite/tests/rumiai-os/pkg-launch/contract.test
