@@ -6,6 +6,10 @@ SYNOPSIS
     pkg uninstall <package-spec>...
     pkg versions <package-class>
     pkg default [-u] [--] <package-spec>
+    pkg provider default <facility> [<provider-selector>]
+    pkg provider default -u [--] <facility>
+    pkg provider bind <consumer> <facility> [<provider-selector>]
+    pkg provider bind -u [--] <consumer> <facility>
 
 DESCRIPTION
     pkg is the public package command of the technical m layer. Package catalog
@@ -27,6 +31,10 @@ PACKAGE OPERANDS
     A version or osarch suffix is optional where the selected subcommand permits
     it. When installation omits a version, pkg resolves the applicable version from
     the current catalog for the requested package/platform class.
+
+    Provider selectors use the same four package-spec shapes. An omitted version
+    expresses a provider-package selection that follows that package's current
+    default when resolved; an explicit version expresses a pinned provider version.
 
 COMMANDS
     install <package-spec>...
@@ -61,12 +69,33 @@ COMMANDS
         Clear the current default binding for the package/platform class. A version
         suffix is not accepted when -u is used.
 
+    provider default <facility>
+        Print the configured system default provider selector for the facility.
+
+    provider default <facility> <provider-selector>
+        Set the system default provider selector for the facility.
+
+    provider default -u [--] <facility>
+        Remove the configured system default provider selector.
+
+    provider bind <consumer> <facility>
+        Print the configured provider selector bound to the consumer/facility pair.
+
+    provider bind <consumer> <facility> <provider-selector>
+        Set the provider selector bound to the consumer/facility pair.
+
+    provider bind -u [--] <consumer> <facility>
+        Remove the consumer binding. Absence of a binding means that dependency
+        resolution inherits the system facility default.
+
 STATE
     Mutable package state is resolved through state-path rather than reconstructed
     by callers. Package HOME and configuration used at launch are user-scoped state.
 
-    RumiAI-managed package configuration uses the reserved .m subnamespace inside
-    the package conf area.
+    RumiAI-managed package configuration normally uses the reserved .m subnamespace
+    inside the package conf area. Provider bindings are the explicit exception:
+    a system-scoped consumer binding is stored as binding/<facility> in that
+    package's system conf area and contains exactly one provider selector.
 
 FILES
     $m_PKG_DIR
@@ -102,6 +131,14 @@ EXAMPLES
     Clear the default binding:
 
         pkg default -u nodejs
+
+    Select Temurin as the system provider for the java facility:
+
+        pkg provider default java temurin
+
+    Pin Maven to a specific Temurin version:
+
+        pkg provider bind maven java temurin@25.0.4.1+1
 
 SEE ALSO
     state-path

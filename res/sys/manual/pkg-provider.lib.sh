@@ -1,0 +1,56 @@
+NAME
+    pkg-provider.lib.sh - manage package facility provider configuration
+
+DESCRIPTION
+    pkg-provider.lib.sh implements the provider-selection configuration surface used
+    by the public pkg provider command.
+
+    Facility defaults are system-scoped package-subsystem configuration. Consumer
+    bindings are system-scoped package configuration stored as binding/<facility>
+    beneath the consumer package conf area. A binding file contains exactly one
+    provider selector followed by newline.
+
+FUNCTIONS
+    pkg_provider default <facility>
+        Print the configured system default provider selector for the facility.
+
+    pkg_provider default <facility> <provider-selector>
+        Set the configured system default provider selector.
+
+    pkg_provider default -u [--] <facility>
+        Remove the configured system default provider selector.
+
+    pkg_provider bind <consumer> <facility>
+        Print the configured provider selector for that consumer/facility pair.
+
+    pkg_provider bind <consumer> <facility> <provider-selector>
+        Set the consumer/facility provider selector.
+
+    pkg_provider bind -u [--] <consumer> <facility>
+        Remove the consumer binding. Dependency resolution then inherits the
+        facility default when one is configured.
+
+PROVIDER SELECTORS
+    Provider selectors use package-spec syntax:
+
+        <package>
+        <package>@<version>
+        <package>!<osarch>
+        <package>@<version>!<osarch>
+
+    This library stores selector intent; it does not install providers or choose a
+    missing provider automatically.
+
+RETURN STATUS
+    0   Requested query or mutation succeeded.
+    1   Required configured state is absent or configuration storage could not be
+        read or changed safely.
+    2   Invocation, consumer/facility name or provider-selector syntax is invalid.
+
+DEPENDENCIES
+    The library runs inside the m bootstrap environment and uses state-path for
+    authoritative system configuration paths.
+
+SEE ALSO
+    pkg
+    state-path
