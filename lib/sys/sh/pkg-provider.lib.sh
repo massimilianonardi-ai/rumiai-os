@@ -413,6 +413,89 @@ pkg_provider_effective_selector()
   _pkg_provider_config_query "$pkg_provider_config_file"
 )
 
+
+_pkg_provider_selector_matches_concrete()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_match_selector=$1
+  pkg_provider_match_concrete=$2
+
+  _pkg_provider_concrete_parse "$pkg_provider_match_concrete" || return 2
+  pkg_provider_match_osarch=$pkg_provider_concrete_osarch
+
+  pkg_provider_match_resolved="$(pkg_provider_selector_resolve "$pkg_provider_match_selector" "$pkg_provider_match_osarch")"
+  pkg_provider_match_status=$?
+  case "$pkg_provider_match_status" in
+    0) [ "$pkg_provider_match_resolved" = "$pkg_provider_match_concrete" ] ;;
+    1) return 1 ;;
+    *) return 2 ;;
+  esac
+}
+
+pkg_provider_concrete_referenced()
+(
+  [ "$#" -eq 1 ] || return 2
+  pkg_provider_reference_target=$1
+  _pkg_provider_concrete_parse "$pkg_provider_reference_target" || return 2
+
+  _pkg_provider_system_conf || return 2
+  pkg_provider_reference_default_root="$pkg_provider_system_conf/provider/default"
+
+  if [ -e "$pkg_provider_reference_default_root" ] || [ -L "$pkg_provider_reference_default_root" ]
+  then
+    [ -d "$pkg_provider_reference_default_root" ] && [ ! -L "$pkg_provider_reference_default_root" ] || return 2
+    for pkg_provider_reference_file in       "$pkg_provider_reference_default_root"/*       "$pkg_provider_reference_default_root"/.[!.]*       "$pkg_provider_reference_default_root"/..?*
+    do
+      [ -e "$pkg_provider_reference_file" ] || [ -L "$pkg_provider_reference_file" ] || continue
+      _pkg_provider_scalar_read "$pkg_provider_reference_file" || return 2
+      _pkg_provider_selector_validate "$pkg_provider_scalar" || return 2
+      if _pkg_provider_selector_matches_concrete "$pkg_provider_scalar" "$pkg_provider_reference_target"
+      then
+        return 0
+      else
+        pkg_provider_reference_status=$?
+        [ "$pkg_provider_reference_status" -eq 1 ] || return 2
+      fi
+    done
+  fi
+
+  pkg_provider_reference_pkg_root="$m_STATE_SYS_DIR/pkg"
+  if [ ! -e "$pkg_provider_reference_pkg_root" ] && [ ! -L "$pkg_provider_reference_pkg_root" ]
+  then
+    return 1
+  fi
+  [ -d "$pkg_provider_reference_pkg_root" ] && [ ! -L "$pkg_provider_reference_pkg_root" ] || return 2
+
+  for pkg_provider_reference_consumer in     "$pkg_provider_reference_pkg_root"/*     "$pkg_provider_reference_pkg_root"/.[!.]*     "$pkg_provider_reference_pkg_root"/..?*
+  do
+    [ -e "$pkg_provider_reference_consumer" ] || [ -L "$pkg_provider_reference_consumer" ] || continue
+    [ -d "$pkg_provider_reference_consumer" ] && [ ! -L "$pkg_provider_reference_consumer" ] || continue
+    pkg_provider_reference_binding_root="$pkg_provider_reference_consumer/conf/binding"
+
+    if [ ! -e "$pkg_provider_reference_binding_root" ] && [ ! -L "$pkg_provider_reference_binding_root" ]
+    then
+      continue
+    fi
+    [ -d "$pkg_provider_reference_binding_root" ] && [ ! -L "$pkg_provider_reference_binding_root" ] || return 2
+
+    for pkg_provider_reference_file in       "$pkg_provider_reference_binding_root"/*       "$pkg_provider_reference_binding_root"/.[!.]*       "$pkg_provider_reference_binding_root"/..?*
+    do
+      [ -e "$pkg_provider_reference_file" ] || [ -L "$pkg_provider_reference_file" ] || continue
+      _pkg_provider_scalar_read "$pkg_provider_reference_file" || return 2
+      _pkg_provider_selector_validate "$pkg_provider_scalar" || return 2
+      if _pkg_provider_selector_matches_concrete "$pkg_provider_scalar" "$pkg_provider_reference_target"
+      then
+        return 0
+      else
+        pkg_provider_reference_status=$?
+        [ "$pkg_provider_reference_status" -eq 1 ] || return 2
+      fi
+    done
+  done
+
+  return 1
+)
+
 pkg_provider()
 (
   [ "$#" -ge 1 ] || return 2
