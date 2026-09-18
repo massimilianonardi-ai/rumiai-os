@@ -22,4 +22,4 @@ RETURN STATUS
 
 DEPENDENCIES
     Uses the m runtime path and logging facilities. Type adapters are resolved as
-    lib/sys/sh/mk-materialize-<type>.lib.sh.
+    lib/sys/sh/mk/mk-materialize-<type>.lib.sh.

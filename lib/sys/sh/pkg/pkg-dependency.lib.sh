@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/pkg-provider.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/pkg-provider.lib.sh"
 
 _pkg_dependency_constraint_parse()
 {

@@ -145,7 +145,7 @@ mk_materialize()
     return 1
   }
 
-  mk_materialize_adapter="$m_LIB_DIR/sys/sh/mk-materialize-$mk_materialize_type.lib.sh"
+  mk_materialize_adapter="$m_LIB_DIR/sys/sh/mk/mk-materialize-$mk_materialize_type.lib.sh"
   [ -f "$mk_materialize_adapter" ] && [ ! -L "$mk_materialize_adapter" ] && [ -r "$mk_materialize_adapter" ] && [ ! -x "$mk_materialize_adapter" ] || {
     _mk_materialize_error type-unsupported type "$mk_materialize_type"
     return 1

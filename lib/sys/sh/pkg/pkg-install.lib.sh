@@ -1,6 +1,6 @@
-. "$m_LIB_DIR/sys/sh/pkg-download.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg-extract.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg-integration.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/pkg-download.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/pkg-extract.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/pkg-integration.lib.sh"
 
 _pkg_install_error()
 {
@@ -344,7 +344,7 @@ _pkg_install_repository_adapter()
   case "$pkg_install_repository_type" in
     "" | [!a-z0-9]* | *[!a-z0-9-]* | *-) return 1 ;;
   esac
-  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg-repository-$pkg_install_repository_type.lib.sh"
+  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg/pkg-repository-$pkg_install_repository_type.lib.sh"
   [ -f "$pkg_install_adapter" ] && [ ! -L "$pkg_install_adapter" ] && [ -r "$pkg_install_adapter" ] && [ ! -x "$pkg_install_adapter" ] || return 1
 }
 

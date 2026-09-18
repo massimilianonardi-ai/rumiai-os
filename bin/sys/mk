@@ -8,7 +8,7 @@ shift
 case "$mk_command" in
   materialize)
     [ "$#" -eq 3 ] || fatal 2 error execution invalid-arguments operation mk subcommand materialize
-    . "$m_LIB_DIR/sys/sh/mk-materialize.lib.sh"
+    . "$m_LIB_DIR/sys/sh/mk/mk-materialize.lib.sh"
     mk_materialize "$@"
     exit $?
     ;;
