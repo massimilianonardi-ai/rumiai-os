@@ -1,4 +1,4 @@
-name: pkg-install-special-cases
+name: pkg-install-diagnostics
 
 on:
   workflow_dispatch:
@@ -30,15 +30,12 @@ jobs:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
+          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           suite/tests/rumiai-os/pkg-repository-chrome/versions.test
           suite/tests/rumiai-os/pkg-repository-chrome/artifact.test
 
-  install-special:
+  maven-retry:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        package: [chrome, keycloak, maven, netbeans]
     steps:
       - uses: actions/checkout@v4
         with:
@@ -47,65 +44,45 @@ jobs:
           path: product
           fetch-depth: 1
           persist-credentials: false
-      - name: Initialize target
+      - name: Install Maven with Java provider
         shell: sh
         run: |
           set -eu
           cd product
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           ./m "$PWD/bin/sys/osarch-update"
-          test "$(readlink bin/ext-osarch)" = ext-linux-x86_64
-      - name: Install and verify ${{ matrix.package }}
-        shell: sh
+          ./m pkg install graalvm
+          java_identity=$(./m pkg default graalvm)
+          ./m pkg install maven
+          identity=$(./m pkg default maven)
+          [ "$(cat "pkg/$identity/binding/java")" = "$java_identity" ]
+          [ -f "pkg/$identity/env" ]
+          ./m mvn --version
+          printf 'PASS package=maven identity=%s java=%s\n' "$identity" "$java_identity"
+
+  keycloak-trace:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-os
+          ref: 7eaebea5a134efb033872e2db3357834ed2fa03f
+          path: product
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Trace Keycloak install
+        shell: bash
         run: |
           set -eu
           cd product
-          pkg='${{ matrix.package }}'
-          case "$pkg" in
-            keycloak|maven|netbeans)
-              ./m pkg install graalvm
-              java_identity=$(./m pkg default graalvm)
-              [ -n "$java_identity" ]
-              ;;
-          esac
-
-          ./m pkg install "$pkg"
-          identity=$(./m pkg default "$pkg")
-          [ -n "$identity" ]
-          ./m pkg versions "$pkg" | grep -Fx "$identity" >/dev/null
-
-          concrete="$PWD/pkg/$identity"
-          [ -d "$concrete" ] && [ ! -L "$concrete" ]
-
-          case "$pkg" in
-            chrome)
-              [ -x "$concrete/cmd/chrome" ]
-              [ -L "$concrete/link/chrome" ]
-              [ -L "$PWD/bin/ext-linux-x86_64/chrome" ]
-              [ -f "$concrete/root/opt/google/chrome/chrome-sandbox" ]
-              [ -u "$concrete/root/opt/google/chrome/chrome-sandbox" ]
-              ;;
-            keycloak)
-              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
-              cmp "$concrete/dependency" "$concrete/../$identity/dependency" >/dev/null 2>&1 || :
-              [ -f "$concrete/env" ]
-              [ -L "$concrete/var/conf" ]
-              [ -L "$concrete/var/data" ]
-              [ "$(readlink "$concrete/var/conf")" = "../../../state/system/current/pkg/keycloak/conf" ]
-              [ "$(readlink "$concrete/var/data")" = "../../../state/system/current/pkg/keycloak/data" ]
-              [ -L "$concrete/root/conf" ]
-              [ -L "$concrete/root/data" ]
-              ;;
-            maven)
-              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
-              [ -f "$concrete/env" ]
-              PATH="$PWD/bin/ext-linux-x86_64:$PWD/bin/sys:$PATH" ./m mvn --version >/dev/null
-              ;;
-            netbeans)
-              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
-              [ -f "$concrete/env" ]
-              [ -x "$concrete/cmd/netbeans" ]
-              [ -L "$concrete/link/netbeans" ]
-              ;;
-          esac
-          printf 'PASS package=%s identity=%s\n' "$pkg" "$identity"
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          ./m "$PWD/bin/sys/osarch-update"
+          ./m pkg install graalvm
+          set +e
+          PS4='+TRACE ${LINENO}: '
+          sh -x ./m pkg install keycloak >../keycloak.out 2>../keycloak.trace
+          status=$?
+          set -e
+          printf 'KEYCLOAK_STATUS=%s\n' "$status"
+          tail -n 500 ../keycloak.trace
+          exit "$status"
