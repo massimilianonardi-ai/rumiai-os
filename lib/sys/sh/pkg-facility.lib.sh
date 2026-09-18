@@ -244,107 +244,19 @@ _pkg_facility_provider_remove()
   done < "$pkg_facility_file"
 }
 
-_pkg_facility_file_declares_name()
-{
-  [ "$#" -eq 2 ] || return 2
-  _pkg_facility_file_validate "$1" || return 1
-  _pkg_facility_name_valid "$2" || return 1
-
-  while IFS= read -r pkg_facility_line
-  do
-    _pkg_facility_line_parse "$pkg_facility_line" || return 1
-    [ "$pkg_facility_name" = "$2" ] && return 0
-  done < "$1"
-  return 1
-}
-
-_pkg_facility_runtime_dir_validate()
-{
-  [ "$#" -eq 2 ] || return 2
-  pkg_facility_runtime_dir=$1
-  pkg_facility_runtime_declarations=$2
-  [ -d "$pkg_facility_runtime_dir" ] && [ ! -L "$pkg_facility_runtime_dir" ] || return 1
-  [ -f "$pkg_facility_runtime_declarations" ] && [ ! -L "$pkg_facility_runtime_declarations" ] || return 1
-
-  pkg_facility_runtime_count=0
-  for pkg_facility_runtime_file in "$pkg_facility_runtime_dir"/*
-  do
-    [ -e "$pkg_facility_runtime_file" ] || [ -L "$pkg_facility_runtime_file" ] || continue
-    pkg_facility_runtime_name=${pkg_facility_runtime_file##*"/"}
-    _pkg_facility_name_valid "$pkg_facility_runtime_name" || return 1
-    [ -f "$pkg_facility_runtime_file" ] && [ ! -L "$pkg_facility_runtime_file" ] && [ -r "$pkg_facility_runtime_file" ] && [ ! -x "$pkg_facility_runtime_file" ] || return 1
-    command -p -- sh -n "$pkg_facility_runtime_file" >/dev/null 2>&1 || return 1
-    _pkg_facility_file_declares_name "$pkg_facility_runtime_declarations" "$pkg_facility_runtime_name" || return 1
-    pkg_facility_runtime_count=$((pkg_facility_runtime_count + 1))
-  done
-
-  for pkg_facility_runtime_file in "$pkg_facility_runtime_dir"/.[!.]* "$pkg_facility_runtime_dir"/..?*
-  do
-    [ -e "$pkg_facility_runtime_file" ] || [ -L "$pkg_facility_runtime_file" ] || continue
-    return 1
-  done
-
-  [ "$pkg_facility_runtime_count" -gt 0 ]
-}
-
-_pkg_facility_runtime_apply()
-{
-  [ "$#" -eq 2 ] || return 2
-  pkg_facility_runtime_provider=$1
-  pkg_facility_runtime_name=$2
-  _pkg_facility_name_valid "$pkg_facility_runtime_name" || return 1
-  case "$pkg_facility_runtime_provider" in "" | *'/'*) return 1 ;; esac
-
-  pkg_facility_runtime_provider_dir="$m_PKG_DIR/$pkg_facility_runtime_provider"
-  [ -d "$pkg_facility_runtime_provider_dir" ] && [ ! -L "$pkg_facility_runtime_provider_dir" ] || return 1
-  pkg_facility_runtime_file="$pkg_facility_runtime_provider_dir/facility-env/$pkg_facility_runtime_name"
-
-  if [ ! -e "$pkg_facility_runtime_file" ] && [ ! -L "$pkg_facility_runtime_file" ]
-  then
-    return 0
-  fi
-
-  [ -f "$pkg_facility_runtime_file" ] && [ ! -L "$pkg_facility_runtime_file" ] && [ -r "$pkg_facility_runtime_file" ] && [ ! -x "$pkg_facility_runtime_file" ] || return 1
-  command -p -- sh -n "$pkg_facility_runtime_file" >/dev/null 2>&1 || return 1
-  pkg_facility_provider_root="$pkg_facility_runtime_provider_dir/root"
-  [ -d "$pkg_facility_provider_root" ] && [ ! -L "$pkg_facility_provider_root" ] || return 1
-
-  . "$pkg_facility_runtime_file"
-  pkg_facility_runtime_status=$?
-  unset pkg_facility_provider_root
-  return "$pkg_facility_runtime_status"
-}
-
 _pkg_facility_materialize()
 {
   [ "$#" -eq 2 ] || return 2
   pkg_facility_range=$1
   pkg_facility_concrete=$2
   pkg_facility_source="$pkg_facility_range/facility"
-  pkg_facility_runtime_source="$pkg_facility_range/facility-env"
 
   if [ ! -e "$pkg_facility_source" ] && [ ! -L "$pkg_facility_source" ]
-  then
-    [ ! -e "$pkg_facility_runtime_source" ] && [ ! -L "$pkg_facility_runtime_source" ]
-    return $?
-  fi
-
-  _pkg_facility_file_validate "$pkg_facility_source" || return 1
-  command -p -- cp -- "$pkg_facility_source" "$pkg_facility_concrete/facility" || return 1
-  _pkg_facility_file_validate "$pkg_facility_concrete/facility" || return 1
-
-  if [ ! -e "$pkg_facility_runtime_source" ] && [ ! -L "$pkg_facility_runtime_source" ]
   then
     return 0
   fi
 
-  _pkg_facility_runtime_dir_validate "$pkg_facility_runtime_source" "$pkg_facility_source" || return 1
-  command -p -- mkdir -- "$pkg_facility_concrete/facility-env" || return 1
-  for pkg_facility_runtime_file in "$pkg_facility_runtime_source"/*
-  do
-    [ -e "$pkg_facility_runtime_file" ] || continue
-    pkg_facility_runtime_name=${pkg_facility_runtime_file##*"/"}
-    command -p -- cp -- "$pkg_facility_runtime_file" "$pkg_facility_concrete/facility-env/$pkg_facility_runtime_name" || return 1
-  done
-  _pkg_facility_runtime_dir_validate "$pkg_facility_concrete/facility-env" "$pkg_facility_concrete/facility"
+  _pkg_facility_file_validate "$pkg_facility_source" || return 1
+  command -p -- cp -- "$pkg_facility_source" "$pkg_facility_concrete/facility" || return 1
+  _pkg_facility_file_validate "$pkg_facility_concrete/facility"
 }

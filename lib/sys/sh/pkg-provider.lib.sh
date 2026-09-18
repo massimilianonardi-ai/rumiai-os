@@ -110,7 +110,7 @@ _pkg_provider_binding_path()
   _pkg_provider_name_valid "$1" || return 2
   _pkg_facility_name_valid "$2" || return 2
   pkg_provider_consumer_conf="$(command -- state-path system pkg "$1" conf)" || return 1
-  pkg_provider_selector_path="$pkg_provider_consumer_conf/.m/binding/$2"
+  pkg_provider_selector_path="$pkg_provider_consumer_conf/binding/$2"
 }
 
 _pkg_provider_default_read()
