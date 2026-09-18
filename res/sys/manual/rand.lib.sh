@@ -21,8 +21,8 @@ DESCRIPTION
 FUNCTIONS
     randhex [bytes]
 
-        Generates bytes cryptographically secure random bytes and writes
-        them as lowercase hexadecimal followed by a newline.
+        Generates the requested number of cryptographically secure random
+        bytes and writes them as lowercase hexadecimal followed by a newline.
 
         bytes defaults to 32. When supplied, it must be a canonical positive
         decimal integer with no leading zero.
@@ -43,8 +43,9 @@ FUNCTIONS
 
     rand64 [bytes]
 
-        Generates bytes cryptographically secure random bytes and writes
-        their Base64 representation as one line followed by a newline.
+        Generates the requested number of cryptographically secure random
+        bytes and writes their Base64 representation as one line followed by
+        a newline.
 
         bytes defaults to 32 and follows the same canonical-positive-decimal
         input rules as randhex.
