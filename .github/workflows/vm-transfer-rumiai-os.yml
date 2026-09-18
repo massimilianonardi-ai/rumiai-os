@@ -35,4 +35,4 @@ jobs:
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
           cd suite
-          ./rumiai-test -- tests/external/chromium/install-live.test
+          ./rumiai-test -- external/chromium/install-live.test
