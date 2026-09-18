@@ -1,4 +1,4 @@
-name: pkg-install-chromium-sandbox-env
+name: chromium-permanent-install-test
 
 on:
   workflow_dispatch:
@@ -18,36 +18,21 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Install and validate Chromium sandbox environment
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 08bae6d721af7a4c7902e3bdb1b1b9e1a9071f08
+          path: suite
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run permanent Chromium install test
         shell: sh
+        env:
+          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
-          cd product
-          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          test "$(git rev-parse HEAD)" = 8177082a4254774db96d94aff2aff3d971da659f
-          ./m "$PWD/bin/sys/osarch-update"
-          test "$(readlink bin/ext-osarch)" = ext-linux-x86_64
-
-          ./m pkg install chromium
-          identity=$(./m pkg default chromium)
-          [ -n "$identity" ]
-          concrete="$PWD/pkg/$identity"
-          sandbox="$concrete/root/chrome_sandbox"
-
-          [ -f "$sandbox" ] && [ ! -L "$sandbox" ] && [ -x "$sandbox" ]
-          listing=$(LC_ALL=C ls -ldn "$sandbox")
-          set -- $listing
-          [ "$#" -ge 4 ]
-          [ "$3" = 0 ] && [ "$4" = 0 ]
-          mode_match=$(find "$sandbox" -prune -perm 4755 -print)
-          [ "$mode_match" = "$sandbox" ]
-
-          [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
-          m_COMMAND_BIN="$concrete/cmd/chromium"
-          export m_COMMAND_BIN
-          . "$concrete/env"
-          [ "$CHROME_DEVEL_SANDBOX" = "$sandbox" ]
-          export CHROME_DEVEL_SANDBOX
-
-          ./m chromium --version
-          printf 'PASS package=chromium identity=%s sandbox=%s\n' "$identity" "$CHROME_DEVEL_SANDBOX"
+          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
+          cd suite
+          ./rumiai-test -- tests/external/chromium/install-live.test
