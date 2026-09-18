@@ -1,4 +1,4 @@
-name: pkg-install-nodejs-retry
+name: pkg-install-current-regression
 
 on:
   workflow_dispatch:
@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  nodejs:
+  regression:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -17,19 +17,29 @@ jobs:
           path: product
           fetch-depth: 1
           persist-credentials: false
-      - name: Retry Node.js through real pkg path
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 7529f88269b1c8b60e58e56235dfd4ff64aca1f2
+          path: suite
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Package regression
         shell: sh
+        env:
+          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
-          cd product
-          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          ./m "$PWD/bin/sys/osarch-update"
-          ./m pkg install nodejs
-          identity=$(./m pkg default nodejs)
-          [ -n "$identity" ]
-          concrete="$PWD/pkg/$identity"
-          [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
-          ./m node --version
-          ./m npm --version
-          ./m npx --version
-          printf 'PASS package=nodejs identity=%s\n' "$identity"
+          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          for test_path in suite/tests/rumiai-os/pkg/*.test
+          do
+            printf 'RUN %s\n' "$test_path"
+            "$test_path"
+          done
+          for test_path in suite/tests/rumiai-os/pkg-repository-chrome/*.test
+          do
+            printf 'RUN %s\n' "$test_path"
+            "$test_path"
+          done
+          printf '%s\n' 'RUN suite/tests/rumiai-os/pkg-integration/contract.test'
+          suite/tests/rumiai-os/pkg-integration/contract.test
