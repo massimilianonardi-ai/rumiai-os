@@ -77,8 +77,8 @@
 #
 # - map MAP_NAME creates a missing map and resets an existing one.
 #
-# - . arg.lib.sh intentionally relies on the POSIX dot/PATH lookup rules. The
-#   sourcing environment must therefore make arg.lib.sh discoverable.
+# - keys and get-all serialization use quote(), provided by the m bootstrap
+#   core library in an integrated runtime environment.
 #
 # - Direct external corruption of the opaque storage, including making internal
 #   variables readonly, is outside the contract and may cause shell-level
