@@ -1,4 +1,3 @@
-. "$m_LIB_DIR/sys/sh/pkg-facility.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg-dependency.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg-state.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg-setuid.lib.sh"
@@ -135,6 +134,9 @@ _pkg_integration_validate_definition()
       facility)
         _pkg_facility_file_validate "$pkg_integration_entry" || return 1
         ;;
+      facility-cmd | facility-env)
+        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        ;;
       dependency)
         _pkg_dependency_file_validate "$pkg_integration_entry" || return 1
         ;;
@@ -160,6 +162,8 @@ _pkg_integration_validate_definition()
         ;;
     esac
   done
+
+  _pkg_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
 
   [ "$pkg_integration_have_cmd" -eq "$pkg_integration_have_link" ] || return 1
   [ "$pkg_integration_have_cmd" -eq 1 ] || return 0
@@ -447,7 +451,7 @@ pkg_integrate()
 
   if ! _pkg_facility_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -458,7 +462,7 @@ pkg_integrate()
 
   if ! _pkg_dependency_materialize "$pkg_integrate_range/dependency" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -469,7 +473,7 @@ pkg_integrate()
 
   if ! _pkg_state_materialize "$pkg_integrate_range" "$pkg_integration_concrete" "$pkg_integrate_pkg"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -493,7 +497,7 @@ pkg_integrate()
     fi
     [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
 
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -517,7 +521,7 @@ pkg_integrate()
     fi
     [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
 
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
