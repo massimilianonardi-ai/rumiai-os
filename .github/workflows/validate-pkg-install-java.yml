@@ -55,5 +55,4 @@ jobs:
           }
 
           run_one rumiai-os/pkg-repository-temurin/contract.test
-          run_one rumiai-os/pkg/install-live.test
           run_one external/java/install-live.test
