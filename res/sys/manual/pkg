@@ -71,7 +71,7 @@ STATE
 FILES
     $m_PKG_DIR
         Managed package store root. pkg install creates this directory on demand
-        after package operands have passed syntax validation.
+        when the first syntactically valid install operand is processed.
 
 EXIT STATUS
     0   The requested operation succeeded.
