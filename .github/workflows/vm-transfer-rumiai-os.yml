@@ -7,20 +7,20 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  validate-pkg-after-uninstall-fix:
+  validate-pkg-install-batch-semantics:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-os
-          ref: 75ce970efe22c00f6757d95d46d544bdd7f1eec6
+          ref: 27541603bbcaaefd9afdaa90248f149e8e2b0b70
           path: product
           fetch-depth: 1
           persist-credentials: false
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: ad2606602507ae0b7abd3eae31f7b24fe3ac5bcb
+          ref: 13867b6e82b33b16c0316f844be77419354815fa
           path: suite
           fetch-depth: 1
           persist-credentials: false
@@ -28,11 +28,9 @@ jobs:
         shell: sh
         run: |
           set -eu
-          sh -n product/lib/sys/sh/pkg-uninstall.lib.sh
-          sh -n suite/tests/rumiai-os/pkg/dependency.test
-          sh -n suite/tests/rumiai-os/pkg/uninstall.test
+          sh -n product/lib/sys/sh/pkg-install.lib.sh
           sh -n suite/tests/rumiai-os/pkg/install-live.test
-      - name: Package dependency regression
+      - name: Dependency and uninstall regression
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
@@ -40,14 +38,8 @@ jobs:
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           suite/tests/rumiai-os/pkg/dependency.test
-      - name: Package uninstall regression
-        shell: sh
-        env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
-        run: |
-          set -eu
           suite/tests/rumiai-os/pkg/uninstall.test
-      - name: Live pkg install and jq execution
+      - name: Live install batch semantics
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
