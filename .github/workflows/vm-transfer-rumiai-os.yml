@@ -34,6 +34,8 @@ jobs:
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
+          product/m "$PWD/product/bin/sys/osarch-update"
+          test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
           cd suite
           set +e
           ./rumiai-test -- external/chromium/install-live.test
