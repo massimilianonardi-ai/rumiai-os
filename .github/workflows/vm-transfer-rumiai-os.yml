@@ -39,12 +39,7 @@ jobs:
           "$fixture/bin/sys/pkg" install 'jq@jq-1.8.2'
 
           probe="$fixture/default-probe"
-          cat > "$probe" <<'EOF'
-#!/usr/bin/env m
-. "$m_LIB_DIR/sys/sh/osarch.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg-default.lib.sh"
-pkg_default_command 'jq@jq-1.8.2'
-EOF
+          printf '%s\n'             '#!/usr/bin/env m'             '. "$m_LIB_DIR/sys/sh/osarch.lib.sh"'             '. "$m_LIB_DIR/sys/sh/pkg-default.lib.sh"'             "pkg_default_command 'jq@jq-1.8.2'" > "$probe"
           chmod +x "$probe"
           "$probe"
 
