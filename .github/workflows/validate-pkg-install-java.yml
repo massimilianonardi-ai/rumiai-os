@@ -1,0 +1,43 @@
+name: Validate pkg install Java
+
+on:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  java:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-os
+          ref: 8a179b38b07fbd35e475b7df6b8f05e976cc0fdb
+          path: product
+          fetch-depth: 1
+          persist-credentials: false
+
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 45c73f3824d3cbaa1621afa4cf1c520ed8c72e36
+          path: suite
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run package install validation
+        shell: sh
+        env:
+          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
+        run: |
+          set -eu
+          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
+          product/m "$PWD/product/bin/sys/osarch-update"
+          test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
+          cd suite
+          ./rumiai-test -- rumiai-os/pkg-repository-temurin/contract.test
+          ./rumiai-test -- rumiai-os/pkg/install-live.test
+          ./rumiai-test -- external/java/install-live.test
