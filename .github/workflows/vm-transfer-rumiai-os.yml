@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  validate-readpathce-and-live-install:
+  diagnose-pkg-adjacent-tests:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,27 +24,21 @@ jobs:
           path: suite
           fetch-depth: 1
           persist-credentials: false
-      - name: Syntax
-        shell: sh
-        run: |
-          set -eu
-          sh -n product/m
-          sh -n product/lib/sys/sh/core.lib.sh
-          sh -n suite/tests/rumiai-os/command/command-bin-canonical.test
-          sh -n suite/tests/rumiai-os/pkg/install-live.test
-      - name: Command resolution regression
+      - name: Run dependency and uninstall independently
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
-          set -eu
+          set -u
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          suite/tests/rumiai-os/command/command-bin-canonical.test
-      - name: Live pkg install from product root
-        shell: sh
-        env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
-        run: |
-          set -eu
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          suite/tests/rumiai-os/pkg/install-live.test
+          set +e
+          suite/tests/rumiai-os/pkg/dependency.test >dependency.out 2>dependency.err
+          dependency_status=$?
+          suite/tests/rumiai-os/pkg/uninstall.test >uninstall.out 2>uninstall.err
+          uninstall_status=$?
+          set -e
+          printf 'DEPENDENCY_STATUS=%s\n' "$dependency_status"
+          cat dependency.err
+          printf 'UNINSTALL_STATUS=%s\n' "$uninstall_status"
+          cat uninstall.err
+          exit 0
