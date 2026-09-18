@@ -6,6 +6,10 @@ SYNOPSIS
     pkg uninstall <package-spec>...
     pkg versions <package-class>
     pkg default [-u] [--] <package-spec>
+    pkg provider default <facility> [<provider-selector>]
+    pkg provider default -u [--] <facility>
+    pkg provider bind <consumer> <facility> [<provider-selector>]
+    pkg provider bind -u [--] <consumer> <facility>
 
 DESCRIPTION
     pkg is the public package command of the technical m layer. Package catalog
@@ -60,6 +64,41 @@ COMMANDS
     default -u [--] <package-class>
         Clear the current default binding for the package/platform class. A version
         suffix is not accepted when -u is used.
+
+    provider default <facility>
+        Print the configured system default provider selector for the facility.
+
+    provider default <facility> <provider-selector>
+        Set the system default provider selector for the facility. Configuration
+        does not install a missing provider. The selector is resolved and checked
+        when a dependency uses the facility.
+
+    provider default -u [--] <facility>
+        Remove the configured facility default.
+
+    provider bind <consumer> <facility>
+        Print the explicit provider selector configured for that consumer and
+        facility.
+
+    provider bind <consumer> <facility> <provider-selector>
+        Set or replace the explicit system-scoped consumer binding. The consumer
+        may be bound independently of package installation.
+
+    provider bind -u [--] <consumer> <facility>
+        Remove the explicit binding so the consumer inherits the facility default.
+
+DEPENDENCIES AND PROVIDERS
+    pkg install does not auto-install a missing facility provider and does not
+    select a provider merely because only one compatible provider is installed.
+
+    For each dependency, an explicit consumer binding is used when present;
+    otherwise the facility default is used. If neither exists, or the selected
+    provider is absent or incompatible, dependency resolution fails.
+
+    Provider selectors are late-bound. A package-only selector follows that
+    provider package's current/default concrete for the applicable platform class.
+    A versioned selector pins that version; an explicit osarch also pins the
+    platform class.
 
 STATE
     Mutable package state is resolved through state-path rather than reconstructed
