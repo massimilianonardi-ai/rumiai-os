@@ -14,4 +14,4 @@ esac
 
 . "$m_LIB_DIR/sys/sh/pkg-${pkg_command}.lib.sh"
 
-"pkg-${pkg_command}" "$@"
+"pkg_${pkg_command}" "$@"
