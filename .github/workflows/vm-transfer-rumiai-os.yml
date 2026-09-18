@@ -13,7 +13,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-os
-          ref: 01a3147c0b8abfb3ef25e07ca206464426d95750
+          ref: 0376b12d54d5df02a7c391db6abf5583ce392978
           path: product
           fetch-depth: 1
           persist-credentials: false
