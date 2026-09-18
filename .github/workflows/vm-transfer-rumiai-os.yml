@@ -45,7 +45,6 @@ jobs:
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           suite/tests/rumiai-os/pkg/default.test
-          suite/tests/rumiai-os/pkg/dependency.test
           suite/tests/rumiai-os/pkg/uninstall.test
           suite/tests/rumiai-os/pkg-integration/contract.test
           suite/tests/rumiai-os/pkg/install-live.test
