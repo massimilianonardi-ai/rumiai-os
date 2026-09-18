@@ -1,14 +1,14 @@
 . "$m_LIB_DIR/sys/sh/pkg-local.lib.sh"
 
-_pkg_default_command_call()
+_pkg_default_apply_call()
 {
   [ "$#" -eq 3 ] || return 2
 
   if [ -n "$3" ]
   then
-    pkg_default "$1" "$2" "$3"
+    pkg_default_apply "$1" "$2" "$3"
   else
-    pkg_default "$1" "$2"
+    pkg_default_apply "$1" "$2"
   fi
 }
 
@@ -47,7 +47,7 @@ pkg_default()
   if [ "$pkg_default_unset" -eq 1 ]
   then
     [ "$pkg_local_class_present" -eq 1 ] || return 0
-    _pkg_default_command_call "$pkg_local_pkg" "" "$pkg_local_identity_osarch" || return 1
+    _pkg_default_apply_call "$pkg_local_pkg" "" "$pkg_local_identity_osarch" || return 1
     return 0
   fi
 
@@ -55,7 +55,7 @@ pkg_default()
 
   if [ -n "$pkg_local_requested_version" ]
   then
-    _pkg_default_command_call "$pkg_local_pkg" "$pkg_local_requested_version" "$pkg_local_identity_osarch" || return 1
+    _pkg_default_apply_call "$pkg_local_pkg" "$pkg_local_requested_version" "$pkg_local_identity_osarch" || return 1
     return 0
   fi
 
