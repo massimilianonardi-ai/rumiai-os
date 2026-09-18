@@ -554,7 +554,7 @@ pkg_install()
       pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || exit 1
       _pkg_install_mkdir "$pkg_install_work_parent" || exit 1
 
-      pkg_install_work="$pkg_install_work_parent/install-$"
+      pkg_install_work="$pkg_install_work_parent/install-$$"
       [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || exit 1
       command -p -- mkdir -- "$pkg_install_work" || exit 1
 
