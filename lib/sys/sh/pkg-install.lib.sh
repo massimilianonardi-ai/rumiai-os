@@ -1,7 +1,6 @@
 . "$m_LIB_DIR/sys/sh/pkg-download.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg-extract.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg-integration.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg-default.lib.sh"
 
 _pkg_install_error()
 {
@@ -487,10 +486,10 @@ _pkg_install_one()
   if [ -n "$pkg_install_identity_osarch" ]
   then
     pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_selected_range" "$pkg_install_extract_dir" "$pkg_install_identity_osarch" || return 1
-    pkg_default "$pkg_install_pkg@$pkg_install_version!$pkg_install_identity_osarch"
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch"
   else
     pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_selected_range" "$pkg_install_extract_dir" || return 1
-    pkg_default "$pkg_install_pkg@$pkg_install_version"
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version"
   fi
 )
 
