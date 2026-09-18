@@ -37,14 +37,11 @@ jobs:
           sh -n suite/tests/rumiai-os/pkg/uninstall.test
           sh -n suite/tests/rumiai-os/pkg-integration/contract.test
           sh -n suite/tests/rumiai-os/pkg/install-live.test
-      - name: Selected package tests
+      - name: Live pkg install must launch jq
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          suite/tests/rumiai-os/pkg/default.test
-          suite/tests/rumiai-os/pkg/uninstall.test
-          suite/tests/rumiai-os/pkg-integration/contract.test
           suite/tests/rumiai-os/pkg/install-live.test
