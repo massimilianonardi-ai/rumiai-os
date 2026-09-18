@@ -38,6 +38,22 @@ jobs:
           product/m "$PWD/product/bin/sys/osarch-update"
           test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
           cd suite
-          ./rumiai-test -- rumiai-os/pkg-repository-temurin/contract.test
-          ./rumiai-test -- rumiai-os/pkg/install-live.test
-          ./rumiai-test -- external/java/install-live.test
+
+          run_one()
+          {
+            selection=$1
+            set +e
+            ./rumiai-test -- "$selection"
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]
+            then
+              log=$(find .runs -type f -path "*/logs/$selection.log" -print | LC_ALL=C sort | tail -n 1)
+              [ -z "$log" ] || cat "$log"
+              exit "$status"
+            fi
+          }
+
+          run_one rumiai-os/pkg-repository-temurin/contract.test
+          run_one rumiai-os/pkg/install-live.test
+          run_one external/java/install-live.test
