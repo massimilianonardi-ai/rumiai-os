@@ -1,0 +1,13 @@
+#!/usr/bin/env m
+
+case "$#" in
+  0)
+    "$m_BIN_SYS_DIR/osarch" update
+    ;;
+  1)
+    "$m_BIN_SYS_DIR/osarch" set "$1"
+    ;;
+  *)
+    fatal execution invalid-arguments
+    ;;
+esac

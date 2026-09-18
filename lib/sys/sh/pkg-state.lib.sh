@@ -60,6 +60,7 @@ _pkg_state_source_type_set()
   pkg_state_path=$2
   pkg_state_source_current=$pkg_state_source_root
   pkg_state_source_rest=$pkg_state_path
+  pkg_state_source_factory=artifact
 
   while :
   do
@@ -79,6 +80,10 @@ _pkg_state_source_type_set()
         elif [ -d "$pkg_state_source_current" ]
         then
           pkg_state_source_type=dir
+        elif [ ! -e "$pkg_state_source_current" ]
+        then
+          pkg_state_source_type=dir
+          pkg_state_source_factory=empty-dir
         else
           return 1
         fi
@@ -298,6 +303,33 @@ $pkg_state_materialized"
   fi
 }
 
+_pkg_state_synthesized_add()
+{
+  [ "$#" -eq 1 ] || return 2
+  if [ -n "$pkg_state_synthesized" ]
+  then
+    pkg_state_synthesized="$1
+$pkg_state_synthesized"
+  else
+    pkg_state_synthesized=$1
+  fi
+}
+
+_pkg_state_synthesized_has()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$pkg_state_synthesized" ] || return 1
+
+  while IFS= read -r pkg_state_synthesized_mapping
+  do
+    [ "$pkg_state_synthesized_mapping" = "$1" ] && return 0
+  done <<EOF_SYNTHESIZED
+$pkg_state_synthesized
+EOF_SYNTHESIZED
+
+  return 1
+}
+
 _pkg_state_dir_ensure_owned()
 {
   [ "$#" -eq 1 ] || return 2
@@ -446,7 +478,12 @@ _pkg_state_rollback()
 
       if [ -e "$pkg_state_default_path" ] || [ -L "$pkg_state_default_path" ]
       then
-        command -p -- mv -- "$pkg_state_default_path" "$pkg_state_root_path" || pkg_state_rollback_status=1
+        if _pkg_state_synthesized_has "$pkg_state_mapping"
+        then
+          command -p -- rm -rf -- "$pkg_state_default_path" || pkg_state_rollback_status=1
+        else
+          command -p -- mv -- "$pkg_state_default_path" "$pkg_state_root_path" || pkg_state_rollback_status=1
+        fi
       else
         pkg_state_rollback_status=1
       fi
@@ -492,6 +529,7 @@ _pkg_state_materialize()
   pkg_state_created_dirs=
   pkg_state_created_objects=
   pkg_state_materialized=
+  pkg_state_synthesized=
 
   _pkg_state_validate "$pkg_state_range" "$pkg_state_concrete/root" "$pkg_state_pkg" || return 1
   [ -n "$pkg_state_mappings" ] || return 0
@@ -510,6 +548,7 @@ _pkg_state_materialize()
       return 1
     }
     pkg_state_current_type=$pkg_state_source_type
+    pkg_state_current_factory=$pkg_state_source_factory
     pkg_state_source="$pkg_state_concrete/root/$pkg_state_path"
     pkg_state_default="$pkg_state_concrete/default/$pkg_state_area/$pkg_state_path"
     pkg_state_destination="$pkg_state_current_area_root/$pkg_state_path"
@@ -518,10 +557,28 @@ _pkg_state_materialize()
       _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
       return 1
     }
-    command -p -- mv -- "$pkg_state_source" "$pkg_state_default" || {
-      _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
-      return 1
-    }
+    case "$pkg_state_current_factory" in
+      artifact)
+        command -p -- mv -- "$pkg_state_source" "$pkg_state_default" || {
+          _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
+          return 1
+        }
+        ;;
+      empty-dir)
+        command -p -- mkdir -- "$pkg_state_default" || {
+          _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
+          return 1
+        }
+        _pkg_state_synthesized_add "$pkg_state_mapping" || {
+          _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
+          return 1
+        }
+        ;;
+      *)
+        _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
+        return 1
+        ;;
+    esac
     _pkg_state_materialized_add "$pkg_state_mapping" || {
       _pkg_state_rollback "$pkg_state_concrete" >/dev/null 2>&1 || :
       return 1

@@ -1,25 +1,15 @@
 NAME
-    osarch-update - materialize and select current OS/architecture command roots
+    osarch-update - compatibility interface for host platform selection
 
 SYNOPSIS
     osarch-update
 
 DESCRIPTION
-    osarch-update detects the normalized operating system and architecture using
-    the m os/architecture facility.
+    osarch-update is retained for compatibility with the previous platform
+    selection command surface. It is equivalent to:
+        osarch update
 
-    For supported combinations it ensures the corresponding sys, ext and ai
-    platform-specific bin directories exist and updates the selector symlinks:
-        bin/sys-osarch
-        bin/ext-osarch
-        bin/ai-osarch
-
-    Current normalized operating systems are linux, macos and windows. Current
-    normalized architectures are x86_64 and arm64.
-
-    Existing non-symlink objects at selector paths are not overwritten.
+    New callers should use osarch update directly.
 
 EXIT STATUS
-    0   Platform directories and selectors were updated.
-    Non-zero status indicates unsupported platform data or filesystem/update
-        failure.
+    The exit status is the status returned by osarch update.

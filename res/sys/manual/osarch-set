@@ -1,0 +1,21 @@
+NAME
+    osarch-set - compatibility interface for platform selection
+
+SYNOPSIS
+    osarch-set
+    osarch-set <osarch>
+
+DESCRIPTION
+    osarch-set is retained for compatibility with the previous platform
+    selection command surface.
+
+    With no operands it is equivalent to:
+        osarch update
+
+    With one <osarch> operand it is equivalent to:
+        osarch set <osarch>
+
+    New callers should use osarch directly.
+
+EXIT STATUS
+    The exit status is the status returned by the corresponding osarch operation.
