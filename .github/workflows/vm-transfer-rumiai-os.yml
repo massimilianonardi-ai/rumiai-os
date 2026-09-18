@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 0479206f73f658abd4bd8e226c20c14e192c3e73
+          ref: bd333e6c8b5c4cc0555de06498e3b17394b18d8a
           path: suite
           fetch-depth: 1
           persist-credentials: false
