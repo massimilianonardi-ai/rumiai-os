@@ -7,7 +7,7 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  trace-pkg-install-one:
+  diagnose-pkg-install:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout exact rumiai-os revision
@@ -28,26 +28,48 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Trace pkg install
+      - name: Diagnose clean, repeated, and unpinned install
         shell: sh
         env:
           TMPDIR: ${{ runner.temp }}
         run: |
           set -u
           test "$(git -C product rev-parse HEAD)" = "eae5a7203fab8676e5914f073c2ab9e0c124dddf" || exit 1
-          test "$(git -C suite rev-parse HEAD)" = "d2c487ecdfb672ac7343019098fda98381f5cf82" || exit 1
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-
           . suite/lib/rumiai-os-fixture.lib
-          fixture="$RUNNER_TEMP/rumiai-pkg-trace"
-          rumiai_test_fixture_rumiai_os_create "$GITHUB_WORKSPACE/product" "$fixture" || exit 1
 
-          PATH="$fixture/bin/sys:$PATH"
+          make_fixture()
+          {
+            dest=$1
+            rumiai_test_fixture_rumiai_os_create "$GITHUB_WORKSPACE/product" "$dest" || exit 90
+          }
+
+          fixture1="$RUNNER_TEMP/rumiai-pkg-repeat"
+          make_fixture "$fixture1"
+          PATH="$fixture1/bin/sys:$PATH"
           export PATH
 
+          "$fixture1/bin/sys/pkg" install 'jq@jq-1.8.2'
+          first_status=$?
+
           set +e
-          sh -x "$fixture/m" "$fixture/bin/sys/pkg" install 'jq@jq-1.8.2'
-          status=$?
+          "$fixture1/bin/sys/pkg" install 'jq@jq-1.8.2'
+          second_status=$?
           set -e
-          printf 'PKG_STATUS=%s\n' "$status"
-          exit "$status"
+
+          fixture2="$RUNNER_TEMP/rumiai-pkg-unpinned"
+          make_fixture "$fixture2"
+          old_path=$PATH
+          PATH="$fixture2/bin/sys:${PATH#*:}"
+          export PATH
+          set +e
+          "$fixture2/bin/sys/pkg" install jq
+          unpinned_status=$?
+          set -e
+          PATH=$old_path
+          export PATH
+
+          printf 'FIRST_PINNED=%s\n' "$first_status"
+          printf 'SECOND_PINNED=%s\n' "$second_status"
+          printf 'UNPINNED=%s\n' "$unpinned_status"
+
+          exit 0
