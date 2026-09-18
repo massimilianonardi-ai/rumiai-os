@@ -4,7 +4,10 @@
 
 _pkg_install_error()
 {
-  log error execution execution-failed operation pkg-install reason "$1"
+  [ "$#" -ge 1 ] || return 2
+  pkg_install_error_reason=$1
+  shift
+  log error execution execution-failed operation pkg-install reason "$pkg_install_error_reason" "$@"
 }
 
 _pkg_install_scalar()
@@ -453,6 +456,18 @@ _pkg_install_one()
     [ "$pkg_install_version" = "$pkg_install_requested_version" ] || return 1
   fi
 
+  _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || return 1
+  if [ -e "$pkg_integration_concrete" ] || [ -L "$pkg_integration_concrete" ]
+  then
+    [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
+    _pkg_default_read_current "$pkg_integration_selector" || return 1
+    _pkg_default_current_valid "$pkg_default_current" || return 1
+    _pkg_install_error already-installed \
+      already-installed "$pkg_integration_concrete_name" \
+      current-default "$pkg_default_current"
+    return 3
+  fi
+
   _pkg_install_resolve_range \
     "$pkg_install_ranges" \
     "$pkg_install_repository_dir" \
@@ -515,41 +530,64 @@ pkg_install()
   [ "$#" -ge 1 ] || return 2
 
   umask 077
-  _pkg_install_mkdir "$m_PKG_DIR" || exit 1
-
-  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || exit 1
-  _pkg_install_mkdir "$pkg_install_work_parent" || exit 1
-
-  pkg_install_work="$pkg_install_work_parent/install-$$"
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || exit 1
-  command -p -- mkdir -- "$pkg_install_work" || exit 1
+  pkg_install_work=
+  pkg_install_work_parent=
+  pkg_install_initialized=0
+  pkg_install_failed=0
+  pkg_install_index=0
   trap '_pkg_install_cleanup' 0
   trap 'exit 130' HUP INT TERM
 
-  pkg_install_catalog="$pkg_install_work/catalog"
-  _pkg_install_mkdir "$pkg_install_catalog" || exit 1
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || { _pkg_install_error catalog-snapshot-failed; exit 1; }
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || exit 1
-
   for pkg_install_operand
   do
-    _pkg_install_operand_parse "$pkg_install_operand" || exit 2
-  done
+    if ! _pkg_install_operand_parse "$pkg_install_operand"
+    then
+      _pkg_install_error invalid-operand operand "$pkg_install_operand"
+      pkg_install_failed=1
+      continue
+    fi
 
-  pkg_install_index=0
-  for pkg_install_operand
-  do
+    if [ "$pkg_install_initialized" -eq 0 ]
+    then
+      _pkg_install_mkdir "$m_PKG_DIR" || exit 1
+
+      pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || exit 1
+      _pkg_install_mkdir "$pkg_install_work_parent" || exit 1
+
+      pkg_install_work="$pkg_install_work_parent/install-$"
+      [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || exit 1
+      command -p -- mkdir -- "$pkg_install_work" || exit 1
+
+      pkg_install_catalog="$pkg_install_work/catalog"
+      _pkg_install_mkdir "$pkg_install_catalog" || exit 1
+      pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || { _pkg_install_error catalog-snapshot-failed; exit 1; }
+      _pkg_install_git_head_valid "$pkg_install_catalog_head" || exit 1
+      pkg_install_initialized=1
+    fi
+
     pkg_install_index=$((pkg_install_index + 1))
     pkg_install_item="$pkg_install_work/item-$pkg_install_index"
     command -p -- mkdir -- "$pkg_install_item" || exit 1
     _pkg_install_one "$pkg_install_catalog" "$pkg_install_operand" "$pkg_install_item"
     pkg_install_status=$?
-    if [ "$pkg_install_status" -ne 0 ]
-    then
-      _pkg_install_error package-failed
-      exit 1
-    fi
+
+    case "$pkg_install_status" in
+      0)
+        ;;
+      2)
+        _pkg_install_error invalid-operand operand "$pkg_install_operand"
+        pkg_install_failed=1
+        ;;
+      3)
+        pkg_install_failed=1
+        ;;
+      *)
+        _pkg_install_error package-failed operand "$pkg_install_operand"
+        pkg_install_failed=1
+        ;;
+    esac
   done
 
+  [ "$pkg_install_failed" -eq 0 ] || exit 1
   exit 0
 )

@@ -3,23 +3,30 @@ NAME
 
 DESCRIPTION
     pkg-install.lib.sh implements the installation orchestration used by the
-    public pkg install command. It validates every package operand before
-    installation side effects, materializes the managed package store on demand,
-    snapshots the package catalog, resolves package repository metadata and
-    artifacts, downloads and verifies artifacts, extracts/materializes them, and
-    delegates final package integration to the package integration facilities.
+    public pkg install command. It processes package operands independently where
+    possible, materializes the managed package store on demand, snapshots the
+    package catalog, resolves package repository metadata and artifacts, downloads
+    and verifies artifacts, extracts/materializes them, and delegates final
+    package integration to the package integration facilities.
 
 FUNCTIONS
     pkg_install <package-spec>...
         Install one or more package specifications through the real package
-        pipeline. Every operand is validated before the package store or temporary
-        installation state is materialized. If $m_PKG_DIR does not exist after
-        validation, it is created before package integration begins. An existing
-        $m_PKG_DIR must be a real directory rather than a symbolic link.
+        pipeline. Processing is best-effort per operand: invalid, unavailable,
+        already-installed or otherwise failed operands emit an error while later
+        independently installable operands continue to be attempted.
 
-        Returns 0 when all requested packages are installed, 1 when installation
-        cannot be completed, and 2 when the invocation or a package operand is
-        invalid.
+        If the resolved concrete already exists, pkg_install does not reinstall
+        it. The error reports the already-installed concrete identity and the
+        current/default concrete identity for that class when present.
+
+        $m_PKG_DIR and temporary installation state are materialized only when the
+        first syntactically valid operand is processed. An invocation containing
+        only invalid operands therefore creates neither.
+
+        Returns 0 when every requested operand succeeds, 1 when at least one
+        operand fails (including a partially successful batch), and 2 when the
+        invocation itself is invalid.
 
 DEPENDENCIES
     The library runs inside the m bootstrap environment and uses the package

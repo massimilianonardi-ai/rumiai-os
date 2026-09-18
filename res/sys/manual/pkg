@@ -31,9 +31,17 @@ PACKAGE OPERANDS
 COMMANDS
     install <package-spec>...
         Install one or more requested packages through the current catalog and
-        package integration pipeline. After all package operands pass syntax
-        validation, materialize $m_PKG_DIR on demand when it does not yet exist.
-        Invalid package operands do not create the package store.
+        package integration pipeline. Processing is best-effort per operand: a
+        failed operand emits an error and does not prevent later independently
+        installable operands from being attempted.
+
+        An already installed concrete is not reinstalled. Its error diagnostic
+        identifies the installed concrete and the current/default concrete for
+        the same package/platform class when one exists.
+
+        $m_PKG_DIR is materialized on demand when the first syntactically valid
+        install operand is processed. An invocation containing only invalid
+        package operands does not create the package store.
 
     uninstall <package-spec>...
         Remove one or more installed package versions. When a version is omitted,
@@ -67,9 +75,13 @@ FILES
 
 EXIT STATUS
     0   The requested operation succeeded.
-    1   The requested package operation could not be completed or the requested
-        installed class/default could not be resolved where required.
-    2   The command, subcommand, option, or package operand is invalid.
+    1   The requested package operation could not be completed, at least one
+        install operand failed in a best-effort batch, or the requested installed
+        class/default could not be resolved where required. Successful operands in
+        a partially failed install batch remain installed.
+    2   The command or subcommand invocation itself is invalid. For pkg install,
+        an invalid package operand inside a non-empty batch is reported per
+        operand and contributes to status 1 rather than aborting the batch.
 
     Individual package execution launched after integration has its own exit status;
     that is not the exit status of this pkg management command.
