@@ -1,4 +1,4 @@
-name: chromium-permanent-install-test
+name: pkg-state-empty-directory-regression
 
 on:
   workflow_dispatch:
@@ -7,13 +7,13 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  chromium:
+  state:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-os
-          ref: 8177082a4254774db96d94aff2aff3d971da659f
+          ref: fe2151999ffba98d9921e1c62662c270adc0cfa0
           path: product
           fetch-depth: 1
           persist-credentials: false
@@ -21,12 +21,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 73952c0cc34dddfdb2b0d640b7687c44edefc8f2
+          ref: bb9dabd2d6d256c956f8457daaa54ab06ffc29c8
           path: suite
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Run permanent Chromium install test
+      - name: Run package state regression
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
@@ -34,16 +34,14 @@ jobs:
           set -eu
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
-          product/m "$PWD/product/bin/sys/osarch-update"
-          test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
           cd suite
           set +e
-          ./rumiai-test -- external/chromium/install-live.test
+          ./rumiai-test -- rumiai-os/pkg/state.test
           status=$?
           set -e
           if [ "$status" -ne 0 ]
           then
-            log=$(find .runs -type f -path '*/logs/external/chromium/install-live.test.log' -print | LC_ALL=C sort | tail -n 1)
+            log=$(find .runs -type f -path '*/logs/rumiai-os/pkg/state.test.log' -print | LC_ALL=C sort | tail -n 1)
             [ -z "$log" ] || cat "$log"
           fi
           exit "$status"
