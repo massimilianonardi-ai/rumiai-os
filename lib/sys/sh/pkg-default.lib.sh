@@ -12,13 +12,13 @@ _pkg_default_command_call()
   fi
 }
 
-pkg_default_command()
+pkg_default()
 (
-  pkg_default_command_unset=0
+  pkg_default_unset=0
 
   case "${1-}" in
     -u)
-      pkg_default_command_unset=1
+      pkg_default_unset=1
       shift
       ;;
     --)
@@ -29,7 +29,7 @@ pkg_default_command()
       ;;
   esac
 
-  if [ "$pkg_default_command_unset" -eq 1 ] && [ "${1-}" = "--" ]
+  if [ "$pkg_default_unset" -eq 1 ] && [ "${1-}" = "--" ]
   then
     shift
   fi
@@ -37,14 +37,14 @@ pkg_default_command()
   [ "$#" -eq 1 ] || return 2
 
   _pkg_local_operand_parse "$1" || return 2
-  if [ "$pkg_default_command_unset" -eq 1 ] && [ -n "$pkg_local_requested_version" ]
+  if [ "$pkg_default_unset" -eq 1 ] && [ -n "$pkg_local_requested_version" ]
   then
     return 2
   fi
 
   _pkg_local_class_select "$pkg_local_pkg" "$pkg_local_requested_osarch" || return 1
 
-  if [ "$pkg_default_command_unset" -eq 1 ]
+  if [ "$pkg_default_unset" -eq 1 ]
   then
     [ "$pkg_local_class_present" -eq 1 ] || return 0
     _pkg_default_command_call "$pkg_local_pkg" "" "$pkg_local_identity_osarch" || return 1

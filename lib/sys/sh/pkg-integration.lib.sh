@@ -559,7 +559,7 @@ pkg_deintegrate()
   return 0
 )
 
-pkg_default()
+pkg_default_apply()
 (
   [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
   pkg_default_pkg=$1
