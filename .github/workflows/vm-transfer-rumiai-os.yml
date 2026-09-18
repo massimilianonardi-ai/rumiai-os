@@ -1,4 +1,4 @@
-name: pkg-install-diagnostics
+name: keycloak-archive-shape
 
 on:
   workflow_dispatch:
@@ -7,82 +7,19 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  chrome-adapter:
+  inspect:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-os
-          ref: 7eaebea5a134efb033872e2db3357834ed2fa03f
-          path: product
-          fetch-depth: 1
-          persist-credentials: false
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-tests
-          ref: 9df1a6f8164b68e3b20210ee1d4c1c2e176f46b6
-          path: suite
-          fetch-depth: 1
-          persist-credentials: false
-      - name: Chrome adapter regression
-        shell: sh
-        env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
-        run: |
-          set -eu
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          suite/tests/rumiai-os/pkg-repository-chrome/versions.test
-          suite/tests/rumiai-os/pkg-repository-chrome/artifact.test
-
-  maven-retry:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-os
-          ref: 7eaebea5a134efb033872e2db3357834ed2fa03f
-          path: product
-          fetch-depth: 1
-          persist-credentials: false
-      - name: Install Maven with Java provider
+      - name: Compare Keycloak release archives
         shell: sh
         run: |
           set -eu
-          cd product
-          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          ./m "$PWD/bin/sys/osarch-update"
-          ./m pkg install graalvm
-          java_identity=$(./m pkg default graalvm)
-          ./m pkg install maven
-          identity=$(./m pkg default maven)
-          [ "$(cat "pkg/$identity/binding/java")" = "$java_identity" ]
-          [ -f "pkg/$identity/env" ]
-          ./m mvn --version
-          printf 'PASS package=maven identity=%s java=%s\n' "$identity" "$java_identity"
-
-  keycloak-trace:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-os
-          ref: 7eaebea5a134efb033872e2db3357834ed2fa03f
-          path: product
-          fetch-depth: 1
-          persist-credentials: false
-      - name: Trace Keycloak install
-        shell: bash
-        run: |
-          set -eu
-          cd product
-          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          ./m "$PWD/bin/sys/osarch-update"
-          ./m pkg install graalvm
-          set +e
-          PS4='+TRACE ${LINENO}: '
-          sh -x ./m pkg install keycloak >../keycloak.out 2>../keycloak.trace
-          status=$?
-          set -e
-          printf 'KEYCLOAK_STATUS=%s\n' "$status"
-          tail -n 500 ../keycloak.trace
-          exit "$status"
+          base=https://github.com/keycloak/keycloak/releases/download/26.7.4
+          curl -fL -o keycloak.tar.gz "$base/keycloak-26.7.4.tar.gz"
+          curl -fL -o keycloak.zip "$base/keycloak-26.7.4.zip"
+          printf '%s\n' 'TAR_DATA_BEGIN'
+          tar -tzf keycloak.tar.gz | grep '^keycloak-26.7.4/data\(/|$\)' || :
+          printf '%s\n' 'TAR_DATA_END'
+          printf '%s\n' 'ZIP_DATA_BEGIN'
+          unzip -Z1 keycloak.zip | grep '^keycloak-26.7.4/data\(/|$\)' || :
+          printf '%s\n' 'ZIP_DATA_END'
