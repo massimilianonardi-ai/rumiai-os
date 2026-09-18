@@ -49,9 +49,9 @@ _pkg_uninstall_one()
   then
     if [ -n "$pkg_uninstall_identity_osarch" ]
     then
-      pkg_default_apply $pkg_uninstall_pkg" "" "$pkg_uninstall_identity_osarch" || return 1
+      pkg_default_apply "$pkg_uninstall_pkg" "" "$pkg_uninstall_identity_osarch" || return 1
     else
-      pkg_default_apply $pkg_uninstall_pkg" "" || return 1
+      pkg_default_apply "$pkg_uninstall_pkg" "" || return 1
     fi
   fi
 
