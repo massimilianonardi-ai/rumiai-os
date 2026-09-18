@@ -113,6 +113,194 @@ _pkg_integration_env_validate()
   command -p -- sh -n "$1" >/dev/null 2>&1
 }
 
+_pkg_integration_relative_path_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | /* | */ | *//* | *'
+'*) return 1 ;;
+  esac
+  case "/$1/" in
+    */./* | */../*) return 1 ;;
+  esac
+}
+
+_pkg_integration_facility_declared()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_facility_file="$1/facility"
+  pkg_integration_required_facility=$2
+
+  _pkg_facility_file_validate "$pkg_integration_facility_file" || return 1
+  while IFS= read -r pkg_integration_facility_line
+  do
+    _pkg_facility_line_parse "$pkg_integration_facility_line" || return 1
+    [ "$pkg_facility_name" = "$pkg_integration_required_facility" ] && return 0
+  done < "$pkg_integration_facility_file"
+  return 1
+}
+
+_pkg_integration_facility_cmd_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_projection_range=$1
+  pkg_integration_projection_root=$2
+  pkg_integration_projection_dir="$pkg_integration_projection_range/facility-cmd"
+
+  if [ ! -e "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ]
+  then
+    return 0
+  fi
+
+  [ -d "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ] || return 1
+  _pkg_integration_dir_entries_empty "$pkg_integration_projection_dir" && return 1
+
+  for pkg_integration_facility_dir in "$pkg_integration_projection_dir"/*
+  do
+    [ -e "$pkg_integration_facility_dir" ] || [ -L "$pkg_integration_facility_dir" ] || continue
+    pkg_integration_projection_facility=${pkg_integration_facility_dir##*/}
+    _pkg_facility_name_valid "$pkg_integration_projection_facility" || return 1
+    _pkg_integration_facility_declared "$pkg_integration_projection_range" "$pkg_integration_projection_facility" || return 1
+    [ -d "$pkg_integration_facility_dir" ] && [ ! -L "$pkg_integration_facility_dir" ] || return 1
+    _pkg_integration_dir_entries_empty "$pkg_integration_facility_dir" && return 1
+
+    for pkg_integration_descriptor in "$pkg_integration_facility_dir"/*
+    do
+      [ -e "$pkg_integration_descriptor" ] || [ -L "$pkg_integration_descriptor" ] || continue
+      pkg_integration_projection_command=${pkg_integration_descriptor##*/}
+      _pkg_integration_command_name_valid "$pkg_integration_projection_command" || return 1
+      _pkg_integration_link_target_read "$pkg_integration_descriptor" || return 1
+      _pkg_integration_relative_path_valid "$pkg_integration_link_target" || return 1
+      [ -e "$pkg_integration_projection_root/$pkg_integration_link_target" ] || [ -L "$pkg_integration_projection_root/$pkg_integration_link_target" ] || return 1
+      readpathce pkg_integration_projection_resolved "$pkg_integration_projection_root/$pkg_integration_link_target" || return 1
+      case "$pkg_integration_projection_resolved" in
+        "$pkg_integration_projection_root"/*) : ;;
+        *) return 1 ;;
+      esac
+      [ -f "$pkg_integration_projection_resolved" ] && [ -x "$pkg_integration_projection_resolved" ] || return 1
+    done
+
+    for pkg_integration_hidden in "$pkg_integration_facility_dir"/.[!.]* "$pkg_integration_facility_dir"/..?*
+    do
+      [ -e "$pkg_integration_hidden" ] || [ -L "$pkg_integration_hidden" ] || continue
+      return 1
+    done
+  done
+
+  for pkg_integration_hidden in "$pkg_integration_projection_dir"/.[!.]* "$pkg_integration_projection_dir"/..?*
+  do
+    [ -e "$pkg_integration_hidden" ] || [ -L "$pkg_integration_hidden" ] || continue
+    return 1
+  done
+}
+
+_pkg_integration_env_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
+  esac
+}
+
+_pkg_integration_facility_env_descriptor_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_projection_descriptor=$1
+  pkg_integration_projection_root=$2
+
+  case "$pkg_integration_projection_descriptor" in
+    root | literal)
+      return 0
+      ;;
+    "root-path "*)
+      pkg_integration_projection_relative=${pkg_integration_projection_descriptor#root-path }
+      _pkg_integration_relative_path_valid "$pkg_integration_projection_relative" || return 1
+      [ -e "$pkg_integration_projection_root/$pkg_integration_projection_relative" ] || [ -L "$pkg_integration_projection_root/$pkg_integration_projection_relative" ] || return 1
+      readpathce pkg_integration_projection_resolved "$pkg_integration_projection_root/$pkg_integration_projection_relative" || return 1
+      case "$pkg_integration_projection_resolved" in
+        "$pkg_integration_projection_root"/*) return 0 ;;
+        *) return 1 ;;
+      esac
+      ;;
+    "literal "*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_pkg_integration_facility_env_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_projection_range=$1
+  pkg_integration_projection_root=$2
+  pkg_integration_projection_dir="$pkg_integration_projection_range/facility-env"
+
+  if [ ! -e "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ]
+  then
+    return 0
+  fi
+
+  [ -d "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ] || return 1
+  _pkg_integration_dir_entries_empty "$pkg_integration_projection_dir" && return 1
+  pkg_integration_projection_tab="$(printf '\t')"
+
+  for pkg_integration_env_file in "$pkg_integration_projection_dir"/*
+  do
+    [ -e "$pkg_integration_env_file" ] || [ -L "$pkg_integration_env_file" ] || continue
+    pkg_integration_projection_facility=${pkg_integration_env_file##*/}
+    _pkg_facility_name_valid "$pkg_integration_projection_facility" || return 1
+    _pkg_integration_facility_declared "$pkg_integration_projection_range" "$pkg_integration_projection_facility" || return 1
+    [ -f "$pkg_integration_env_file" ] && [ ! -L "$pkg_integration_env_file" ] && [ -r "$pkg_integration_env_file" ] && [ ! -x "$pkg_integration_env_file" ] || return 1
+
+    pkg_integration_env_original="$(
+      command -p -- cat -- "$pkg_integration_env_file" || exit 1
+      printf -- '%s' x
+    )" || return 1
+    pkg_integration_env_sorted="$(
+      LC_ALL=C command -p -- sort < "$pkg_integration_env_file" || exit 1
+      printf -- '%s' x
+    )" || return 1
+    [ "$pkg_integration_env_original" = "$pkg_integration_env_sorted" ] || return 1
+
+    pkg_integration_projection_count=0
+    pkg_integration_projection_previous=
+    while IFS= read -r pkg_integration_projection_line
+    do
+      case "$pkg_integration_projection_line" in
+        *"$pkg_integration_projection_tab"*) : ;;
+        *) return 1 ;;
+      esac
+      pkg_integration_projection_variable=${pkg_integration_projection_line%%"$pkg_integration_projection_tab"*}
+      pkg_integration_projection_descriptor=${pkg_integration_projection_line#*"$pkg_integration_projection_tab"}
+      case "$pkg_integration_projection_descriptor" in
+        *"$pkg_integration_projection_tab"*) return 1 ;;
+      esac
+      _pkg_integration_env_name_valid "$pkg_integration_projection_variable" || return 1
+      [ "$pkg_integration_projection_variable" != "$pkg_integration_projection_previous" ] || return 1
+      pkg_integration_projection_previous=$pkg_integration_projection_variable
+      _pkg_integration_facility_env_descriptor_validate "$pkg_integration_projection_descriptor" "$pkg_integration_projection_root" || return 1
+      pkg_integration_projection_count=$((pkg_integration_projection_count + 1))
+    done < "$pkg_integration_env_file"
+    [ "$pkg_integration_projection_count" -gt 0 ] || return 1
+  done
+
+  for pkg_integration_hidden in "$pkg_integration_projection_dir"/.[!.]* "$pkg_integration_projection_dir"/..?*
+  do
+    [ -e "$pkg_integration_hidden" ] || [ -L "$pkg_integration_hidden" ] || continue
+    return 1
+  done
+}
+
+_pkg_integration_facility_projection_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  _pkg_integration_facility_cmd_validate "$1" "$2" || return 1
+  _pkg_integration_facility_env_validate "$1" "$2"
+}
+
 _pkg_integration_validate_definition()
 {
   [ "$#" -eq 2 ] || return 2
@@ -141,6 +329,9 @@ _pkg_integration_validate_definition()
       env)
         _pkg_integration_env_validate "$pkg_integration_entry" || return 1
         ;;
+      facility-cmd | facility-env)
+        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        ;;
       setuid_root)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         ;;
@@ -160,6 +351,8 @@ _pkg_integration_validate_definition()
         ;;
     esac
   done
+
+  _pkg_integration_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
 
   [ "$pkg_integration_have_cmd" -eq "$pkg_integration_have_link" ] || return 1
   [ "$pkg_integration_have_cmd" -eq 1 ] || return 0
@@ -224,6 +417,41 @@ _pkg_integration_materialize_commands()
     _pkg_integration_link_target_read "$pkg_integration_range/link/$pkg_integration_command" || return 1
     command -p -- ln -s "../root/$pkg_integration_link_target" "$pkg_integration_concrete/link/$pkg_integration_command" || return 1
   done
+}
+
+_pkg_integration_materialize_facility_projection()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_range=$1
+  pkg_integration_concrete=$2
+
+  if [ -d "$pkg_integration_range/facility-cmd" ]
+  then
+    command -p -- mkdir "$pkg_integration_concrete/facility-cmd" || return 1
+    for pkg_integration_facility_dir in "$pkg_integration_range/facility-cmd"/*
+    do
+      [ -d "$pkg_integration_facility_dir" ] || continue
+      pkg_integration_projection_facility=${pkg_integration_facility_dir##*/}
+      command -p -- mkdir "$pkg_integration_concrete/facility-cmd/$pkg_integration_projection_facility" || return 1
+      for pkg_integration_descriptor in "$pkg_integration_facility_dir"/*
+      do
+        [ -f "$pkg_integration_descriptor" ] || continue
+        pkg_integration_projection_command=${pkg_integration_descriptor##*/}
+        _pkg_integration_link_target_read "$pkg_integration_descriptor" || return 1
+        command -p -- ln -s "../../root/$pkg_integration_link_target" "$pkg_integration_concrete/facility-cmd/$pkg_integration_projection_facility/$pkg_integration_projection_command" || return 1
+      done
+    done
+  fi
+
+  if [ -d "$pkg_integration_range/facility-env" ]
+  then
+    command -p -- mkdir "$pkg_integration_concrete/facility-env" || return 1
+    for pkg_integration_env_file in "$pkg_integration_range/facility-env"/*
+    do
+      [ -f "$pkg_integration_env_file" ] || continue
+      command -p -- cp -- "$pkg_integration_env_file" "$pkg_integration_concrete/facility-env/${pkg_integration_env_file##*/}" || return 1
+    done
+  fi
 }
 
 _pkg_integration_materialize_env()
@@ -456,9 +684,20 @@ pkg_integrate()
     return 1
   fi
 
+  if ! _pkg_integration_materialize_facility_projection "$pkg_integrate_range" "$pkg_integration_concrete"
+  then
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" 2>/dev/null
+    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
+    then
+      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
+    fi
+    _pkg_integration_error pkg-integrate facility-projection-materialization-failed
+    return 1
+  fi
+
   if ! _pkg_dependency_materialize "$pkg_integrate_range/dependency" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -469,7 +708,7 @@ pkg_integrate()
 
   if ! _pkg_state_materialize "$pkg_integrate_range" "$pkg_integration_concrete" "$pkg_integrate_pkg"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -493,7 +732,7 @@ pkg_integrate()
     fi
     [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
 
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
@@ -517,7 +756,7 @@ pkg_integrate()
     fi
     [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
 
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/dependency" 2>/dev/null
+    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/dependency" 2>/dev/null
     if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
     then
       command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
