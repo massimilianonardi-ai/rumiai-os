@@ -1,93 +1,13 @@
 #!/usr/bin/env m
 
-osarch_set_update_link()
-{
-  osarch_set_link="$1"
-  osarch_set_target="$2"
-
-  if [ -e "$osarch_set_link" ] && [ ! -L "$osarch_set_link" ]
-  then
-    return "2"
-  fi
-
-  osarch_set_tmp="${osarch_set_link}.tmp.$$"
-  command -p -- rm -f "$osarch_set_tmp" || return "1"
-  command -p -- ln -s "$osarch_set_target" "$osarch_set_tmp" || return "1"
-  command -p -- rm -f "$osarch_set_link" || {
-    command -p -- rm -f "$osarch_set_tmp" 2>/dev/null || :
-    return "1"
-  }
-  command -p -- mv "$osarch_set_tmp" "$osarch_set_link" || {
-    command -p -- rm -f "$osarch_set_tmp" 2>/dev/null || :
-    return "1"
-  }
-}
-
-[ "$#" -le 1 ] || fatal execution invalid-arguments
-
-if [ "$#" -eq 0 ]
-then
-  . "$m_LIB_DIR/sys/sh/osarch.lib.sh"
-
-  case "$m_OSARCH_OS" in
-    linux|macos|windows) :;;
-    *) fatal system osarch-update-failure os "$m_OSARCH_OS";;
-  esac
-
-  case "$m_OSARCH_ARCH" in
-    x86_64|arm64) :;;
-    *) fatal system osarch-update-failure arch "$m_OSARCH_ARCH";;
-  esac
-
-  osarch_set_requested="$m_OSARCH"
-else
-  osarch_set_requested="$1"
-
-  case "$osarch_set_requested" in
-    linux-x86_64|linux-arm64|macos-x86_64|macos-arm64|windows-x86_64|windows-arm64) :;;
-    *) fatal execution invalid-arguments osarch "$osarch_set_requested";;
-  esac
-fi
-
-osarch_set_sys_target="sys-$osarch_set_requested"
-osarch_set_ext_target="ext-$osarch_set_requested"
-osarch_set_ai_target="ai-$osarch_set_requested"
-osarch_set_sys_dir="$m_BIN_DIR/$osarch_set_sys_target"
-osarch_set_ext_dir="$m_BIN_DIR/$osarch_set_ext_target"
-osarch_set_ai_dir="$m_BIN_DIR/$osarch_set_ai_target"
-osarch_set_ai_link="$m_BIN_DIR/ai-osarch"
-
-for osarch_set_link in "$m_BIN_SYS_OSARCH_DIR" "$m_BIN_EXT_OSARCH_DIR" "$osarch_set_ai_link"
-do
-  if [ -e "$osarch_set_link" ] && [ ! -L "$osarch_set_link" ]
-  then
-    log error filesystem path-invalid path "$osarch_set_link"
-    exit "1"
-  fi
-done
-
-command -p -- mkdir -p "$osarch_set_sys_dir" "$osarch_set_ext_dir" "$osarch_set_ai_dir" || fatal execution execution-failed operation "osarch-directory-create"
-
-osarch_set_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_set_sys_target"
-osarch_set_status="$?"
-case "$osarch_set_status" in
-  0) :;;
-  2) fatal filesystem path-invalid path "$m_BIN_SYS_OSARCH_DIR";;
-  *) fatal execution execution-failed operation "osarch-link-update";;
-esac
-
-osarch_set_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_set_ext_target"
-osarch_set_status="$?"
-case "$osarch_set_status" in
-  0) :;;
-  2) fatal filesystem path-invalid path "$m_BIN_EXT_OSARCH_DIR";;
-  *) fatal execution execution-failed operation "osarch-link-update";;
-esac
-
-osarch_set_update_link "$osarch_set_ai_link" "$osarch_set_ai_target"
-osarch_set_status="$?"
-case "$osarch_set_status" in
-  0) :;;
-  2) fatal filesystem path-invalid path "$osarch_set_ai_link";;
-  *) fatal execution execution-failed operation "osarch-link-update";;
+case "$#" in
+  0)
+    "$m_BIN_SYS_DIR/osarch" update
+    ;;
+  1)
+    "$m_BIN_SYS_DIR/osarch" set "$1"
+    ;;
+  *)
+    fatal execution invalid-arguments
+    ;;
 esac

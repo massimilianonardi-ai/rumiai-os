@@ -1,40 +1,21 @@
 NAME
-    osarch-set - select active OS/architecture command roots
+    osarch-set - compatibility interface for platform selection
 
 SYNOPSIS
     osarch-set
     osarch-set <osarch>
 
 DESCRIPTION
-    osarch-set selects the platform-specific sys, ext and ai command roots.
+    osarch-set is retained for compatibility with the previous platform
+    selection command surface.
 
-    With no operands, it detects the operating system and architecture through
-    the m OS/architecture facility and selects the resulting normalized osarch.
+    With no operands it is equivalent to:
+        osarch update
 
-    With one <osarch> operand, it selects that exact supported normalized
-    identity instead of detecting the host. The identity has the form:
-        <platform>-<architecture>
+    With one <osarch> operand it is equivalent to:
+        osarch set <osarch>
 
-    Current normalized platforms are linux, macos and windows. Current
-    normalized architectures are x86_64 and arm64.
-
-    Before changing selectors, osarch-set rejects any selector pathname occupied
-    by a non-symlink object. It then ensures the corresponding directories exist:
-        bin/sys-<osarch>
-        bin/ext-<osarch>
-        bin/ai-<osarch>
-
-    It creates or updates these relative selector symlinks:
-        bin/sys-osarch -> sys-<osarch>
-        bin/ext-osarch -> ext-<osarch>
-        bin/ai-osarch  -> ai-<osarch>
-
-    Successful selection produces no output.
-
-    osarch-update is the compatibility command for detected-host selection and
-    is equivalent to invoking osarch-set without operands.
+    New callers should use osarch directly.
 
 EXIT STATUS
-    0   Platform directories and selectors were updated.
-    Non-zero status indicates invalid arguments, unsupported detected platform
-        data, a selector conflict or filesystem/update failure.
+    The exit status is the status returned by the corresponding osarch operation.
