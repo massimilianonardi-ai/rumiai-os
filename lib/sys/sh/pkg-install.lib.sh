@@ -500,50 +500,54 @@ _pkg_install_cleanup()
   fi
 }
 
+_pkg_install_mkdir()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  command -p -- mkdir -p -- "$1" || return 2
+  [ -d "$1" ] && [ ! -L "$1" ] || return 3
+}
+
 pkg_install()
 (
   [ "$#" -ge 1 ] || return 2
 
-  for pkg_install_operand
-  do
-    _pkg_install_operand_parse "$pkg_install_operand" || return 2
-  done
-
   umask 077
-  command -p -- mkdir -p -- "$m_PKG_DIR" || return 1
-  [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
+  _pkg_install_mkdir "$m_PKG_DIR" || exit 1
 
-  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
-  command -p -- mkdir -p -- "$pkg_install_work_parent" || return 1
-  [ -d "$pkg_install_work_parent" ] && [ ! -L "$pkg_install_work_parent" ] || return 1
+  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || exit 1
+  _pkg_install_mkdir "$pkg_install_work_parent" || exit 1
+
   pkg_install_work="$pkg_install_work_parent/install-$$"
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 1
-  command -p -- mkdir -- "$pkg_install_work" || return 1
+  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || exit 1
+  command -p -- mkdir -- "$pkg_install_work" || exit 1
   trap '_pkg_install_cleanup' 0
   trap 'exit 130' HUP INT TERM
 
   pkg_install_catalog="$pkg_install_work/catalog"
-  command -p -- mkdir -- "$pkg_install_catalog" || return 1
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || {
-    _pkg_install_error catalog-snapshot-failed
-    return 1
-  }
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 1
+  _pkg_install_mkdir "$pkg_install_catalog" || exit 1
+  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || { _pkg_install_error catalog-snapshot-failed; exit 1; }
+  _pkg_install_git_head_valid "$pkg_install_catalog_head" || exit 1
+
+  for pkg_install_operand
+  do
+    _pkg_install_operand_parse "$pkg_install_operand" || exit 2
+  done
 
   pkg_install_index=0
   for pkg_install_operand
   do
     pkg_install_index=$((pkg_install_index + 1))
     pkg_install_item="$pkg_install_work/item-$pkg_install_index"
-    command -p -- mkdir -- "$pkg_install_item" || return 1
+    command -p -- mkdir -- "$pkg_install_item" || exit 1
     _pkg_install_one "$pkg_install_catalog" "$pkg_install_operand" "$pkg_install_item"
     pkg_install_status=$?
     if [ "$pkg_install_status" -ne 0 ]
     then
       _pkg_install_error package-failed
-      return 1
+      exit 1
     fi
   done
 
-  return 0
+  exit 0
 )
