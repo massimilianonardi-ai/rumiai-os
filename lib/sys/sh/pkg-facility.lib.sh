@@ -244,6 +244,341 @@ _pkg_facility_provider_remove()
   done < "$pkg_facility_file"
 }
 
+_pkg_facility_command_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | [!abcdefghijklmnopqrstuvwxyz0123456789]* | *[!abcdefghijklmnopqrstuvwxyz0123456789._-]* | *[._-]) return 1 ;;
+  esac
+}
+
+_pkg_facility_env_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
+  esac
+}
+
+_pkg_facility_scalar_read()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -x "$1" ] || return 1
+
+  pkg_facility_scalar=
+  pkg_facility_scalar_extra=
+  {
+    IFS= read -r pkg_facility_scalar || return 1
+    IFS= read -r pkg_facility_scalar_extra
+    pkg_facility_scalar_second_status=$?
+  } < "$1"
+
+  [ "$pkg_facility_scalar_second_status" -ne 0 ] || return 1
+  [ -z "$pkg_facility_scalar_extra" ] || return 1
+
+  pkg_facility_scalar_actual="$(command -p -- wc -c < "$1")" || return 1
+  pkg_facility_scalar_expected="$(printf -- '%s\n' "$pkg_facility_scalar" | command -p -- wc -c)" || return 1
+  [ "$pkg_facility_scalar_actual" = "$pkg_facility_scalar_expected" ]
+}
+
+_pkg_facility_declares()
+{
+  [ "$#" -eq 2 ] || return 2
+  _pkg_facility_file_validate "$1" || return 1
+  _pkg_facility_name_valid "$2" || return 1
+
+  while IFS= read -r pkg_facility_declaration
+  do
+    _pkg_facility_line_parse "$pkg_facility_declaration" || return 1
+    [ "$pkg_facility_name" = "$2" ] && return 0
+  done < "$1"
+
+  return 1
+}
+
+_pkg_facility_relative_path_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_projection_root=$1
+  pkg_facility_projection_relative=$2
+
+  case "$pkg_facility_projection_relative" in
+    "" | /* | *"/" | *//* | *'
+'*) return 1 ;;
+  esac
+
+  readpathce pkg_facility_projection_resolved "$pkg_facility_projection_root/$pkg_facility_projection_relative" || return 1
+  case "$pkg_facility_projection_resolved" in
+    "$pkg_facility_projection_root" | "$pkg_facility_projection_root"/*) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_pkg_facility_command_source_validate()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_facility_command_root=$1
+  pkg_facility_declarations=$2
+  pkg_facility_provider_root=$3
+
+  if [ ! -e "$pkg_facility_command_root" ] && [ ! -L "$pkg_facility_command_root" ]
+  then
+    return 0
+  fi
+
+  [ -d "$pkg_facility_command_root" ] && [ ! -L "$pkg_facility_command_root" ] || return 1
+  for pkg_facility_command_facility_dir in "$pkg_facility_command_root"/*
+  do
+    [ -e "$pkg_facility_command_facility_dir" ] || [ -L "$pkg_facility_command_facility_dir" ] || continue
+    pkg_facility_command_facility=${pkg_facility_command_facility_dir##*"/"}
+    _pkg_facility_name_valid "$pkg_facility_command_facility" || return 1
+    _pkg_facility_declares "$pkg_facility_declarations" "$pkg_facility_command_facility" || return 1
+    [ -d "$pkg_facility_command_facility_dir" ] && [ ! -L "$pkg_facility_command_facility_dir" ] || return 1
+
+    pkg_facility_command_count=0
+    for pkg_facility_command_descriptor in "$pkg_facility_command_facility_dir"/*
+    do
+      [ -e "$pkg_facility_command_descriptor" ] || [ -L "$pkg_facility_command_descriptor" ] || continue
+      pkg_facility_command=${pkg_facility_command_descriptor##*"/"}
+      _pkg_facility_command_name_valid "$pkg_facility_command" || return 1
+      _pkg_facility_scalar_read "$pkg_facility_command_descriptor" || return 1
+      _pkg_facility_relative_path_validate "$pkg_facility_provider_root" "$pkg_facility_scalar" || return 1
+      [ -f "$pkg_facility_projection_resolved" ] && [ -x "$pkg_facility_projection_resolved" ] || return 1
+      pkg_facility_command_count=$((pkg_facility_command_count + 1))
+    done
+    [ "$pkg_facility_command_count" -gt 0 ] || return 1
+
+    for pkg_facility_command_descriptor in "$pkg_facility_command_facility_dir"/.[!.]* "$pkg_facility_command_facility_dir"/..?*
+    do
+      [ -e "$pkg_facility_command_descriptor" ] || [ -L "$pkg_facility_command_descriptor" ] || continue
+      return 1
+    done
+  done
+
+  for pkg_facility_command_facility_dir in "$pkg_facility_command_root"/.[!.]* "$pkg_facility_command_root"/..?*
+  do
+    [ -e "$pkg_facility_command_facility_dir" ] || [ -L "$pkg_facility_command_facility_dir" ] || continue
+    return 1
+  done
+}
+
+_pkg_facility_env_descriptor_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_env_descriptor=$1
+  pkg_facility_provider_root=$2
+
+  case "$pkg_facility_env_descriptor" in
+    root)
+      return 0
+      ;;
+    "root-path "*)
+      pkg_facility_env_relative=${pkg_facility_env_descriptor#root-path }
+      _pkg_facility_relative_path_validate "$pkg_facility_provider_root" "$pkg_facility_env_relative"
+      ;;
+    literal)
+      return 0
+      ;;
+    "literal "*)
+      return 0
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_pkg_facility_env_file_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_env_file=$1
+  pkg_facility_provider_root=$2
+  [ -f "$pkg_facility_env_file" ] && [ ! -L "$pkg_facility_env_file" ] && [ -r "$pkg_facility_env_file" ] && [ ! -x "$pkg_facility_env_file" ] || return 1
+
+  pkg_facility_env_original="$(
+    command -p -- cat -- "$pkg_facility_env_file" || exit 1
+    printf -- '%s' x
+  )" || return 1
+  pkg_facility_env_sorted="$(
+    LC_ALL=C command -p -- sort < "$pkg_facility_env_file" || exit 1
+    printf -- '%s' x
+  )" || return 1
+  [ "$pkg_facility_env_original" = "$pkg_facility_env_sorted" ] || return 1
+
+  pkg_facility_env_tab="$(printf '\t')"
+  pkg_facility_env_previous=
+  pkg_facility_env_count=0
+  while IFS="$pkg_facility_env_tab" read -r pkg_facility_env_name pkg_facility_env_descriptor pkg_facility_env_extra
+  do
+    [ -n "$pkg_facility_env_name" ] && [ -n "$pkg_facility_env_descriptor" ] && [ -z "$pkg_facility_env_extra" ] || return 1
+    _pkg_facility_env_name_valid "$pkg_facility_env_name" || return 1
+    [ "$pkg_facility_env_name" != "$pkg_facility_env_previous" ] || return 1
+    _pkg_facility_env_descriptor_validate "$pkg_facility_env_descriptor" "$pkg_facility_provider_root" || return 1
+    pkg_facility_env_previous=$pkg_facility_env_name
+    pkg_facility_env_count=$((pkg_facility_env_count + 1))
+  done < "$pkg_facility_env_file"
+
+  [ "$pkg_facility_env_count" -gt 0 ]
+}
+
+_pkg_facility_env_source_validate()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_facility_env_root=$1
+  pkg_facility_declarations=$2
+  pkg_facility_provider_root=$3
+
+  if [ ! -e "$pkg_facility_env_root" ] && [ ! -L "$pkg_facility_env_root" ]
+  then
+    return 0
+  fi
+
+  [ -d "$pkg_facility_env_root" ] && [ ! -L "$pkg_facility_env_root" ] || return 1
+  for pkg_facility_env_file in "$pkg_facility_env_root"/*
+  do
+    [ -e "$pkg_facility_env_file" ] || [ -L "$pkg_facility_env_file" ] || continue
+    pkg_facility_env_facility=${pkg_facility_env_file##*"/"}
+    _pkg_facility_name_valid "$pkg_facility_env_facility" || return 1
+    _pkg_facility_declares "$pkg_facility_declarations" "$pkg_facility_env_facility" || return 1
+    _pkg_facility_env_file_validate "$pkg_facility_env_file" "$pkg_facility_provider_root" || return 1
+  done
+
+  for pkg_facility_env_file in "$pkg_facility_env_root"/.[!.]* "$pkg_facility_env_root"/..?*
+  do
+    [ -e "$pkg_facility_env_file" ] || [ -L "$pkg_facility_env_file" ] || continue
+    return 1
+  done
+}
+
+_pkg_facility_projection_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_projection_range=$1
+  pkg_facility_projection_root=$2
+  pkg_facility_projection_declarations="$pkg_facility_projection_range/facility"
+
+  if [ ! -e "$pkg_facility_projection_range/facility-cmd" ] && \
+     [ ! -L "$pkg_facility_projection_range/facility-cmd" ] && \
+     [ ! -e "$pkg_facility_projection_range/facility-env" ] && \
+     [ ! -L "$pkg_facility_projection_range/facility-env" ]
+  then
+    return 0
+  fi
+
+  _pkg_facility_file_validate "$pkg_facility_projection_declarations" || return 1
+  _pkg_facility_command_source_validate \
+    "$pkg_facility_projection_range/facility-cmd" \
+    "$pkg_facility_projection_declarations" \
+    "$pkg_facility_projection_root" || return 1
+  _pkg_facility_env_source_validate \
+    "$pkg_facility_projection_range/facility-env" \
+    "$pkg_facility_projection_declarations" \
+    "$pkg_facility_projection_root"
+}
+
+_pkg_facility_projection_materialize()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_projection_range=$1
+  pkg_facility_projection_concrete=$2
+
+  if [ -d "$pkg_facility_projection_range/facility-cmd" ] && [ ! -L "$pkg_facility_projection_range/facility-cmd" ]
+  then
+    command -p -- mkdir -- "$pkg_facility_projection_concrete/facility-cmd" || return 1
+    for pkg_facility_command_facility_dir in "$pkg_facility_projection_range/facility-cmd"/*
+    do
+      [ -d "$pkg_facility_command_facility_dir" ] && [ ! -L "$pkg_facility_command_facility_dir" ] || continue
+      pkg_facility_command_facility=${pkg_facility_command_facility_dir##*"/"}
+      command -p -- mkdir -- "$pkg_facility_projection_concrete/facility-cmd/$pkg_facility_command_facility" || return 1
+
+      for pkg_facility_command_descriptor in "$pkg_facility_command_facility_dir"/*
+      do
+        [ -f "$pkg_facility_command_descriptor" ] && [ ! -L "$pkg_facility_command_descriptor" ] || continue
+        pkg_facility_command=${pkg_facility_command_descriptor##*"/"}
+        _pkg_facility_scalar_read "$pkg_facility_command_descriptor" || return 1
+        command -p -- ln -s \
+          "../../root/$pkg_facility_scalar" \
+          "$pkg_facility_projection_concrete/facility-cmd/$pkg_facility_command_facility/$pkg_facility_command" || return 1
+      done
+    done
+  fi
+
+  if [ -d "$pkg_facility_projection_range/facility-env" ] && [ ! -L "$pkg_facility_projection_range/facility-env" ]
+  then
+    command -p -- mkdir -- "$pkg_facility_projection_concrete/facility-env" || return 1
+    for pkg_facility_env_file in "$pkg_facility_projection_range/facility-env"/*
+    do
+      [ -f "$pkg_facility_env_file" ] && [ ! -L "$pkg_facility_env_file" ] || continue
+      command -p -- cp -- "$pkg_facility_env_file" "$pkg_facility_projection_concrete/facility-env/" || return 1
+    done
+  fi
+}
+
+_pkg_facility_env_apply()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_env_file=$1
+  pkg_facility_provider_root=$2
+  _pkg_facility_env_file_validate "$pkg_facility_env_file" "$pkg_facility_provider_root" || return 1
+
+  pkg_facility_env_tab="$(printf '\t')"
+  while IFS="$pkg_facility_env_tab" read -r pkg_facility_env_name pkg_facility_env_descriptor pkg_facility_env_extra
+  do
+    [ -n "$pkg_facility_env_name" ] && [ -n "$pkg_facility_env_descriptor" ] && [ -z "$pkg_facility_env_extra" ] || return 1
+
+    case "$pkg_facility_env_descriptor" in
+      root)
+        pkg_facility_env_value=$pkg_facility_provider_root
+        ;;
+      "root-path "*)
+        pkg_facility_env_relative=${pkg_facility_env_descriptor#root-path }
+        _pkg_facility_relative_path_validate "$pkg_facility_provider_root" "$pkg_facility_env_relative" || return 1
+        pkg_facility_env_value="$pkg_facility_provider_root/$pkg_facility_env_relative"
+        ;;
+      literal)
+        pkg_facility_env_value=
+        ;;
+      "literal "*)
+        pkg_facility_env_value=${pkg_facility_env_descriptor#literal }
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+
+    pkg_facility_env_assignment="$pkg_facility_env_name=$pkg_facility_env_value"
+    export "$pkg_facility_env_assignment" || return 1
+  done < "$pkg_facility_env_file"
+}
+
+_pkg_facility_runtime_apply()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_runtime_provider=$1
+  pkg_facility_runtime_facility=$2
+  _pkg_facility_name_valid "$pkg_facility_runtime_facility" || return 1
+  case "$pkg_facility_runtime_provider" in "" | *'/'*) return 1 ;; esac
+
+  pkg_facility_runtime_concrete="$m_PKG_DIR/$pkg_facility_runtime_provider"
+  [ -d "$pkg_facility_runtime_concrete" ] && [ ! -L "$pkg_facility_runtime_concrete" ] || return 1
+  pkg_facility_runtime_root="$pkg_facility_runtime_concrete/root"
+  [ -d "$pkg_facility_runtime_root" ] && [ ! -L "$pkg_facility_runtime_root" ] || return 1
+
+  pkg_facility_runtime_command_dir="$pkg_facility_runtime_concrete/facility-cmd/$pkg_facility_runtime_facility"
+  if [ -e "$pkg_facility_runtime_command_dir" ] || [ -L "$pkg_facility_runtime_command_dir" ]
+  then
+    [ -d "$pkg_facility_runtime_command_dir" ] && [ ! -L "$pkg_facility_runtime_command_dir" ] || return 1
+    PATH="$pkg_facility_runtime_command_dir:$PATH"
+    export PATH
+  fi
+
+  pkg_facility_runtime_env="$pkg_facility_runtime_concrete/facility-env/$pkg_facility_runtime_facility"
+  if [ -e "$pkg_facility_runtime_env" ] || [ -L "$pkg_facility_runtime_env" ]
+  then
+    _pkg_facility_env_apply "$pkg_facility_runtime_env" "$pkg_facility_runtime_root" || return 1
+  fi
+}
+
 _pkg_facility_materialize()
 {
   [ "$#" -eq 2 ] || return 2
@@ -253,10 +588,17 @@ _pkg_facility_materialize()
 
   if [ ! -e "$pkg_facility_source" ] && [ ! -L "$pkg_facility_source" ]
   then
-    return 0
+    [ ! -e "$pkg_facility_range/facility-cmd" ] && \
+    [ ! -L "$pkg_facility_range/facility-cmd" ] && \
+    [ ! -e "$pkg_facility_range/facility-env" ] && \
+    [ ! -L "$pkg_facility_range/facility-env" ]
+    return $?
   fi
 
   _pkg_facility_file_validate "$pkg_facility_source" || return 1
+  _pkg_facility_projection_validate "$pkg_facility_range" "$pkg_facility_concrete/root" || return 1
+
   command -p -- cp -- "$pkg_facility_source" "$pkg_facility_concrete/facility" || return 1
-  _pkg_facility_file_validate "$pkg_facility_concrete/facility"
+  _pkg_facility_file_validate "$pkg_facility_concrete/facility" || return 1
+  _pkg_facility_projection_materialize "$pkg_facility_range" "$pkg_facility_concrete"
 }
