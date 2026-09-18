@@ -1,91 +1,3 @@
-# POSIX sh array emulation backed by global shell variables.
-#
-# Public API:
-#
-#   array ARRAY_NAME size
-#   array ARRAY_NAME size SIZE_VAR_NAME
-#   array ARRAY_NAME get
-#   array ARRAY_NAME get INDEX
-#   array ARRAY_NAME get INDEX ELEM_VAR_NAME
-#   array ARRAY_NAME put INDEX NEW_VALUE
-#   array ARRAY_NAME add NEW_VALUE
-#   array ARRAY_NAME ins INDEX NEW_VALUE
-#   array ARRAY_NAME rem INDEX
-#   array ARRAY_NAME set NEW_VALUES...
-#   array ARRAY_NAME unset
-#
-# Representation and contract:
-#
-# - Each array is represented by ordinary shell variables:
-#
-#     ARRAY_NAME_TYPE=array
-#     ARRAY_NAME_SIZE=N
-#     ARRAY_NAME_0 ... ARRAY_NAME_(N-1)
-#
-#   These variables are opaque internal storage. Callers must not modify,
-#   unset or mark them readonly in order to manipulate an array.
-#
-# - Array names and output destination names must be valid shell identifiers.
-#   Indices must be canonical non-negative decimal integers: "0", or a digit
-#   sequence without leading zeroes, representable by the shell arithmetic
-#   implementation.
-#
-# - Metadata validation and full storage validation are intentionally separate.
-#   _array_state validates TYPE and SIZE only. Full O(n) slot validation is done
-#   only by operations which already need to traverse the complete array
-#   (currently get-all, ins and rem). Constant-time operations intentionally do
-#   not scan all slots; in particular add remains O(1).
-#
-# - Growth operations refuse to overwrite a pre-existing variable occupying a
-#   newly required array slot. A malformed pre-existing metadata state is not
-#   silently claimed as a new array.
-#
-# - eval is used only for variable indirection after names have been validated.
-#   Array values themselves are never embedded into eval source and therefore
-#   are not reparsed as shell code. Data is moved with quoted expansions and
-#   printed with printf rather than echo.
-#
-# - get without INDEX emits a shell-safe serialized argument list using quote()
-#   from arg.lib.sh. A normal round-trip is:
-#
-#     saved="$(array ARRAY_NAME get)"
-#     eval "set -- $saved"
-#
-#   Empty values, whitespace, quotes, shell metacharacters and embedded or
-#   trailing newlines are preserved by the quote serialization contract.
-#   POSIX shell variables cannot represent NUL bytes.
-#
-# - size DEST and get INDEX DEST copy directly into DEST. A destination which
-#   overlaps the internal storage of the source array or of another existing
-#   array is rejected.
-#
-# - Positional parameters are used as temporary per-function storage because
-#   POSIX sh has no standard local keyword. Function invocation restores the
-#   caller's positional parameters on return, avoiding global scratch variables.
-#
-# - Expected internal non-zero statuses are handled in conditional contexts so
-#   successful API paths remain compatible with set -e. API failures still
-#   behave like any other non-zero command when the caller enables errexit.
-#
-# - Public status convention:
-#
-#     0  success
-#     1  operational, state, range or storage failure
-#     2  invalid API usage or invalid argument syntax
-#
-#   Functions return status to the caller; this library does not intentionally
-#   terminate the caller process.
-#
-# - array ARRAY_NAME creates a missing array and resets an existing one.
-#   ins accepts INDEX == SIZE, which is equivalent to appending at the end.
-#
-# - . arg.lib.sh intentionally relies on the POSIX dot/PATH lookup rules. The
-#   sourcing environment must therefore make arg.lib.sh discoverable.
-#
-# - Direct external corruption of the opaque storage, including making internal
-#   variables readonly, is outside the contract and may cause shell-level
-#   failures. Mutations are not transactional against such external interference.
-
 
 _array_name_valid()
 {
@@ -98,7 +10,6 @@ _array_name_valid()
   return 0
 }
 
-
 _array_uint_valid()
 {
   case "$1" in
@@ -110,7 +21,6 @@ _array_uint_valid()
   [ "$1" -ge "0" ] 2>/dev/null
 }
 
-
 _array_var_is_set()
 {
   _array_name_valid "$1" || return 1
@@ -118,14 +28,12 @@ _array_var_is_set()
   eval "[ \"\${$1+x}\" = \"x\" ]"
 }
 
-
 _array_var_set()
 {
   _array_name_valid "$1" || return 1
 
   eval "$1=\"\${2}\""
 }
-
 
 _array_var_copy()
 {
@@ -136,7 +44,6 @@ _array_var_copy()
   eval "$1=\"\${$2}\""
 }
 
-
 _array_var_print()
 {
   _array_name_valid "$1" || return 1
@@ -144,7 +51,6 @@ _array_var_print()
 
   eval "printf '%s\n' \"\${$1}\""
 }
-
 
 _array_destination_valid()
 {
@@ -184,13 +90,6 @@ _array_destination_valid()
   return 0
 }
 
-
-# Return:
-#
-#   0  valid array metadata
-#   1  array does not exist
-#   2  inconsistent array metadata
-
 _array_state()
 {
   if ! _array_var_is_set "${1}_TYPE"
@@ -210,10 +109,6 @@ _array_state()
   return 0
 }
 
-
-# Full O(n) storage validation. Use only when the operation already needs
-# to traverse the complete declared array.
-
 _array_slots_valid()
 {
   set -- "$1" "$2" "0"
@@ -227,7 +122,6 @@ _array_slots_valid()
 
   return 0
 }
-
 
 _array_range_unset()
 {
@@ -243,7 +137,6 @@ _array_range_unset()
   return 0
 }
 
-
 _array_range_clear()
 {
   set -- "$1" "$2" "$3"
@@ -258,19 +151,9 @@ _array_range_clear()
   return 0
 }
 
-
 _array_get_all()
 {
   _array_slots_valid "$1" "$2" || return 1
-
-  # Keep:
-  #
-  #   $1 ARRAY_NAME
-  #   $2 SIZE
-  #
-  # and append each actual array value to the positional parameters.
-  #
-  # No command substitution is used to transport array data.
 
   set -- "$1" "$2"
 
@@ -288,7 +171,6 @@ _array_get_all()
   printf '\n'
 }
 
-
 _array_reset()
 {
   eval "set -- \"\$1\" \"\${${1}_SIZE}\""
@@ -297,7 +179,6 @@ _array_reset()
 
   _array_var_set "${1}_SIZE" "0"
 }
-
 
 _array_destroy()
 {
@@ -308,12 +189,8 @@ _array_destroy()
   unset "${1}_SIZE" "${1}_TYPE"
 }
 
-
 _array_add()
 {
-  # Deliberately no full slot validation here: internal storage is opaque
-  # and append remains O(1).
-
   eval \
     "set -- \"\$1\" \"\$2\" \"\${${1}_SIZE}\""
 
@@ -333,7 +210,6 @@ _array_add()
 
   return 0
 }
-
 
 _array_insert()
 {
@@ -389,7 +265,6 @@ _array_insert()
   _array_var_set "${1}_SIZE" "$5"
 }
 
-
 _array_remove()
 {
   eval \
@@ -436,7 +311,6 @@ _array_remove()
 
   _array_var_set "${1}_SIZE" "$4"
 }
-
 
 _array_set()
 {
@@ -498,7 +372,6 @@ _array_set()
 
   _array_var_set "${1}_SIZE" "$2"
 }
-
 
 array()
 {
