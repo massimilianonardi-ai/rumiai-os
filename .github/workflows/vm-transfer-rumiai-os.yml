@@ -7,19 +7,19 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  pkg-install-current:
+  trace-pkg-install-one:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout current rumiai-os target
+      - name: Checkout exact rumiai-os revision
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-os
-          ref: db0b25c20b08247cd68818ef9caea61a1cf02451
+          ref: eae5a7203fab8676e5914f073c2ab9e0c124dddf
           path: product
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Checkout current rumiai-tests suite
+      - name: Checkout exact rumiai-tests revision
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
@@ -28,18 +28,26 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Verify and run targeted coverage
+      - name: Trace pkg install
         shell: sh
         env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
           TMPDIR: ${{ runner.temp }}
         run: |
-          set -eu
-          test "$(git -C product rev-parse HEAD)" = "db0b25c20b08247cd68818ef9caea61a1cf02451"
-          test "$(git -C suite rev-parse HEAD)" = "d2c487ecdfb672ac7343019098fda98381f5cf82"
+          set -u
+          test "$(git -C product rev-parse HEAD)" = "eae5a7203fab8676e5914f073c2ab9e0c124dddf" || exit 1
+          test "$(git -C suite rev-parse HEAD)" = "d2c487ecdfb672ac7343019098fda98381f5cf82" || exit 1
           git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          sh -n suite/lib/rumiai-os-fixture.lib
-          sh -n suite/tests/rumiai-tests/lib/rumiai-os-fixture-reference.test
-          sh -n suite/tests/rumiai-os/pkg/install-live.test
-          suite/tests/rumiai-tests/lib/rumiai-os-fixture-reference.test
-          suite/tests/rumiai-os/pkg/install-live.test
+
+          . suite/lib/rumiai-os-fixture.lib
+          fixture="$RUNNER_TEMP/rumiai-pkg-trace"
+          rumiai_test_fixture_rumiai_os_create "$GITHUB_WORKSPACE/product" "$fixture" || exit 1
+
+          PATH="$fixture/bin/sys:$PATH"
+          export PATH
+
+          set +e
+          sh -x "$fixture/m" "$fixture/bin/sys/pkg" install 'jq@jq-1.8.2'
+          status=$?
+          set -e
+          printf 'PKG_STATUS=%s\n' "$status"
+          exit "$status"
