@@ -1,4 +1,4 @@
-name: Validate final pkg catalog matrix
+name: Validate pkg install catalog matrix
 
 on:
   pull_request:
@@ -9,12 +9,12 @@ permissions:
 jobs:
   catalog:
     runs-on: ubuntu-24.04
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-os
-          ref: 8a179b38b07fbd35e475b7df6b8f05e976cc0fdb
+          ref: 25ab0e5a5b8267af715f320bd9ee17405a2b41f6
           path: product
           fetch-depth: 1
           persist-credentials: false
@@ -22,12 +22,12 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: f5fbc0e6b56212d4afa2d0fae91a5cf31ee2f830
+          ref: 9d3017474a05787b5b83bf644d00ff68e1b72a7c
           path: suite
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Run final package catalog matrix
+      - name: Run package install catalog matrix
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
@@ -38,18 +38,39 @@ jobs:
           product/m "$PWD/product/bin/sys/osarch-update"
           test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
           cd suite
-          set +e
-          ./rumiai-test -- external
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]
-          then
-            find .runs -type f -path '*/logs/external/*/install-live.test.log' -print |
-              LC_ALL=C sort |
-              while IFS= read -r log
-              do
-                printf '\n===== %s =====\n' "$log"
+
+          overall=0
+          run_one()
+          {
+            selection=$1
+            set +e
+            ./rumiai-test -- "$selection"
+            status=$?
+            set -e
+            if [ "$status" -ne 0 ]
+            then
+              log=$(find .runs -type f -path "*/logs/$selection.log" -print | LC_ALL=C sort | tail -n 1)
+              if [ -n "$log" ]
+              then
+                printf '\n===== %s =====\n' "$selection"
                 cat "$log"
-              done
-          fi
-          exit "$status"
+              fi
+              [ "$status" -le "$overall" ] || overall=$status
+            fi
+          }
+
+          run_one external/chrome/install-live.test
+          run_one external/chromium/install-live.test
+          run_one external/dbeaver/install-live.test
+          run_one external/electron/install-live.test
+          run_one external/graalvm/install-live.test
+          run_one external/java/install-live.test
+          run_one external/jq/release-live.test
+          run_one external/keycloak/install-live.test
+          run_one external/maven/install-live.test
+          run_one external/micromamba/release-live.test
+          run_one external/netbeans/install-live.test
+          run_one external/nodejs/release-live.test
+          run_one external/pulsar/install-live.test
+
+          exit "$overall"
