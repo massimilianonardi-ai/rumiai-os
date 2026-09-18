@@ -1,4 +1,4 @@
-name: Validate pkg install Java
+name: Validate pkg install Keycloak
 
 on:
   pull_request:
@@ -7,7 +7,7 @@ permissions:
   contents: read
 
 jobs:
-  java:
+  keycloak:
     runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
@@ -27,7 +27,7 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Run package install validation
+      - name: Run Keycloak package validation
         shell: sh
         env:
           RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
@@ -54,5 +54,5 @@ jobs:
             fi
           }
 
-          run_one rumiai-os/pkg-repository-temurin/contract.test
-          run_one external/java/install-live.test
+          run_one rumiai-os/pkg/state.test
+          run_one external/keycloak/install-live.test
