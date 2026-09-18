@@ -1,89 +1,3 @@
-# POSIX sh map emulation backed by global shell variables.
-#
-# Public API:
-#
-#   map MAP_NAME size
-#   map MAP_NAME size SIZE_VAR_NAME
-#   map MAP_NAME keys
-#   map MAP_NAME get
-#   map MAP_NAME get KEY
-#   map MAP_NAME get KEY ELEM_VAR_NAME
-#   map MAP_NAME put KEY NEW_VALUE
-#   map MAP_NAME rem KEY
-#   map MAP_NAME set [KEY VALUE]...
-#   map MAP_NAME unset
-#
-# Representation and contract:
-#
-# - Each map is represented by ordinary shell variables:
-#
-#     MAP_NAME_TYPE=map
-#     MAP_NAME_SIZE=N
-#     MAP_NAME_KEY_0 ... MAP_NAME_KEY_(N-1)
-#     MAP_NAME_VALUE_0 ... MAP_NAME_VALUE_(N-1)
-#
-#   These variables are opaque internal storage. Callers must not modify,
-#   unset or mark them readonly in order to manipulate a map.
-#
-# - Map names and output destination names must be valid shell identifiers.
-#   Keys and values are arbitrary shell strings except NUL, which POSIX shell
-#   variables cannot represent. Empty keys and empty values are supported.
-#
-# - Keys are unique. put updates an existing key in place or appends a new key.
-#   Entry order is insertion order; updating a key does not move it. set consumes
-#   KEY VALUE pairs, preserves the first position of duplicate keys and keeps the
-#   last value supplied for each duplicate key.
-#
-# - Metadata validation and full storage validation are intentionally separate.
-#   _map_state validates TYPE and SIZE only. Full O(n) slot validation is done
-#   only by operations which already need to traverse the complete map. Other
-#   operations validate the slots they actually visit and do not add a separate
-#   full-map scan.
-#
-# - Growth refuses to overwrite pre-existing variables occupying a newly
-#   required key/value slot. A malformed pre-existing metadata state is not
-#   silently claimed as a new map.
-#
-# - eval is used only for variable indirection after names and indices have been
-#   validated. Keys and values are never embedded into eval source and therefore
-#   are not reparsed as shell code. Data is moved with quoted expansions and
-#   printed with printf rather than echo.
-#
-# - keys and get without KEY emit shell-safe serialized argument lists using
-#   quote() from arg.lib.sh. keys serializes keys; get serializes values, both in
-#   map order. Empty values, whitespace, quotes, shell metacharacters and embedded
-#   or trailing newlines are preserved by the quote serialization contract.
-#
-# - size DEST and get KEY DEST copy directly into DEST. A destination overlapping
-#   internal storage of this map, another existing map or an existing array is
-#   rejected.
-#
-# - Positional parameters are used as temporary per-function storage because
-#   POSIX sh has no standard local keyword. Function invocation restores the
-#   caller's positional parameters on return, avoiding global scratch variables.
-#
-# - Expected internal non-zero statuses are handled in conditional contexts so
-#   successful API paths remain compatible with set -e. API failures still
-#   behave like any other non-zero command when the caller enables errexit.
-#
-# - Public status convention:
-#
-#     0  success
-#     1  operational, state, missing-key or storage failure
-#     2  invalid API usage or invalid argument syntax
-#
-#   Functions return status to the caller; this library does not intentionally
-#   terminate the caller process.
-#
-# - map MAP_NAME creates a missing map and resets an existing one.
-#
-# - keys and get-all serialization use quote(), provided by the m bootstrap
-#   core library in an integrated runtime environment.
-#
-# - Direct external corruption of the opaque storage, including making internal
-#   variables readonly, is outside the contract and may cause shell-level
-#   failures. Mutations are not transactional against such external interference.
-
 
 _map_name_valid()
 {
@@ -96,7 +10,6 @@ _map_name_valid()
   return 0
 }
 
-
 _map_uint_valid()
 {
   case "$1" in
@@ -108,7 +21,6 @@ _map_uint_valid()
   [ "$1" -ge "0" ] 2>/dev/null
 }
 
-
 _map_var_is_set()
 {
   _map_name_valid "$1" || return 1
@@ -116,14 +28,12 @@ _map_var_is_set()
   eval "[ \"\${$1+x}\" = \"x\" ]"
 }
 
-
 _map_var_set()
 {
   _map_name_valid "$1" || return 1
 
   eval "$1=\"\${2}\""
 }
-
 
 _map_var_copy()
 {
@@ -134,7 +44,6 @@ _map_var_copy()
   eval "$1=\"\${$2}\""
 }
 
-
 _map_var_print()
 {
   _map_name_valid "$1" || return 1
@@ -142,7 +51,6 @@ _map_var_print()
 
   eval "printf '%s\n' \"\${$1}\""
 }
-
 
 _map_destination_valid()
 {
@@ -211,13 +119,6 @@ _map_destination_valid()
   return 0
 }
 
-
-# Return:
-#
-#   0  valid map metadata
-#   1  map does not exist
-#   2  inconsistent map metadata
-
 _map_state()
 {
   if ! _map_var_is_set "${1}_TYPE"
@@ -237,7 +138,6 @@ _map_state()
   return 0
 }
 
-
 _map_slot_valid()
 {
   _map_uint_valid "$2" || return 1
@@ -246,10 +146,6 @@ _map_slot_valid()
 
   return 0
 }
-
-
-# Full O(n) storage validation. Use only when the operation already needs
-# to traverse the complete declared map.
 
 _map_slots_valid()
 {
@@ -265,7 +161,6 @@ _map_slots_valid()
   return 0
 }
 
-
 _map_range_unset()
 {
   set -- "$1" "$2" "$3"
@@ -280,7 +175,6 @@ _map_range_unset()
   return 0
 }
 
-
 _map_key_equal()
 {
   _map_name_valid "$1" || return 1
@@ -289,7 +183,6 @@ _map_key_equal()
 
   eval "[ \"\${${1}_KEY_${2}}\" = \"\$3\" ]"
 }
-
 
 _map_keys()
 {
@@ -311,7 +204,6 @@ _map_keys()
   printf '\n'
 }
 
-
 _map_get_all()
 {
   _map_slots_valid "$1" "$2" || return 1
@@ -331,7 +223,6 @@ _map_get_all()
 
   printf '\n'
 }
-
 
 _map_get_print()
 {
@@ -353,7 +244,6 @@ _map_get_print()
   return 1
 }
 
-
 _map_get_copy()
 {
   set -- "$1" "$2" "$3" "$4" "0"
@@ -374,7 +264,6 @@ _map_get_copy()
   return 1
 }
 
-
 _map_reset()
 {
   eval "set -- \"\$1\" \"\${${1}_SIZE}\""
@@ -384,7 +273,6 @@ _map_reset()
   _map_var_set "${1}_SIZE" "0"
 }
 
-
 _map_destroy()
 {
   eval "set -- \"\$1\" \"\${${1}_SIZE}\""
@@ -393,7 +281,6 @@ _map_destroy()
 
   unset "${1}_SIZE" "${1}_TYPE"
 }
-
 
 _map_put()
 {
@@ -442,7 +329,6 @@ _map_put()
   return 0
 }
 
-
 _map_remove()
 {
   eval \
@@ -479,7 +365,6 @@ _map_remove()
   _map_var_set "${1}_SIZE" "$4"
 }
 
-
 _map_set()
 {
   _map_reset "$1" || return 1
@@ -502,7 +387,6 @@ _map_set()
 
   return 0
 }
-
 
 map()
 {
