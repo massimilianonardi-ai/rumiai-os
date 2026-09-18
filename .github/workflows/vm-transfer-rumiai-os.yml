@@ -40,8 +40,10 @@ jobs:
           set -eu
           cd product
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          ./m ./bin/sys/osarch-update
-          ./m ./bin/sys/osarch
+          osarch_update="$PWD/bin/sys/osarch-update"
+          ./m "$osarch_update"
+          test -L bin/ext-osarch
+          printf 'OSARCH_SELECTOR=%s\n' "$(readlink bin/ext-osarch)"
 
       - name: Install ${{ matrix.package }}
         shell: sh
