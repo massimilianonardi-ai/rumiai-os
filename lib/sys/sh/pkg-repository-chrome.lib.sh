@@ -307,15 +307,6 @@ pkg_repository_compare_versions()
   _pkg_repository_chrome_validate_repository "$1" || return 1
   _pkg_repository_chrome_validate_version "$2" || return 1
   _pkg_repository_chrome_validate_version "$3" || return 1
-
-  pkg_repository_chrome_records="$(_pkg_repository_chrome_records "$1")" || return 1
-  _pkg_repository_chrome_record_set "$pkg_repository_chrome_records" "$2" || return 1
-  if [ "$2" = "$3" ]
-  then
-    printf -- '0\n'
-    return 0
-  fi
-  _pkg_repository_chrome_record_set "$pkg_repository_chrome_records" "$3" || return 1
   _pkg_repository_chrome_compare_raw "$2" "$3"
 )
 
