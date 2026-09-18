@@ -1,4 +1,4 @@
-name: keycloak-permanent-install-test
+name: pkg-install-final-all-catalog
 
 on:
   workflow_dispatch:
@@ -7,8 +7,24 @@ on:
       - tmp/pkg-install-vm-transfer-20260917
 
 jobs:
-  keycloak:
+  install:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - chrome
+          - chromium
+          - dbeaver
+          - electron
+          - graalvm
+          - jq
+          - keycloak
+          - maven
+          - micromamba
+          - netbeans
+          - nodejs
+          - pulsar
     steps:
       - uses: actions/checkout@v4
         with:
@@ -18,33 +34,136 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - uses: actions/checkout@v4
-        with:
-          repository: massimilianonardi-ai/rumiai-tests
-          ref: 1fbd3eab0507179417d0f78122a5d4f54b4a0468
-          path: suite
-          fetch-depth: 1
-          persist-credentials: false
-
-      - name: Run permanent Keycloak install test
+      - name: Initialize exact target
         shell: sh
-        env:
-          RUMIAI_TEST_RUMIAI_OS_ROOT: ${{ github.workspace }}/product
         run: |
           set -eu
-          git -C product remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-          git -C suite remote set-url origin https://github.com/massimilianonardi-ai/rumiai-tests.git
-          product/m "$PWD/product/bin/sys/osarch-update"
-          test "$(readlink product/bin/ext-osarch)" = ext-linux-x86_64
+          cd product
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          test "$(git rev-parse HEAD)" = fe2151999ffba98d9921e1c62662c270adc0cfa0
+          ./m "$PWD/bin/sys/osarch-update"
+          test "$(readlink bin/ext-osarch)" = ext-linux-x86_64
 
-          cd suite
-          set +e
-          ./rumiai-test -- external/keycloak/install-live.test
-          status=$?
-          set -e
-          if [ "$status" -ne 0 ]
+      - name: Install and validate ${{ matrix.package }}
+        shell: sh
+        run: |
+          set -eu
+          cd product
+          pkg='${{ matrix.package }}'
+
+          java_identity=
+          case "$pkg" in
+            keycloak|maven|netbeans)
+              ./m pkg install graalvm
+              java_identity=$(./m pkg default graalvm)
+              [ -n "$java_identity" ]
+              ;;
+          esac
+
+          ./m pkg install "$pkg"
+          identity=$(./m pkg default "$pkg")
+          [ -n "$identity" ]
+          ./m pkg versions "$pkg" | grep -Fx "$identity" >/dev/null
+
+          concrete="$PWD/pkg/$identity"
+          [ -d "$concrete" ] && [ ! -L "$concrete" ]
+          [ -d "$concrete/root" ] && [ ! -L "$concrete/root" ]
+
+          if [ -d "$concrete/cmd" ]
           then
-            log=$(find .runs -type f -path '*/logs/external/keycloak/install-live.test.log' -print | LC_ALL=C sort | tail -n 1)
-            [ -z "$log" ] || cat "$log"
+            for command_path in "$concrete/cmd"/*
+            do
+              [ -e "$command_path" ] || [ -L "$command_path" ] || continue
+              command_name=${command_path##*/}
+              [ -f "$command_path" ] && [ ! -L "$command_path" ] && [ -x "$command_path" ]
+              [ -L "$concrete/link/$command_name" ]
+              [ -L "$PWD/bin/ext-linux-x86_64/$command_name" ]
+            done
           fi
-          exit "$status"
+
+          check_setuid()
+          {
+            target=$1
+            [ -f "$target" ] && [ ! -L "$target" ]
+            listing=$(LC_ALL=C ls -ldn "$target")
+            set -- $listing
+            [ "$#" -ge 4 ]
+            [ "$3" = 0 ] && [ "$4" = 0 ]
+            mode_match=$(find "$target" -prune -perm 4755 -print)
+            [ "$mode_match" = "$target" ]
+          }
+
+          case "$pkg" in
+            chrome)
+              check_setuid "$concrete/root/opt/google/chrome/chrome-sandbox"
+              ./m chrome --version
+              ;;
+            chromium)
+              check_setuid "$concrete/root/chrome_sandbox"
+              [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+              sandbox="$concrete/root/chrome_sandbox"
+              sandbox_from_env="$(
+                (
+                  m_COMMAND_BIN="$concrete/cmd/chromium"
+                  export m_COMMAND_BIN
+                  unset CHROME_DEVEL_SANDBOX
+                  . "$concrete/env" || exit 1
+                  printf '%s\n' "${CHROME_DEVEL_SANDBOX-}"
+                )
+              )"
+              [ "$sandbox_from_env" = "$sandbox" ]
+              ./m chromium --version
+              ;;
+            electron|pulsar)
+              check_setuid "$concrete/root/chrome-sandbox"
+              ;;
+            graalvm)
+              [ "$(cat "$concrete/facility")" = 'java 25' ]
+              [ -x "$concrete/root/bin/java" ]
+              [ -x "$concrete/root/bin/javac" ]
+              "$concrete/root/bin/java" -version >/dev/null 2>&1
+              "$concrete/root/bin/javac" -version >/dev/null 2>&1
+              provider_root=$(./m "$PWD/bin/sys/state-path" system sys pkg data)
+              marker="$provider_root/providers/java/25/$identity"
+              [ -f "$marker" ] && [ ! -L "$marker" ] && [ ! -s "$marker" ]
+              ;;
+            jq)
+              ./m jq --version
+              ;;
+            keycloak)
+              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
+              [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+              [ -L "$concrete/root/conf" ]
+              [ -L "$concrete/root/data" ]
+              [ "$(readlink "$concrete/root/conf")" = ../var/conf/conf ]
+              [ "$(readlink "$concrete/root/data")" = ../var/data/data ]
+              [ -d "$concrete/default/conf/conf" ] && [ ! -L "$concrete/default/conf/conf" ]
+              [ -d "$concrete/default/data/data" ] && [ ! -L "$concrete/default/data/data" ]
+              test -z "$(find "$concrete/default/data/data" -mindepth 1 -maxdepth 1 -print -quit)"
+              state_conf=$(./m "$PWD/bin/sys/state-path" system pkg keycloak conf)
+              state_data=$(./m "$PWD/bin/sys/state-path" system pkg keycloak data)
+              [ -d "$state_conf/conf" ] && [ ! -L "$state_conf/conf" ]
+              [ -d "$state_data/data" ] && [ ! -L "$state_data/data" ]
+              ./m keycloak --version
+              ;;
+            maven)
+              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
+              [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+              ./m mvn --version
+              ;;
+            micromamba)
+              ./m micromamba --version
+              ;;
+            netbeans)
+              [ "$(cat "$concrete/binding/java")" = "$java_identity" ]
+              [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+              ;;
+            nodejs)
+              [ -f "$concrete/env" ] && [ ! -L "$concrete/env" ]
+              ./m node --version
+              ./m npm --version
+              ./m npx --version
+              ;;
+          esac
+
+          printf 'PASS package=%s identity=%s\n' "$pkg" "$identity"
