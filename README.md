@@ -170,7 +170,11 @@ The canonical platform identifier has the form:
 <platform>-<architecture>
 ```
 
-Current native tokens are `linux`, `macos`, `windows` and `arm64`, `x86_64`. `osarch-update` is explicit; the bootstrap does not invoke it automatically.
+Current native tokens are `linux`, `macos`, `windows` and `arm64`, `x86_64`.
+
+`osarch-set` controls the active platform selectors. With no operands it detects the host OS/architecture and selects that normalized `osarch`; with one `<osarch>` operand it selects that exact supported identity. In both forms it ensures the corresponding `sys-<osarch>`, `ext-<osarch>` and `ai-<osarch>` directories exist and updates `sys-osarch`, `ext-osarch` and `ai-osarch` to relative targets.
+
+`osarch-update` remains the compatibility command for detected-host selection and is equivalent to invoking `osarch-set` without operands. Platform selection is explicit; the bootstrap does not invoke either command automatically.
 
 ## Development workspace
 
