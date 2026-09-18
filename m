@@ -18,9 +18,6 @@ readpathce()
     if [ "${1#*/}" != "$1" ]
     then
       cmd="$1"
-    elif [ -e "./$1" ] || [ -L "./$1" ]
-    then
-      cmd="./$1"
     else
       cmd="$(command -v -- "$1" 2>/dev/null; printf -- '%s' "x")"; cmd="${cmd%
 x}"
