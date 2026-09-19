@@ -11,6 +11,80 @@ gitman_display_safe()
     command -p awk '{ gsub(/[[:cntrl:]]/, "?"); printf "%s", $0 }'
 }
 
+gitman_config_decode()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  gitman_config_decoded=$(
+    printf '%s' "$1" |
+      command -p awk '
+        BEGIN { ORS = "" }
+        {
+          for (i = 1; i <= length($0); i++) {
+            ch = substr($0, i, 1)
+
+            if (ch == "\\") {
+              if (i < length($0)) {
+                next_ch = substr($0, i + 1, 1)
+
+                if (next_ch == "n") {
+                  printf "\n"
+                  i++
+                  continue
+                }
+
+                if (next_ch == "\\") {
+                  printf "\\"
+                  i++
+                  continue
+                }
+              }
+
+              printf "\\"
+              continue
+            }
+
+            printf "%s", ch
+          }
+        }
+      '
+    printf 'X'
+  ) || return 1
+
+  gitman_config_decoded=${gitman_config_decoded%X}
+  return 0
+}
+
+gitman_config_encode()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  gitman_config_encoded=$(
+    printf '%sX' "$1" |
+      command -p awk '
+        BEGIN { ORS = "" }
+        {
+          if (NR > 1) {
+            printf "\\n"
+          }
+
+          for (i = 1; i <= length($0); i++) {
+            ch = substr($0, i, 1)
+
+            if (ch == "\\") {
+              printf "\\\\"
+            } else {
+              printf "%s", ch
+            }
+          }
+        }
+      '
+  ) || return 1
+
+  gitman_config_encoded=${gitman_config_encoded%X}
+  printf '%s\n' "$gitman_config_encoded"
+}
+
 gitman_error_batch_begin()
 {
   gitman_batch_error=
@@ -168,17 +242,15 @@ gitman_initial_candidates_load()
     return 0
   fi
 
-  gitman_conf_dir=$(command -- state-path user sys gitman conf) || return 1
-  gitman_conf_file="$gitman_conf_dir/repositories"
-
   if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
   then
     if [ -f "$gitman_conf_file" ] && [ -r "$gitman_conf_file" ]
     then
-      while IFS= read -r gitman_initial_candidate || [ -n "$gitman_initial_candidate" ]
+      while IFS= read -r gitman_initial_encoded || [ -n "$gitman_initial_encoded" ]
       do
-        [ -n "$gitman_initial_candidate" ] || continue
-        array gitman_initial_candidates add "$gitman_initial_candidate" || return 1
+        [ -n "$gitman_initial_encoded" ] || continue
+        gitman_config_decode "$gitman_initial_encoded" || return 1
+        array gitman_initial_candidates add "$gitman_config_decoded" || return 1
       done < "$gitman_conf_file"
     else
       gitman_initial_config_display=$(gitman_display_safe "$gitman_conf_file") || return 1
@@ -269,7 +341,7 @@ gitman_repository_menu()
   done
 
   gitman_repository_result=$(
-    command -- menu       -H 'Git repositories'       -F 'Enter: open | a: add | r: remove | c: clear all | Escape: exit'       -B "$gitman_last_error"       -K a -K r -K c       -- "$@"
+    command -- menu       -H 'Git repositories'       -F 'Enter: open | a: add | r: remove | c: clear all | s: save | Escape: exit'       -B "$gitman_last_error"       -K a -K r -K c -K s       -- "$@"
   )
   gitman_repository_status=$?
 
@@ -383,6 +455,90 @@ gitman_remove_menu()
   return 0
 }
 
+gitman_config_overwrite_confirm()
+{
+  gitman_confirm_result=$(
+    command -- menu       -H 'Overwrite repositories configuration?'       -F 'Enter: choose | Escape: cancel'       -B "$gitman_last_error"       --       'no@:=No'       'yes@:=Yes'
+  )
+  gitman_confirm_status=$?
+
+  case "$gitman_confirm_status" in
+    0) ;;
+    1) return 1 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_confirm_status" ;;
+  esac
+
+  eval "set -- $gitman_confirm_result" || gitman_menu_failure
+  [ "$#" -eq 2 ] || gitman_menu_failure
+  [ "$1" = enter ] || gitman_menu_failure
+  [ "$2" = yes ]
+}
+
+gitman_config_save()
+{
+  if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
+  then
+    if [ ! -f "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
+    then
+      gitman_conf_display=$(gitman_display_safe "$gitman_conf_file") || return 1
+      gitman_last_error="cannot save configuration: not a regular file: $gitman_conf_display"
+      return 0
+    fi
+
+    if [ -s "$gitman_conf_file" ]
+    then
+      gitman_config_overwrite_confirm || return 0
+    fi
+  fi
+
+  command -p -- mkdir -p -- "$gitman_conf_dir" 2>/dev/null || {
+    gitman_conf_display=$(gitman_display_safe "$gitman_conf_dir") || return 1
+    gitman_last_error="cannot save configuration: cannot create directory: $gitman_conf_display"
+    return 0
+  }
+
+  [ -d "$gitman_conf_dir" ] || {
+    gitman_conf_display=$(gitman_display_safe "$gitman_conf_dir") || return 1
+    gitman_last_error="cannot save configuration: invalid directory: $gitman_conf_display"
+    return 0
+  }
+
+  gitman_conf_tmp="$gitman_conf_dir/.repositories.$"
+  command -p -- rm -f -- "$gitman_conf_tmp" 2>/dev/null || {
+    gitman_last_error='cannot save configuration: temporary-file cleanup failed'
+    return 0
+  }
+
+  (
+    umask 077
+    : > "$gitman_conf_tmp" || exit 1
+
+    array gitman_repositories size gitman_save_count || exit 1
+    gitman_save_index=0
+
+    while [ "$gitman_save_index" -lt "$gitman_save_count" ]
+    do
+      array gitman_repositories get "$gitman_save_index" gitman_save_repository || exit 1
+      gitman_config_encode "$gitman_save_repository" >> "$gitman_conf_tmp" || exit 1
+      gitman_save_index=$((gitman_save_index + 1))
+    done
+  ) || {
+    command -p -- rm -f -- "$gitman_conf_tmp" 2>/dev/null || :
+    gitman_last_error='cannot save configuration: write failed'
+    return 0
+  }
+
+  command -p -- mv -- "$gitman_conf_tmp" "$gitman_conf_file" 2>/dev/null || {
+    command -p -- rm -f -- "$gitman_conf_tmp" 2>/dev/null || :
+    gitman_last_error='cannot save configuration: replace failed'
+    return 0
+  }
+
+  gitman_last_error=
+  return 0
+}
+
 gitman_pause()
 {
   printf '\nPress any key to continue...' > /dev/tty ||
@@ -487,6 +643,10 @@ gitman_invocation_directory=$(
     command -p pwd -P
 ) || fatal 1 execution execution-failed operation gitman reason working-directory-unavailable
 
+gitman_conf_dir=$(command -- state-path user sys gitman conf) ||
+  fatal 1 execution execution-failed operation gitman reason configuration-path-unavailable
+gitman_conf_file="$gitman_conf_dir/repositories"
+
 array gitman_repositories ||
   fatal 1 execution execution-failed operation gitman reason repository-storage-failed
 
@@ -546,6 +706,10 @@ do
       array gitman_repositories ||
         fatal 1 execution execution-failed operation gitman reason repository-storage-failed
       gitman_last_error=
+      ;;
+    s)
+      gitman_config_save ||
+        fatal 1 execution execution-failed operation gitman reason configuration-save-failed
       ;;
     *)
       gitman_menu_failure
