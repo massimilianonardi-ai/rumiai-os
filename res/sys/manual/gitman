@@ -29,9 +29,18 @@ INITIAL DIRECTORIES
 
         <gitman-conf>/repositories
 
-    The file contains one literal directory pathname per non-empty line. Blank
-    lines are ignored. Entries are not shell-evaluated: quoting, variables,
-    tilde expansion and comments have no special meaning.
+    The file contains one encoded directory pathname per non-empty line.
+
+        \\n     pathname newline
+        \\\\     literal backslash
+
+    Every other character is literal. A backslash before a character other than
+    n or backslash remains a literal backslash followed by that character.
+    This keeps one logical directory per line while allowing pathname newlines
+    and literal backslash-n text to round-trip unambiguously.
+
+    Blank lines are ignored. Entries are not shell-evaluated: quoting,
+    variables, tilde expansion and comments have no special meaning.
 
     Relative paths from operands and the configuration file are resolved
     relative to the directory from which gitman was invoked.
@@ -81,12 +90,30 @@ REPOSITORY MENU
         a       add repositories with filesystem multi-selection
         r       remove repositories with a multi-selection list
         c       clear all repositories from the in-memory set
+        s       save the current repository set to configuration
         Escape  exit gitman
 
     Remove and clear affect only gitman's in-memory list. They never remove
     directories or alter Git state.
 
     Cancelling an add/remove submenu returns to the repository menu.
+
+SAVE CONFIGURATION
+    The s action writes the current repository set to:
+
+        <gitman-conf>/repositories
+
+    using the configuration encoding described above.
+
+    If the file is absent or zero-length, it is written directly. If it already
+    contains data, gitman first asks whether it may be overwritten; the
+    confirmation menu defaults to No. Cancelling or choosing No leaves the file
+    unchanged.
+
+    The configuration directory is created lazily when needed. A successful
+    save replaces the configuration with the current repositories in menu order
+    and clears the current error. A save failure leaves the in-memory repository
+    set unchanged and reports the failure in the bottom footer.
 
 GIT ACTION MENU
     Opening a repository shows these read-only actions:
@@ -125,8 +152,10 @@ TERMINAL BEHAVIOR
     in its bottom footer.
 
 CONFIGURATION
-    The optional repositories file is read-only in this delivery. gitman does
-    not create, update or persist it automatically.
+    gitman reads the optional repositories file at startup when no directory
+    operands are supplied. It writes that file only when the user explicitly
+    selects the repository-menu save action; in-memory add/remove/clear changes
+    are otherwise not persisted automatically.
 
 SIDE EFFECTS
     The first delivery contains no mutating Git action. gitman does not create,
