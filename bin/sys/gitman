@@ -1,0 +1,542 @@
+#!/usr/bin/env m
+
+. "$m_LIB_DIR/sys/sh/array.lib.sh"
+
+gitman_display_safe()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '%s' "$1" |
+    command -p tr '\n' '?' |
+    command -p awk '{ gsub(/[[:cntrl:]]/, "?"); printf "%s", $0 }'
+}
+
+gitman_error_batch_begin()
+{
+  gitman_batch_error=
+}
+
+gitman_error_batch_add()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  if [ -n "$gitman_batch_error" ]
+  then
+    gitman_batch_error="$gitman_batch_error; $1"
+  else
+    gitman_batch_error=$1
+  fi
+}
+
+gitman_error_batch_end()
+{
+  gitman_last_error=$gitman_batch_error
+}
+
+gitman_repository_present()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  array gitman_repositories size gitman_repository_count || return 1
+  gitman_repository_index=0
+
+  while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
+  do
+    array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 1
+    [ "$gitman_repository_value" != "$1" ] || return 0
+    gitman_repository_index=$((gitman_repository_index + 1))
+  done
+
+  return 1
+}
+
+gitman_candidate_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  gitman_candidate_error=
+  gitman_candidate_repository=
+  gitman_candidate_display=$(gitman_display_safe "$1") || return 1
+
+  if [ ! -d "$1" ]
+  then
+    gitman_candidate_error="not a directory: $gitman_candidate_display"
+    return 1
+  fi
+
+  gitman_candidate_directory=$(
+    CDPATH= cd -P -- "$1" 2>/dev/null &&
+      command -p pwd -P
+  ) || {
+    gitman_candidate_error="cannot resolve directory: $gitman_candidate_display"
+    return 1
+  }
+
+  gitman_candidate_bare=$(command -- git -C "$gitman_candidate_directory" rev-parse --is-bare-repository 2>/dev/null)
+  gitman_candidate_git_status=$?
+
+  if [ "$gitman_candidate_git_status" -ne 0 ]
+  then
+    gitman_candidate_error="not a Git working tree: $gitman_candidate_display"
+    return 1
+  fi
+
+  if [ "$gitman_candidate_bare" = true ]
+  then
+    gitman_candidate_error="bare Git repository is not supported: $gitman_candidate_display"
+    return 1
+  fi
+
+  gitman_candidate_inside=$(command -- git -C "$gitman_candidate_directory" rev-parse --is-inside-work-tree 2>/dev/null) || {
+    gitman_candidate_error="not a Git working tree: $gitman_candidate_display"
+    return 1
+  }
+
+  if [ "$gitman_candidate_inside" != true ]
+  then
+    gitman_candidate_error="not a Git working tree: $gitman_candidate_display"
+    return 1
+  fi
+
+  gitman_candidate_top=$(command -- git -C "$gitman_candidate_directory" rev-parse --show-toplevel 2>/dev/null) || {
+    gitman_candidate_error="cannot resolve Git working-tree top-level: $gitman_candidate_display"
+    return 1
+  }
+
+  gitman_candidate_repository=$(
+    CDPATH= cd -P -- "$gitman_candidate_top" 2>/dev/null &&
+      command -p pwd -P
+  ) || {
+    gitman_candidate_error="cannot resolve Git working-tree top-level: $gitman_candidate_display"
+    return 1
+  }
+
+  return 0
+}
+
+gitman_candidate_process()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  if gitman_candidate_resolve "$1"
+  then
+    if ! gitman_repository_present "$gitman_candidate_repository"
+    then
+      array gitman_repositories add "$gitman_candidate_repository" || return 1
+    fi
+  else
+    gitman_candidate_status=$?
+    [ "$gitman_candidate_status" -eq 1 ] || return "$gitman_candidate_status"
+    gitman_error_batch_add "$gitman_candidate_error" || return 1
+  fi
+
+  return 0
+}
+
+gitman_validate_batch()
+{
+  gitman_error_batch_begin
+
+  for gitman_candidate in "$@"
+  do
+    gitman_candidate_process "$gitman_candidate" || return 1
+  done
+
+  gitman_error_batch_end
+  return 0
+}
+
+gitman_initial_candidates_load()
+{
+  array gitman_initial_candidates || return 1
+  gitman_initial_config_error=
+
+  if [ "$#" -gt 0 ]
+  then
+    for gitman_initial_candidate in "$@"
+    do
+      array gitman_initial_candidates add "$gitman_initial_candidate" || return 1
+    done
+    return 0
+  fi
+
+  gitman_conf_dir=$(command -- state-path user sys gitman conf) || return 1
+  gitman_conf_file="$gitman_conf_dir/repositories"
+
+  if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
+  then
+    if [ -f "$gitman_conf_file" ] && [ -r "$gitman_conf_file" ]
+    then
+      while IFS= read -r gitman_initial_candidate || [ -n "$gitman_initial_candidate" ]
+      do
+        [ -n "$gitman_initial_candidate" ] || continue
+        array gitman_initial_candidates add "$gitman_initial_candidate" || return 1
+      done < "$gitman_conf_file"
+    else
+      gitman_initial_config_display=$(gitman_display_safe "$gitman_conf_file") || return 1
+      gitman_initial_config_error="cannot read configuration file: $gitman_initial_config_display"
+    fi
+  fi
+
+  array gitman_initial_candidates size gitman_initial_candidate_count || return 1
+  if [ "$gitman_initial_candidate_count" -eq 0 ]
+  then
+    array gitman_initial_candidates add "." || return 1
+  fi
+
+  return 0
+}
+
+gitman_initial_validate()
+{
+  gitman_error_batch_begin
+
+  if [ -n "$gitman_initial_config_error" ]
+  then
+    gitman_error_batch_add "$gitman_initial_config_error" || return 1
+  fi
+
+  array gitman_initial_candidates size gitman_initial_candidate_count || return 1
+  gitman_initial_candidate_index=0
+
+  while [ "$gitman_initial_candidate_index" -lt "$gitman_initial_candidate_count" ]
+  do
+    array gitman_initial_candidates get "$gitman_initial_candidate_index" gitman_initial_candidate || return 1
+    gitman_candidate_process "$gitman_initial_candidate" || return 1
+    gitman_initial_candidate_index=$((gitman_initial_candidate_index + 1))
+  done
+
+  gitman_error_batch_end
+  return 0
+}
+
+gitman_menu_failure()
+{
+  fatal 1 execution execution-failed operation gitman reason menu-failed
+}
+
+gitman_filesystem_acquire()
+{
+  gitman_acquire_header=$1
+
+  gitman_acquire_result=$(
+    command -- menu       -H "$gitman_acquire_header"       -F 'Enter: browse | Space: mark | Tab: add | Escape: back/exit'       -B "$gitman_last_error"       -M       -d "$gitman_invocation_directory"
+  )
+  gitman_acquire_status=$?
+
+  case "$gitman_acquire_status" in
+    0) ;;
+    1) return 1 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_acquire_status" ;;
+  esac
+
+  eval "set -- $gitman_acquire_result" || gitman_menu_failure
+  [ "$#" -ge 2 ] || gitman_menu_failure
+  gitman_acquire_key=$1
+  shift
+
+  [ "$gitman_acquire_key" = tab ] || gitman_menu_failure
+
+  gitman_validate_batch "$@" ||
+    fatal 1 execution execution-failed operation gitman reason repository-validation-failed
+
+  return 0
+}
+
+gitman_repository_menu()
+{
+  array gitman_repositories size gitman_repository_count || return 2
+  [ "$gitman_repository_count" -gt 0 ] || return 2
+
+  set --
+  gitman_repository_index=0
+
+  while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
+  do
+    array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 2
+    gitman_repository_label=$(gitman_display_safe "$gitman_repository_value") || return 2
+    set -- "$@" "$gitman_repository_index@:=\$gitman_repository_label"
+    gitman_repository_index=$((gitman_repository_index + 1))
+  done
+
+  gitman_repository_result=$(
+    command -- menu       -H 'Git repositories'       -F 'Enter: open | a: add | r: remove | c: clear all | Escape: exit'       -B "$gitman_last_error"       -K a -K r -K c       -- "$@"
+  )
+  gitman_repository_status=$?
+
+  case "$gitman_repository_status" in
+    0) ;;
+    1) return 1 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_repository_status" ;;
+  esac
+
+  eval "set -- $gitman_repository_result" || gitman_menu_failure
+  [ "$#" -eq 2 ] || gitman_menu_failure
+
+  gitman_repository_menu_key=$1
+  gitman_repository_menu_index=$2
+  return 0
+}
+
+gitman_index_selected()
+{
+  [ "$#" -ge 2 ] || return 2
+  gitman_index_target=$1
+  shift
+
+  for gitman_selected_index in "$@"
+  do
+    [ "$gitman_selected_index" != "$gitman_index_target" ] || return 0
+  done
+
+  return 1
+}
+
+gitman_repositories_remove()
+{
+  array gitman_repositories_new || return 1
+  array gitman_repositories size gitman_repository_count || return 1
+  gitman_repository_index=0
+
+  while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
+  do
+    if ! gitman_index_selected "$gitman_repository_index" "$@"
+    then
+      array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 1
+      array gitman_repositories_new add "$gitman_repository_value" || return 1
+    fi
+    gitman_repository_index=$((gitman_repository_index + 1))
+  done
+
+  array gitman_repositories || return 1
+  array gitman_repositories_new size gitman_repository_count || return 1
+  gitman_repository_index=0
+
+  while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
+  do
+    array gitman_repositories_new get "$gitman_repository_index" gitman_repository_value || return 1
+    array gitman_repositories add "$gitman_repository_value" || return 1
+    gitman_repository_index=$((gitman_repository_index + 1))
+  done
+
+  gitman_last_error=
+  return 0
+}
+
+gitman_remove_menu()
+{
+  array gitman_repositories size gitman_repository_count || return 2
+  [ "$gitman_repository_count" -gt 0 ] || return 0
+
+  set --
+  gitman_repository_index=0
+
+  while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
+  do
+    array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 2
+    gitman_repository_label=$(gitman_display_safe "$gitman_repository_value") || return 2
+    set -- "$@" "$gitman_repository_index@:=\$gitman_repository_label"
+    gitman_repository_index=$((gitman_repository_index + 1))
+  done
+
+  gitman_remove_result=$(
+    command -- menu       -H 'Remove Git repositories'       -F 'Space: mark | Enter: remove | Backspace/Escape: repositories'       -B "$gitman_last_error"       -M -K backspace       -- "$@"
+  )
+  gitman_remove_status=$?
+
+  case "$gitman_remove_status" in
+    0) ;;
+    1) return 0 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_remove_status" ;;
+  esac
+
+  eval "set -- $gitman_remove_result" || gitman_menu_failure
+  [ "$#" -ge 2 ] || gitman_menu_failure
+
+  gitman_remove_key=$1
+  shift
+
+  case "$gitman_remove_key" in
+    backspace)
+      return 0
+      ;;
+    enter)
+      gitman_repositories_remove "$@" ||
+        fatal 1 execution execution-failed operation gitman reason repository-remove-failed
+      ;;
+    *)
+      gitman_menu_failure
+      ;;
+  esac
+
+  return 0
+}
+
+gitman_pause()
+{
+  printf '\nPress any key to continue...' > /dev/tty ||
+    fatal 1 execution execution-failed operation gitman reason terminal-output-failed
+
+  command -- read-key >/dev/null
+  gitman_pause_status=$?
+
+  printf '\n' > /dev/tty 2>/dev/null || :
+
+  [ "$gitman_pause_status" -eq 0 ] ||
+    fatal 1 execution execution-failed operation gitman reason key-read-failed
+}
+
+gitman_git_action_run()
+{
+  [ "$#" -eq 2 ] || return 2
+  gitman_action_repository=$1
+  gitman_action=$2
+
+  printf '\nRepository: %s\n\n' "$gitman_action_repository"
+
+  case "$gitman_action" in
+    status)
+      command -- git -C "$gitman_action_repository" status --short --branch
+      ;;
+    log)
+      command -- git -C "$gitman_action_repository" log --oneline --decorate --graph -n 50
+      ;;
+    branch)
+      command -- git -C "$gitman_action_repository" branch -vv
+      ;;
+    diff)
+      command -- git -C "$gitman_action_repository" diff
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+  gitman_git_status=$?
+
+  if [ "$gitman_git_status" -eq 0 ]
+  then
+    gitman_last_error=
+  else
+    gitman_last_error="git $gitman_action failed with status $gitman_git_status"
+  fi
+
+  gitman_pause
+  return 0
+}
+
+gitman_action_menu()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_repository=$1
+  gitman_action_header=$(gitman_display_safe "$gitman_action_repository") || return 2
+
+  while :
+  do
+    gitman_action_result=$(
+      command -- menu         -H "$gitman_action_header"         -F 'Enter: run | Backspace/Escape: repositories'         -B "$gitman_last_error"         -K backspace         --         'status@:=Status'         'log@:=Log'         'branch@:=Branches'         'diff@:=Diff'
+    )
+    gitman_action_status=$?
+
+    case "$gitman_action_status" in
+      0) ;;
+      1) return 0 ;;
+      2) gitman_menu_failure ;;
+      *) exit "$gitman_action_status" ;;
+    esac
+
+    eval "set -- $gitman_action_result" || gitman_menu_failure
+    [ "$#" -eq 2 ] || gitman_menu_failure
+
+    gitman_action_key=$1
+    gitman_action_value=$2
+
+    case "$gitman_action_key" in
+      backspace)
+        return 0
+        ;;
+      enter)
+        gitman_git_action_run "$gitman_action_repository" "$gitman_action_value" ||
+          fatal 1 execution execution-failed operation gitman reason git-action-failed
+        ;;
+      *)
+        gitman_menu_failure
+        ;;
+    esac
+  done
+}
+
+for gitman_required_command in git menu read-key state-path
+do
+  command -v "$gitman_required_command" >/dev/null 2>&1 ||
+    fatal 127 execution command-not-found operation gitman command "$gitman_required_command"
+done
+
+gitman_invocation_directory=$(
+  CDPATH= cd -P -- . 2>/dev/null &&
+    command -p pwd -P
+) || fatal 1 execution execution-failed operation gitman reason working-directory-unavailable
+
+array gitman_repositories ||
+  fatal 1 execution execution-failed operation gitman reason repository-storage-failed
+
+gitman_last_error=
+
+gitman_initial_candidates_load "$@" ||
+  fatal 1 execution execution-failed operation gitman reason initial-candidate-load-failed
+
+gitman_initial_validate ||
+  fatal 1 execution execution-failed operation gitman reason initial-candidate-validation-failed
+
+while :
+do
+  array gitman_repositories size gitman_repository_count ||
+    fatal 1 execution execution-failed operation gitman reason repository-storage-failed
+
+  if [ "$gitman_repository_count" -eq 0 ]
+  then
+    if ! gitman_filesystem_acquire 'Select Git repositories'
+    then
+      exit 0
+    fi
+    continue
+  fi
+
+  if ! gitman_repository_menu
+  then
+    gitman_repository_menu_status=$?
+    [ "$gitman_repository_menu_status" -eq 1 ] && exit 0
+    fatal 1 execution execution-failed operation gitman reason repository-menu-failed
+  fi
+
+  case "$gitman_repository_menu_key" in
+    enter)
+      case "$gitman_repository_menu_index" in
+        ""|*[!0123456789]*)
+          gitman_menu_failure
+          ;;
+      esac
+      array gitman_repositories get "$gitman_repository_menu_index" gitman_repository_value ||
+        gitman_menu_failure
+      gitman_action_menu "$gitman_repository_value" ||
+        fatal 1 execution execution-failed operation gitman reason action-menu-failed
+      ;;
+    a)
+      gitman_filesystem_acquire 'Add Git repositories' || :
+      ;;
+    r)
+      gitman_remove_menu ||
+        fatal 1 execution execution-failed operation gitman reason remove-menu-failed
+      ;;
+    c)
+      array gitman_repositories ||
+        fatal 1 execution execution-failed operation gitman reason repository-storage-failed
+      gitman_last_error=
+      ;;
+    *)
+      gitman_menu_failure
+      ;;
+  esac
+done

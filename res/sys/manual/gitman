@@ -1,0 +1,149 @@
+NAME
+    gitman - interactive manager for local Git working trees
+
+SYNOPSIS
+    gitman [directory ...]
+
+DESCRIPTION
+    gitman maintains an in-memory set of local, non-bare Git working trees and
+    provides interactive menus for selecting repositories and running read-only
+    Git inspection commands.
+
+    Each accepted directory is normalized to the physical top-level directory
+    reported by Git for that working tree. Different paths inside the same
+    working tree therefore become one entry. Distinct linked Git worktrees
+    remain separate entries even when they share the same underlying Git
+    repository.
+
+    Bare repositories are not supported by this first delivery.
+
+INITIAL DIRECTORIES
+    When one or more directory operands are supplied, only those operands are
+    used as the initial candidates.
+
+    With no operands, gitman resolves:
+
+        state-path user sys gitman conf
+
+    and reads the optional file:
+
+        <gitman-conf>/repositories
+
+    The file contains one literal directory pathname per non-empty line. Blank
+    lines are ignored. Entries are not shell-evaluated: quoting, variables,
+    tilde expansion and comments have no special meaning.
+
+    Relative paths from operands and the configuration file are resolved
+    relative to the directory from which gitman was invoked.
+
+    If the file is absent or has no non-empty entries, gitman falls back to:
+
+        .
+
+    If the configuration pathname exists but is not a readable regular file,
+    gitman records an error and also falls back to ".".
+
+REPOSITORY VALIDATION
+    A candidate is valid only when it belongs to a non-bare Git working tree.
+
+    gitman asks Git for the working-tree top-level, resolves that top-level
+    physically, and stores that physical pathname as the repository identity.
+    Duplicate identities are ignored.
+
+    Validation errors do not prevent other candidates in the same operation
+    from being accepted.
+
+ERROR FOOTER
+    The bottom footer contains at most the most recent error.
+
+    When one validation operation contains multiple invalid candidates, their
+    failures are combined into one footer message. A later successful operation
+    clears the previous error.
+
+FILESYSTEM ACQUISITION
+    When no valid repositories are stored, gitman opens a filesystem
+    multi-selection menu rooted at the invocation directory.
+
+        Enter       browse a directory
+        Space       mark/unmark
+        Backspace   parent directory
+        Tab         confirm selection
+        Escape      exit when the repository set is empty
+
+    Confirmed paths are revalidated as Git working trees. If none is valid,
+    acquisition is shown again with the validation error in the bottom footer.
+
+REPOSITORY MENU
+    With one or more repositories, gitman shows a single-selection repository
+    menu.
+
+        Enter   open selected repository
+        a       add repositories with filesystem multi-selection
+        r       remove repositories with a multi-selection list
+        c       clear all repositories from the in-memory set
+        Escape  exit gitman
+
+    Remove and clear affect only gitman's in-memory list. They never remove
+    directories or alter Git state.
+
+    Cancelling an add/remove submenu returns to the repository menu.
+
+GIT ACTION MENU
+    Opening a repository shows these read-only actions:
+
+        Status
+            git -C <repository> status --short --branch
+
+        Log
+            git -C <repository> log --oneline --decorate --graph -n 50
+
+        Branches
+            git -C <repository> branch -vv
+
+        Diff
+            git -C <repository> diff
+
+    Enter runs the selected action. Backspace is the default key for returning
+    to the repository menu. Escape also returns to the repository menu.
+
+TERMINAL BEHAVIOR
+    The menu session completes and restores its terminal state before gitman
+    launches the selected Git command.
+
+    Git therefore runs on the normal terminal, including any pager behavior
+    selected by Git itself.
+
+    When the Git command finishes, gitman displays:
+
+        Press any key to continue...
+
+    and waits through read-key. After one key is received, the Git action menu
+    is displayed again.
+
+    A non-zero Git command result does not end the gitman session. The Git
+    command output remains visible and the action menu shows a concise failure
+    in its bottom footer.
+
+CONFIGURATION
+    The optional repositories file is read-only in this delivery. gitman does
+    not create, update or persist it automatically.
+
+SIDE EFFECTS
+    The first delivery contains no mutating Git action. gitman does not create,
+    delete or modify repositories, change branches, stage files, commit, reset,
+    checkout, merge, rebase, fetch, pull, push or modify Git configuration.
+
+EXIT STATUS
+    0     Normal user exit or cancellation.
+    1     Interactive/runtime execution failure.
+    2     Invalid invocation.
+    127   A required command is unavailable.
+
+DEPENDENCIES
+    gitman requires the RumiAI commands menu, read-key and state-path, plus an
+    available Git executable.
+
+SEE ALSO
+    menu
+    read-key
+    state-path
