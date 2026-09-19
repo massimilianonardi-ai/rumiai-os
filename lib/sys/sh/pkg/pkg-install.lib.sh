@@ -264,7 +264,7 @@ _pkg_install_stream_select()
   pkg_install_catalog=$1
   pkg_install_pkg=$2
   pkg_install_target=$3
-  pkg_install_package_dir="$pkg_install_catalog/$pkg_install_pkg"
+  pkg_install_package_dir="$pkg_install_catalog/pkg/$pkg_install_pkg"
   pkg_install_target_stream="$pkg_install_package_dir/$pkg_install_target"
   pkg_install_generic_stream="$pkg_install_package_dir/catalog"
   [ -d "$pkg_install_package_dir" ] && [ ! -L "$pkg_install_package_dir" ] || return 1
@@ -344,7 +344,7 @@ _pkg_install_repository_adapter()
   case "$pkg_install_repository_type" in
     "" | [!a-z0-9]* | *[!a-z0-9-]* | *-) return 1 ;;
   esac
-  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg/pkg-repository-$pkg_install_repository_type.lib.sh"
+  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
   [ -f "$pkg_install_adapter" ] && [ ! -L "$pkg_install_adapter" ] && [ -r "$pkg_install_adapter" ] && [ ! -x "$pkg_install_adapter" ] || return 1
 }
 

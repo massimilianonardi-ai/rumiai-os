@@ -1,5 +1,5 @@
-. "$m_LIB_DIR/sys/sh/pkg/pkg-facility.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/pkg-dependency.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-dependency.lib.sh"
 
 _pkg_launch_error()
 {
