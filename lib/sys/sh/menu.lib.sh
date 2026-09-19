@@ -1,4 +1,4 @@
-# POSIX-sh terminal-menu engine with pluggable list providers and multi-selection.
+# POSIX-sh terminal-menu engine with pluggable list providers and optional multi-selection.
 #
 # Dependencies:
 #   term.lib.sh   terminal/TTY/terminfo lifecycle and key decoding
@@ -23,6 +23,8 @@
 #   menu_reset
 #   menu_key_clear
 #   menu_key_add KEY
+#   menu_multiselect_enable
+#   menu_multiselect_disable
 #   menu_toggle_key_set KEY
 #   menu_run_provider PROVIDER
 #   menu_array_provider
@@ -52,13 +54,14 @@
 #       cancel  finish as a user cancellation
 #
 # Enter is always delivered as an event. Escape and up/down/pageup/pagedown/
-# home/end are owned by the engine and cannot be configured. The configured
-# multi-selection toggle key is also reserved. Other named keys returned by term_read_key
-# and one text key can be configured with menu_key_add.
+# home/end are owned by the engine and cannot be configured. When multi-selection
+# is enabled, its configured toggle key is also reserved. Other named keys
+# returned by term_read_key and one text key can be configured with menu_key_add.
 #
-# The toggle key is handled by the engine and is not delivered as an event.
-# Marks are index-based within the current provider view. reload preserves marks
-# whose indices remain valid; reset clears all marks.
+# Multi-selection is disabled by default. When enabled, the toggle key is
+# handled by the engine and is not delivered as an event. Marks are index-based
+# within the current provider view. reload preserves marks whose indices remain
+# valid; reset clears all marks.
 #
 # Array-backed provider
 # ---------------------
@@ -95,6 +98,7 @@ menu_reset()
   menu_header=
   menu_footer=
   menu_bottom_footer=
+  _menu_multiselect=0
   _menu_toggle_key=' '
   menu_array_values=
   menu_array_labels=
@@ -206,7 +210,7 @@ menu_key_add()
     return 2
   fi
 
-  if [ "$1" = "$_menu_toggle_key" ]
+  if [ "$_menu_multiselect" -eq 1 ] && [ "$1" = "$_menu_toggle_key" ]
   then
     menu_error="key is reserved by multi-selection"
     return 2
@@ -233,6 +237,48 @@ menu_key_add()
   return 0
 }
 
+menu_multiselect_enable()
+{
+  if [ "$#" -ne 0 ]
+  then
+    menu_error="menu_multiselect_enable takes no arguments"
+    return 2
+  fi
+
+  if _menu_key_is_configured "$_menu_toggle_key"
+  then
+    menu_error="multi-selection key is already configured as an action: $_menu_toggle_key"
+    return 2
+  fi
+
+  map _menu_selected_indices || {
+    menu_error="cannot reset multi-selection state"
+    return 1
+  }
+
+  _menu_multiselect=1
+  menu_error=
+  return 0
+}
+
+menu_multiselect_disable()
+{
+  if [ "$#" -ne 0 ]
+  then
+    menu_error="menu_multiselect_disable takes no arguments"
+    return 2
+  fi
+
+  map _menu_selected_indices || {
+    menu_error="cannot reset multi-selection state"
+    return 1
+  }
+
+  _menu_multiselect=0
+  menu_error=
+  return 0
+}
+
 menu_toggle_key_set()
 {
   if [ "$#" -ne 1 ] || [ -z "$1" ]
@@ -253,7 +299,7 @@ menu_toggle_key_set()
     return 2
   fi
 
-  if _menu_key_is_configured "$1"
+  if [ "$_menu_multiselect" -eq 1 ] && _menu_key_is_configured "$1"
   then
     menu_error="key is already configured as an action: $1"
     return 2
@@ -495,6 +541,16 @@ _menu_result_collect()
     return 2
   }
 
+  if [ "$_menu_multiselect" -eq 0 ]
+  then
+    _menu_provider_item_get "$1" || return 2
+    array _menu_session_values add "$menu_provider_value" || {
+      _menu_fail "cannot store menu result"
+      return 2
+    }
+    return 0
+  fi
+
   map _menu_selected_indices size _menu_selected_count || {
     _menu_fail "cannot read multi-selection size"
     return 2
@@ -644,7 +700,13 @@ _menu_render()
   _menu_row=0
   _menu_index=$_menu_top
   _menu_last_menu_row=$((_menu_render_rows - 1))
-  _menu_text_width=$((_menu_term_cols - 6))
+
+  if [ "$_menu_multiselect" -eq 1 ]
+  then
+    _menu_text_width=$((_menu_term_cols - 6))
+  else
+    _menu_text_width=$((_menu_term_cols - 2))
+  fi
 
   while [ "$_menu_row" -lt "$_menu_render_rows" ]
   do
@@ -661,14 +723,19 @@ _menu_render()
       _menu_cursor=' '
     fi
 
-    if _menu_selection_is_marked "$_menu_index"
+    if [ "$_menu_multiselect" -eq 1 ]
     then
-      _menu_mark='[x]'
-    else
-      _menu_mark='[ ]'
-    fi
+      if _menu_selection_is_marked "$_menu_index"
+      then
+        _menu_mark='[x]'
+      else
+        _menu_mark='[ ]'
+      fi
 
-    printf '%s %s %s' "$_menu_cursor" "$_menu_mark" "$_menu_text" > "$term_tty_device" || return 2
+      printf '%s %s %s' "$_menu_cursor" "$_menu_mark" "$_menu_text" > "$term_tty_device" || return 2
+    else
+      printf '%s %s' "$_menu_cursor" "$_menu_text" > "$term_tty_device" || return 2
+    fi
 
     if [ "$_menu_row" -lt "$_menu_last_menu_row" ] || [ -n "$menu_footer" ]
     then
@@ -770,7 +837,7 @@ _menu_apply_key()
       _menu_action=event
       ;;
     *)
-      if [ "$_menu_key" = "$_menu_toggle_key" ]
+      if [ "$_menu_multiselect" -eq 1 ] && [ "$_menu_key" = "$_menu_toggle_key" ]
       then
         _menu_action=toggle
       elif _menu_key_is_configured "$_menu_key"
