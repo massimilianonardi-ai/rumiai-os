@@ -1,4 +1,3 @@
-#!/bin/sh
 
 . enc.lib.sh
 

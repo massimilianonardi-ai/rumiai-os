@@ -1,3 +1,4 @@
+
 _json_fields_join()
 (
   [ "$#" -ge 1 ] || return 2

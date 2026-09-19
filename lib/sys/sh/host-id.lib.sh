@@ -1,3 +1,4 @@
+
 host_id_get()
 (
   [ "$#" -eq 0 ] || return 2
