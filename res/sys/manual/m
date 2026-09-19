@@ -8,7 +8,8 @@ SYNOPSIS
 DESCRIPTION
     m resolves the RumiAI OS technical root, initializes the relocatable m
     runtime environment, exposes technical command paths, loads the core shell
-    facilities and establishes the current state/resource roots.
+    facilities, establishes the current state/resource roots and applies the
+    environment projections of currently resolvable system facility defaults.
 
     With no command operand, m starts the managed shell through the shell
     facility.
@@ -17,6 +18,19 @@ DESCRIPTION
     path, exports its resolved pathname as m_COMMAND_BIN, removes the command
     operand from the argument vector and executes the command body inside the
     initialized m runtime.
+
+    Before dispatch or shell entry, facility-default provider environment is
+    recomputed from authoritative provider selection and installed projection
+    metadata. A valid ext-osarch selector chooses the active platform class;
+    otherwise only generic provider classes can contribute environment.
+    Facilities are applied in LC_ALL=C name order and later facilities win when
+    they export the same variable. PATH is never supplied by facility-env;
+    provider commands are exposed through the existing ext-osarch/ext PATH roots.
+
+    Changes to facility defaults or provider package defaults are observed by
+    later m bootstraps. Already-running parent processes and shells are not
+    mutated retroactively. Invalid provider environment projection is reported
+    without making the technical bootstrap unavailable.
 
     The bootstrap refuses to dispatch itself recursively as a command.
 
