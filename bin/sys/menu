@@ -392,10 +392,18 @@ done
 if [ "$menu_command_directory_option_seen" -eq 1 ]
 then
   [ "$#" -eq 0 ] || menu_command_fail directory-mode-does-not-accept-list-items
-  [ "$menu_command_action_key_count" -gt 0 ] || menu_command_fail directory-mode-requires-action-key
 
   menu_command_key_decode "$menu_command_parent_key_name" || menu_command_fail invalid-parent-key
   menu_command_parent_key=$menu_command_decoded_key
+
+  if [ "$menu_command_action_key_count" -eq 0 ]
+  then
+    [ "$menu_command_multiselect" -eq 1 ] || menu_command_fail directory-mode-requires-action-key
+    [ "$menu_command_select_key" != tab ] || menu_command_fail directory-mode-requires-action-key
+    [ "$menu_command_parent_key" != tab ] || menu_command_fail directory-mode-requires-action-key
+    menu_key_add tab || menu_command_fail "$menu_error"
+  fi
+
   menu_key_add "$menu_command_parent_key" || menu_command_fail "$menu_error"
 
   menu_command_root=$(menu_command_directory_resolve "$menu_command_directory") || menu_command_fail directory-unavailable
