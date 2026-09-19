@@ -142,6 +142,15 @@ TERMINAL
     The menu session saves/restores exact TTY state and coordinates alternate
     screen, keypad and cursor lifecycle through term.lib.sh.
 
+    Rendering is incremental when the surrounding layout is unchanged.
+    Navigation within one viewport repaints only the old/new selection rows;
+    a multi-selection toggle repaints only its row; navigation that shifts the
+    viewport repaints only the list viewport. Whole-screen clear is reserved
+    for initial or broader layout invalidation.
+
+    Queued navigation input may be coalesced before repaint so repeated key
+    presses produce one final visible update rather than one repaint per key.
+
 RETURN STATUS
     menu_reset, menu_key_clear, menu_key_add, menu_multiselect_enable,
     menu_multiselect_disable, menu_toggle_key_set, menu_array_provider:
