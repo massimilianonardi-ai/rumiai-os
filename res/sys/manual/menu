@@ -38,12 +38,10 @@ OPTIONS
         Add an action key. May be repeated. List mode also always accepts Enter
         as confirmation.
 
-        Filesystem single-selection mode requires at least one -K because Enter
-        is reserved for browsing.
-
-        Filesystem multi-selection mode may omit -K. When it does, Tab is the
-        fallback confirmation action. If any -K is supplied, only the explicit
-        action keys are used and Tab is not added implicitly.
+        Filesystem mode may omit -K in both single-selection and
+        multi-selection. When it does, Tab is the fallback confirmation action.
+        If any -K is supplied, only the explicit action keys are used and Tab
+        is not added implicitly.
 
     -M
         Enable multi-selection. Space is the default toggle key.
@@ -103,10 +101,11 @@ KEYS
         default, with the same confinement rules as entering ...
 
     Tab
-        In filesystem multi-selection with no explicit -K, confirm the current
-        marked selection. This fallback is unavailable when Tab is already the
-        configured toggle or parent-navigation key; in that case an explicit
-        -K is required.
+        In filesystem mode with no explicit -K, confirm the current selection.
+        In multi-selection this returns the marked values, or the current item
+        when nothing is marked. This fallback is unavailable when Tab is
+        already the configured toggle or parent-navigation key; in that case an
+        explicit -K is required.
 
     Escape
         Cancel.
@@ -129,8 +128,9 @@ MULTI-SELECTION
     current item is returned. If items are marked, only marked values are
     returned, in menu/provider order.
 
-    In filesystem mode, multi-selection with no explicit -K uses Tab as the
-    confirmation action. Supplying any explicit -K suppresses that fallback.
+    In filesystem mode, no explicit -K means Tab is the confirmation action
+    in both single-selection and multi-selection. Supplying any explicit -K
+    suppresses that fallback.
 
     Changing filesystem directory clears marks from the previous directory
     view.
