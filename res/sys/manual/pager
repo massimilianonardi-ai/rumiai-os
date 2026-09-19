@@ -29,16 +29,13 @@ OUTPUT DESTINATION
     below. The viewer reads standard input when no file operand is present and
     receives the resolved file operands otherwise.
 
-HOST POLICY
-    Linux
-        Prefer less.
+BACKEND POLICY
+    Prefer less whenever it is available on the current host.
 
-        If less is unavailable, fall back to more. This deliberately accepts a
-        less capable interaction rather than failing only because the preferred
-        Linux viewer is unavailable.
-
-    Other hosts
-        Use more until a concrete host divergence requires a dedicated adapter.
+    less is an optional host capability rather than a POSIX baseline
+    dependency. If it is unavailable, fall back to the POSIX more utility.
+    The fallback is deliberately accepted as a less capable paging experience
+    rather than failing solely because less is unavailable.
 
 CALLER ENVIRONMENT
     pager does not erase environment intended for the selected viewer.
