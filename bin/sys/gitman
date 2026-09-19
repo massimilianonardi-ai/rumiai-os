@@ -228,6 +228,30 @@ gitman_validate_batch()
   return 0
 }
 
+gitman_config_read()
+{
+  array gitman_config_candidates || return 1
+  gitman_config_error=
+
+  if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
+  then
+    if [ -f "$gitman_conf_file" ] && [ -r "$gitman_conf_file" ]
+    then
+      while IFS= read -r gitman_config_encoded || [ -n "$gitman_config_encoded" ]
+      do
+        [ -n "$gitman_config_encoded" ] || continue
+        gitman_config_decode "$gitman_config_encoded" || return 1
+        array gitman_config_candidates add "$gitman_config_decoded" || return 1
+      done < "$gitman_conf_file"
+    else
+      gitman_config_display=$(gitman_display_safe "$gitman_conf_file") || return 1
+      gitman_config_error="cannot read configuration file: $gitman_config_display"
+    fi
+  fi
+
+  return 0
+}
+
 gitman_initial_candidates_load()
 {
   array gitman_initial_candidates || return 1
@@ -242,21 +266,18 @@ gitman_initial_candidates_load()
     return 0
   fi
 
-  if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
-  then
-    if [ -f "$gitman_conf_file" ] && [ -r "$gitman_conf_file" ]
-    then
-      while IFS= read -r gitman_initial_encoded || [ -n "$gitman_initial_encoded" ]
-      do
-        [ -n "$gitman_initial_encoded" ] || continue
-        gitman_config_decode "$gitman_initial_encoded" || return 1
-        array gitman_initial_candidates add "$gitman_config_decoded" || return 1
-      done < "$gitman_conf_file"
-    else
-      gitman_initial_config_display=$(gitman_display_safe "$gitman_conf_file") || return 1
-      gitman_initial_config_error="cannot read configuration file: $gitman_initial_config_display"
-    fi
-  fi
+  gitman_config_read || return 1
+  gitman_initial_config_error=$gitman_config_error
+
+  array gitman_config_candidates size gitman_config_candidate_count || return 1
+  gitman_config_candidate_index=0
+
+  while [ "$gitman_config_candidate_index" -lt "$gitman_config_candidate_count" ]
+  do
+    array gitman_config_candidates get "$gitman_config_candidate_index" gitman_config_candidate || return 1
+    array gitman_initial_candidates add "$gitman_config_candidate" || return 1
+    gitman_config_candidate_index=$((gitman_config_candidate_index + 1))
+  done
 
   array gitman_initial_candidates size gitman_initial_candidate_count || return 1
   if [ "$gitman_initial_candidate_count" -eq 0 ]
@@ -341,7 +362,7 @@ gitman_repository_menu()
   done
 
   gitman_repository_result=$(
-    command -- menu       -H 'Git repositories'       -F 'Enter: open | a: add | r: remove | c: clear all | s: save | Escape: exit'       -B "$gitman_last_error"       -K a -K r -K c -K s       -- "$@"
+    command -- menu       -H 'Git repositories'       -F 'Enter: open | a: add | r: remove | c: clear all | s: save | e: edit conf | Escape: exit'       -B "$gitman_last_error"       -K a -K r -K c -K s -K e       -- "$@"
   )
   gitman_repository_status=$?
 
@@ -536,6 +557,105 @@ gitman_config_save()
   }
 
   gitman_last_error=
+  return 0
+}
+
+gitman_config_reload_confirm()
+{
+  gitman_reload_confirm_result=$(
+    command -- menu       -H 'Reset repositories and reload configuration?'       -F 'Enter: choose | Escape: keep current repositories'       -B "$gitman_last_error"       --       'no@:=No'       'yes@:=Yes'
+  )
+  gitman_reload_confirm_status=$?
+
+  case "$gitman_reload_confirm_status" in
+    0) ;;
+    1) return 1 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_reload_confirm_status" ;;
+  esac
+
+  eval "set -- $gitman_reload_confirm_result" || gitman_menu_failure
+  [ "$#" -eq 2 ] || gitman_menu_failure
+  [ "$1" = enter ] || gitman_menu_failure
+  [ "$2" = yes ]
+}
+
+gitman_config_reload()
+{
+  gitman_config_read || return 1
+
+  array gitman_repositories || return 1
+  gitman_error_batch_begin
+
+  if [ -n "$gitman_config_error" ]
+  then
+    gitman_error_batch_add "$gitman_config_error" || return 1
+  fi
+
+  array gitman_config_candidates size gitman_reload_count || return 1
+  gitman_reload_index=0
+
+  while [ "$gitman_reload_index" -lt "$gitman_reload_count" ]
+  do
+    array gitman_config_candidates get "$gitman_reload_index" gitman_reload_candidate || return 1
+    gitman_candidate_process "$gitman_reload_candidate" || return 1
+    gitman_reload_index=$((gitman_reload_index + 1))
+  done
+
+  gitman_error_batch_end
+  return 0
+}
+
+gitman_config_edit()
+{
+  command -p mkdir -p -- "$gitman_conf_dir" 2>/dev/null || {
+    gitman_conf_display=$(gitman_display_safe "$gitman_conf_dir") || return 1
+    gitman_last_error="cannot edit configuration: cannot create directory: $gitman_conf_display"
+    return 0
+  }
+
+  if [ -e "$gitman_conf_file" ] || [ -L "$gitman_conf_file" ]
+  then
+    if [ ! -f "$gitman_conf_file" ]
+    then
+      gitman_conf_display=$(gitman_display_safe "$gitman_conf_file") || return 1
+      gitman_last_error="cannot edit configuration: not a regular file: $gitman_conf_display"
+      return 0
+    fi
+  fi
+
+  if [ -n "${VISUAL-}" ]
+  then
+    gitman_editor=$VISUAL
+  elif [ -n "${EDITOR-}" ]
+  then
+    gitman_editor=$EDITOR
+  else
+    gitman_editor=vi
+  fi
+
+  command -v "$gitman_editor" >/dev/null 2>&1 || {
+    gitman_editor_display=$(gitman_display_safe "$gitman_editor") || return 1
+    gitman_last_error="cannot edit configuration: editor not found: $gitman_editor_display"
+    return 0
+  }
+
+  command -- "$gitman_editor" "$gitman_conf_file"
+  gitman_editor_status=$?
+
+  if [ "$gitman_editor_status" -ne 0 ]
+  then
+    gitman_last_error="configuration editor exited with status $gitman_editor_status"
+    return 0
+  fi
+
+  gitman_last_error=
+
+  if gitman_config_reload_confirm
+  then
+    gitman_config_reload || return 1
+  fi
+
   return 0
 }
 
@@ -751,6 +871,10 @@ do
     s)
       gitman_config_save ||
         fatal 1 execution execution-failed operation gitman reason configuration-save-failed
+      ;;
+    e)
+      gitman_config_edit ||
+        fatal 1 execution execution-failed operation gitman reason configuration-edit-failed
       ;;
     *)
       gitman_menu_failure
