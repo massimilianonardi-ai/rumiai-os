@@ -119,19 +119,23 @@ GIT ACTION MENU
     Opening a repository shows these read-only actions:
 
         Status
-            git -C <repository> status --short --branch
+            git -C <repository> --no-pager status --short --branch
 
         Log
-            git -C <repository> log --oneline --decorate --graph -n 50
+            git -C <repository> --no-pager log --oneline --decorate --graph -n 50
 
         Branches
-            git -C <repository> branch -vv
+            git -C <repository> --no-pager branch -vv
 
         Diff
-            git -C <repository> diff
+            git -C <repository> --no-pager diff
 
     Enter runs the selected action. Backspace is the default key for returning
     to the repository menu. Escape also returns to the repository menu.
+
+    gitman disables Git's internal pager for every action. Output is written
+    directly to the restored normal terminal; gitman then owns the explicit
+    "Press any key to continue..." pause.
 
 TERMINAL BEHAVIOR
     The menu session completes and restores its terminal state before gitman
