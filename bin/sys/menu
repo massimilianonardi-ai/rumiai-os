@@ -398,7 +398,6 @@ then
 
   if [ "$menu_command_action_key_count" -eq 0 ]
   then
-    [ "$menu_command_multiselect" -eq 1 ] || menu_command_fail directory-mode-requires-action-key
     [ "$menu_command_select_key" != tab ] || menu_command_fail directory-mode-requires-action-key
     [ "$menu_command_parent_key" != tab ] || menu_command_fail directory-mode-requires-action-key
     menu_key_add tab || menu_command_fail "$menu_error"
