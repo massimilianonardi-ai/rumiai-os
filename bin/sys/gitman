@@ -553,32 +553,63 @@ gitman_pause()
     fatal 1 execution execution-failed operation gitman reason key-read-failed
 }
 
+gitman_git_action_exec()
+{
+  [ "$#" -eq 3 ] || return 2
+  gitman_exec_paging=$1
+  gitman_exec_repository=$2
+  gitman_exec_action=$3
+
+  case "$gitman_exec_action" in
+    status)
+      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" status --short --branch
+      ;;
+    log)
+      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" log --oneline --decorate --graph -n 50
+      ;;
+    branch)
+      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" branch -vv
+      ;;
+    diff)
+      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" diff
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
 gitman_git_action_run()
 {
   [ "$#" -eq 2 ] || return 2
   gitman_action_repository=$1
   gitman_action=$2
 
-  printf '\nRepository: %s\n\n' "$gitman_action_repository"
+  case "$gitman_output_mode" in
+    pager)
+      if [ -n "${LESS-}" ]
+      then
+        gitman_action_less="$LESS -R -+F -+X"
+      else
+        gitman_action_less='-R -+F -+X'
+      fi
 
-  case "$gitman_action" in
-    status)
-      command -- git -C "$gitman_action_repository" status --short --branch
+      LESS=$gitman_action_less GIT_PAGER=pager \
+        gitman_git_action_exec --paginate "$gitman_action_repository" "$gitman_action"
+      gitman_git_status=$?
       ;;
-    log)
-      command -- git -C "$gitman_action_repository" log --oneline --decorate --graph -n 50
-      ;;
-    branch)
-      command -- git -C "$gitman_action_repository" branch -vv
-      ;;
-    diff)
-      command -- git -C "$gitman_action_repository" diff
+    terminal)
+      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_action_repository" "$gitman_action"
+
+      gitman_git_action_exec --no-pager "$gitman_action_repository" "$gitman_action"
+      gitman_git_status=$?
+
+      gitman_pause
       ;;
     *)
       return 2
       ;;
   esac
-  gitman_git_status=$?
 
   if [ "$gitman_git_status" -eq 0 ]
   then
@@ -587,7 +618,6 @@ gitman_git_action_run()
     gitman_last_error="git $gitman_action failed with status $gitman_git_status"
   fi
 
-  gitman_pause
   return 0
 }
 
@@ -595,12 +625,14 @@ gitman_action_menu()
 {
   [ "$#" -eq 1 ] || return 2
   gitman_action_repository=$1
-  gitman_action_header=$(gitman_display_safe "$gitman_action_repository") || return 2
+  gitman_action_repository_display=$(gitman_display_safe "$gitman_action_repository") || return 2
 
   while :
   do
+    gitman_action_header="$gitman_action_repository_display [output: $gitman_output_mode]"
+
     gitman_action_result=$(
-      command -- menu         -H "$gitman_action_header"         -F 'Enter: run | Backspace/Escape: repositories'         -B "$gitman_last_error"         -K backspace         --         'status@:=Status'         'log@:=Log'         'branch@:=Branches'         'diff@:=Diff'
+      command -- menu         -H "$gitman_action_header"         -F 'Enter: run | p: toggle output | Backspace/Escape: repositories'         -B "$gitman_last_error"         -K backspace -K p         --         'status@:=Status'         'log@:=Log'         'branch@:=Branches'         'diff@:=Diff'
     )
     gitman_action_status=$?
 
@@ -621,6 +653,14 @@ gitman_action_menu()
       backspace)
         return 0
         ;;
+      p)
+        case "$gitman_output_mode" in
+          pager) gitman_output_mode=terminal ;;
+          terminal) gitman_output_mode=pager ;;
+          *) return 2 ;;
+        esac
+        gitman_last_error=
+        ;;
       enter)
         gitman_git_action_run "$gitman_action_repository" "$gitman_action_value" ||
           fatal 1 execution execution-failed operation gitman reason git-action-failed
@@ -632,7 +672,7 @@ gitman_action_menu()
   done
 }
 
-for gitman_required_command in git menu read-key state-path
+for gitman_required_command in git menu pager read-key state-path
 do
   command -v "$gitman_required_command" >/dev/null 2>&1 ||
     fatal 127 execution command-not-found operation gitman command "$gitman_required_command"
@@ -651,6 +691,7 @@ array gitman_repositories ||
   fatal 1 execution execution-failed operation gitman reason repository-storage-failed
 
 gitman_last_error=
+gitman_output_mode=pager
 
 gitman_initial_candidates_load "$@" ||
   fatal 1 execution execution-failed operation gitman reason initial-candidate-load-failed
