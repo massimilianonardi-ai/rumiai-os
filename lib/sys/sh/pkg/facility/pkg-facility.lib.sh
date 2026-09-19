@@ -430,13 +430,24 @@ _pkg_facility_provider_unknown_surfaces_reject()
 pkg_facility_provider_validate()
 {
   [ "$#" -eq 3 ] || return 2
-  pkg_facility_provider_catalog=$1
+  pkg_facility_provider_catalog_root=$1
   pkg_facility_provider_definition=$2
   pkg_facility_provider_root=$3
   pkg_facility_provider_file="$pkg_facility_provider_definition/facility"
 
+  [ -d "$pkg_facility_provider_catalog_root" ] && [ ! -L "$pkg_facility_provider_catalog_root" ] || return 1
+  [ -d "$pkg_facility_provider_catalog_root/pkg" ] && [ ! -L "$pkg_facility_provider_catalog_root/pkg" ] || return 1
   [ -d "$pkg_facility_provider_definition" ] && [ ! -L "$pkg_facility_provider_definition" ] || return 1
   [ -d "$pkg_facility_provider_root" ] && [ ! -L "$pkg_facility_provider_root" ] || return 1
+
+  readpathce pkg_facility_provider_catalog_root_resolved "$pkg_facility_provider_catalog_root" || return 1
+  readpathce pkg_facility_provider_pkg_root_resolved "$pkg_facility_provider_catalog_root/pkg" || return 1
+  readpathce pkg_facility_provider_definition_resolved "$pkg_facility_provider_definition" || return 1
+  case "$pkg_facility_provider_definition_resolved" in
+    "$pkg_facility_provider_pkg_root_resolved"/*) : ;;
+    *) return 1 ;;
+  esac
+
   _pkg_facility_provider_unknown_surfaces_reject "$pkg_facility_provider_definition" || return 1
 
   if [ ! -e "$pkg_facility_provider_file" ] && [ ! -L "$pkg_facility_provider_file" ]
@@ -448,6 +459,7 @@ pkg_facility_provider_validate()
     return $?
   fi
 
+  pkg_facility_provider_catalog="$pkg_facility_provider_catalog_root/facility"
   [ -d "$pkg_facility_provider_catalog" ] && [ ! -L "$pkg_facility_provider_catalog" ] || return 1
   _pkg_facility_file_validate "$pkg_facility_provider_file" || return 1
 

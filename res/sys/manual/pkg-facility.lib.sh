@@ -26,10 +26,12 @@ FUNCTIONS
         Returns 0 when the contract is valid, 1 when its structure or typed content
         is invalid, and 2 for invalid invocation.
 
-    pkg_facility_provider_validate <facility-catalog-root> <provider-definition-dir> <provider-root>
+    pkg_facility_provider_validate <catalog-root> <provider-definition-dir> <provider-root>
         Validate every facility declared by one provider definition against the
-        exact contract under facility-catalog-root and validate the provider's
+        exact contract under <catalog-root>/facility and validate the provider's
         facility-cmd/facility-env realization against that contract and useful root.
+        provider-definition-dir must resolve beneath the same <catalog-root>/pkg
+        tree, mechanically preserving the same-snapshot conformance boundary.
 
         A provider definition with no facility declaration is valid only when it
         also contains no facility-cmd or facility-env realization.
