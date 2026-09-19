@@ -797,6 +797,28 @@ pkg_deintegrate()
   return 0
 )
 
+_pkg_default_restore_previous()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_default_restore_old=$1
+  pkg_default_restore_new=$2
+  pkg_default_restore_status=0
+
+  if [ -n "$pkg_default_restore_new" ]
+  then
+    _pkg_default_remove_bindings "$pkg_default_restore_new" 2>/dev/null || pkg_default_restore_status=1
+  fi
+  command -p -- rm -f -- "$pkg_integration_selector" 2>/dev/null || pkg_default_restore_status=1
+
+  if [ -n "$pkg_default_restore_old" ]
+  then
+    command -p -- ln -s "$pkg_default_restore_old" "$pkg_integration_selector" 2>/dev/null || pkg_default_restore_status=1
+    _pkg_default_create_bindings "$pkg_default_restore_old" 2>/dev/null || pkg_default_restore_status=1
+  fi
+
+  [ "$pkg_default_restore_status" -eq 0 ]
+}
+
 pkg_default_apply()
 (
   [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
@@ -830,7 +852,16 @@ pkg_default_apply()
   then
     [ -n "$pkg_default_old_concrete" ] || return 0
     _pkg_default_remove_bindings "$pkg_default_old_concrete" || return 1
-    command -p -- rm -f -- "$pkg_integration_selector" || return 1
+    if ! command -p -- rm -f -- "$pkg_integration_selector"
+    then
+      _pkg_default_create_bindings "$pkg_default_old_concrete" >/dev/null 2>&1 || :
+      return 1
+    fi
+    if ! pkg_provider_package_default_reconcile "$pkg_default_pkg" "$pkg_default_osarch" "$pkg_default_old_concrete" ""
+    then
+      _pkg_default_restore_previous "$pkg_default_old_concrete" "" >/dev/null 2>&1 || :
+      return 1
+    fi
     return 0
   fi
 
@@ -854,18 +885,28 @@ pkg_default_apply()
   if [ -n "$pkg_default_old_concrete" ]
   then
     _pkg_default_remove_bindings "$pkg_default_old_concrete" || return 1
-    command -p -- rm -f -- "$pkg_integration_selector" || return 1
+    if ! command -p -- rm -f -- "$pkg_integration_selector"
+    then
+      _pkg_default_create_bindings "$pkg_default_old_concrete" >/dev/null 2>&1 || :
+      return 1
+    fi
   fi
 
   if ! command -p -- ln -s "$pkg_default_new_concrete" "$pkg_integration_selector"
   then
+    _pkg_default_restore_previous "$pkg_default_old_concrete" "" >/dev/null 2>&1 || :
     return 1
   fi
 
   if ! _pkg_default_create_bindings "$pkg_default_new_concrete"
   then
-    _pkg_default_remove_bindings "$pkg_default_new_concrete" 2>/dev/null
-    command -p -- rm -f -- "$pkg_integration_selector" 2>/dev/null
+    _pkg_default_restore_previous "$pkg_default_old_concrete" "$pkg_default_new_concrete" >/dev/null 2>&1 || :
+    return 1
+  fi
+
+  if ! pkg_provider_package_default_reconcile "$pkg_default_pkg" "$pkg_default_osarch" "$pkg_default_old_concrete" "$pkg_default_new_concrete"
+  then
+    _pkg_default_restore_previous "$pkg_default_old_concrete" "$pkg_default_new_concrete" >/dev/null 2>&1 || :
     return 1
   fi
 

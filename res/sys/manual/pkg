@@ -73,10 +73,14 @@ COMMANDS
         Print the configured system default provider selector for the facility.
 
     provider default <facility> <provider-selector>
-        Set the system default provider selector for the facility.
+        Set the system default provider selector for the facility. Commands declared
+        by that facility are reconciled into bin/ext or bin/ext-<osarch> according
+        to provider-selector and package-default semantics. Facility environment
+        metadata is not injected into the ambient m environment.
 
     provider default -u [--] <facility>
-        Remove the configured system default provider selector.
+        Remove the configured system default provider selector and its owned global
+        facility command projection.
 
     provider bind <consumer> <facility>
         Print the configured provider selector bound to the consumer/facility pair.

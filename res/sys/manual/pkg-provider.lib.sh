@@ -5,10 +5,14 @@ DESCRIPTION
     pkg-provider.lib.sh implements the provider-selection configuration surface used
     by the public pkg provider command.
 
-    Facility defaults are system-scoped package-subsystem configuration. Consumer
-    bindings are system-scoped package configuration stored as binding/<facility>
-    beneath the consumer package conf area. A binding file contains exactly one
-    provider selector followed by newline.
+    Facility defaults are system-scoped package-subsystem configuration. A facility
+    default owns global command publication for that facility through bin/ext and
+    bin/ext-<osarch>. Consumer bindings are system-scoped package configuration
+    stored as binding/<facility> beneath the consumer package conf area. A binding
+    file contains exactly one provider selector followed by newline.
+
+    Global publication contains commands only. facility-env remains a consumer-launch
+    projection and is not injected into ambient m or shell state.
 
 FUNCTIONS
     pkg_provider_effective_selector <consumer> <facility>
@@ -29,14 +33,22 @@ FUNCTIONS
         facility default or a system consumer binding, 1 when it is not referenced,
         and 2 when the request or authoritative configuration cannot be validated.
 
+    pkg_provider_package_default_reconcile <package> <osarch> <old-concrete> <new-concrete>
+        Reconcile global commands for unversioned facility defaults affected by one
+        package-default transition. osarch is empty for the generic package class.
+        The function preserves selector-based targets, updates command-set changes
+        and rejects unrelated external-command collisions.
+
     pkg_provider default <facility>
         Print the configured system default provider selector for the facility.
 
     pkg_provider default <facility> <provider-selector>
-        Set the configured system default provider selector.
+        Set the configured system default provider selector and reconcile the
+        facility's owned global command projection.
 
     pkg_provider default -u [--] <facility>
-        Remove the configured system default provider selector.
+        Remove the configured system default provider selector and its owned global
+        command projection.
 
     pkg_provider bind <consumer> <facility>
         Print the configured provider selector for that consumer/facility pair.
@@ -57,7 +69,8 @@ PROVIDER SELECTORS
         <package>@<version>!<osarch>
 
     This library stores selector intent; it does not install providers or choose a
-    missing provider automatically.
+    missing provider automatically. Unversioned global command links target provider
+    package-default selectors; pinned selectors target pinned provider concretes.
 
 RETURN STATUS
     0   Requested query or mutation succeeded.

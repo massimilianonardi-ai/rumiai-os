@@ -192,8 +192,22 @@ _pkg_provider_default()
   then
     [ "$#" -eq 1 ] || return 2
     _pkg_provider_default_file "$1" || return $?
-    _pkg_provider_config_unset "$pkg_provider_config_file"
-    return $?
+
+    pkg_provider_old_selector=
+    if [ -e "$pkg_provider_config_file" ] || [ -L "$pkg_provider_config_file" ]
+    then
+      _pkg_provider_scalar_read "$pkg_provider_config_file" || return 1
+      _pkg_provider_selector_validate "$pkg_provider_scalar" || return 1
+      pkg_provider_old_selector=$pkg_provider_scalar
+    fi
+
+    _pkg_provider_global_reconcile "$1" "$pkg_provider_old_selector" "" || return 1
+    if ! _pkg_provider_config_unset "$pkg_provider_config_file"
+    then
+      _pkg_provider_global_reconcile "$1" "" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+      return 1
+    fi
+    return 0
   fi
 
   [ "$#" -eq 1 ] || [ "$#" -eq 2 ] || return 2
@@ -202,9 +216,26 @@ _pkg_provider_default()
   if [ "$#" -eq 1 ]
   then
     _pkg_provider_config_query "$pkg_provider_config_file"
-  else
-    _pkg_provider_config_set "$pkg_provider_config_file" "$2"
+    return $?
   fi
+
+  _pkg_provider_selector_validate "$2" || return 2
+  pkg_provider_new_selector=$2
+  pkg_provider_old_selector=
+  if [ -e "$pkg_provider_config_file" ] || [ -L "$pkg_provider_config_file" ]
+  then
+    _pkg_provider_scalar_read "$pkg_provider_config_file" || return 1
+    _pkg_provider_selector_validate "$pkg_provider_scalar" || return 1
+    pkg_provider_old_selector=$pkg_provider_scalar
+  fi
+
+  _pkg_provider_global_reconcile "$1" "$pkg_provider_old_selector" "$pkg_provider_new_selector" || return 1
+  if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector"
+  then
+    _pkg_provider_global_reconcile "$1" "$pkg_provider_new_selector" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+    return 1
+  fi
+  return 0
 }
 
 _pkg_provider_bind()
@@ -494,6 +525,503 @@ pkg_provider_concrete_referenced()
   done
 
   return 1
+)
+
+_pkg_provider_global_class_set()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_pkg=$1
+  pkg_provider_global_osarch=$2
+
+  if [ -n "$pkg_provider_global_osarch" ]
+  then
+    _pkg_provider_osarch_valid "$pkg_provider_global_osarch" || return 2
+    pkg_provider_global_class="$pkg_provider_global_pkg!$pkg_provider_global_osarch"
+    pkg_provider_global_public_dir="$m_BIN_DIR/ext-$pkg_provider_global_osarch"
+  else
+    pkg_provider_global_class=$pkg_provider_global_pkg
+    pkg_provider_global_public_dir=$m_BIN_EXT_DIR
+  fi
+  pkg_provider_global_selector_path="$m_PKG_DIR/$pkg_provider_global_class"
+}
+
+_pkg_provider_global_plan_concrete()
+{
+  [ "$#" -eq 5 ] || return 2
+  pkg_provider_global_facility=$1
+  pkg_provider_global_pkg=$2
+  pkg_provider_global_osarch=$3
+  pkg_provider_global_concrete=$4
+  pkg_provider_global_target_name=$5
+
+  [ -n "$pkg_provider_global_concrete" ] || return 0
+  _pkg_provider_resolved_validate "$pkg_provider_global_concrete" "$pkg_provider_global_pkg" "" "$pkg_provider_global_osarch" || return 1
+  _pkg_provider_global_class_set "$pkg_provider_global_pkg" "$pkg_provider_global_osarch" || return 1
+
+  pkg_provider_global_cmd_dir="$m_PKG_DIR/$pkg_provider_global_concrete/facility-cmd/$pkg_provider_global_facility"
+  if [ ! -e "$pkg_provider_global_cmd_dir" ] && [ ! -L "$pkg_provider_global_cmd_dir" ]
+  then
+    return 0
+  fi
+  [ -d "$pkg_provider_global_cmd_dir" ] && [ ! -L "$pkg_provider_global_cmd_dir" ] || return 1
+
+  for pkg_provider_global_cmd_path in "$pkg_provider_global_cmd_dir"/*
+  do
+    [ -e "$pkg_provider_global_cmd_path" ] || [ -L "$pkg_provider_global_cmd_path" ] || continue
+    [ -L "$pkg_provider_global_cmd_path" ] || return 1
+    pkg_provider_global_command=${pkg_provider_global_cmd_path##*/}
+    _pkg_provider_name_valid "$pkg_provider_global_command" || return 1
+    readpathce pkg_provider_global_resolved "$pkg_provider_global_cmd_path" || return 1
+    [ -f "$pkg_provider_global_resolved" ] && [ -x "$pkg_provider_global_resolved" ] || return 1
+    printf -- '%s\t%s\n' \
+      "$pkg_provider_global_public_dir/$pkg_provider_global_command" \
+      "../../pkg/$pkg_provider_global_target_name/facility-cmd/$pkg_provider_global_facility/$pkg_provider_global_command"
+  done
+}
+
+_pkg_provider_global_plan_class()
+{
+  [ "$#" -eq 5 ] || return 2
+  pkg_provider_global_facility=$1
+  pkg_provider_global_pkg=$2
+  pkg_provider_global_version=$3
+  pkg_provider_global_osarch=$4
+  pkg_provider_global_require_default=$5
+
+  _pkg_provider_global_class_set "$pkg_provider_global_pkg" "$pkg_provider_global_osarch" || return 1
+  pkg_provider_global_current=
+
+  if [ -z "$pkg_provider_global_version" ] || [ "$pkg_provider_global_require_default" -eq 1 ]
+  then
+    if [ ! -e "$pkg_provider_global_selector_path" ] && [ ! -L "$pkg_provider_global_selector_path" ]
+    then
+      return 0
+    fi
+    [ -L "$pkg_provider_global_selector_path" ] || return 1
+    pkg_provider_global_current="$(command -p -- readlink "$pkg_provider_global_selector_path")" || return 1
+    [ -n "$pkg_provider_global_current" ] || return 1
+    case "$pkg_provider_global_current" in */*) return 1 ;; esac
+    _pkg_provider_resolved_validate "$pkg_provider_global_current" "$pkg_provider_global_pkg" "" "$pkg_provider_global_osarch" || return 1
+  fi
+
+  if [ -z "$pkg_provider_global_version" ]
+  then
+    pkg_provider_global_concrete=$pkg_provider_global_current
+    pkg_provider_global_target_name=$pkg_provider_global_class
+  else
+    if [ -n "$pkg_provider_global_osarch" ]
+    then
+      pkg_provider_global_concrete="$pkg_provider_global_pkg@$pkg_provider_global_version!$pkg_provider_global_osarch"
+    else
+      pkg_provider_global_concrete="$pkg_provider_global_pkg@$pkg_provider_global_version"
+    fi
+    if [ ! -d "$m_PKG_DIR/$pkg_provider_global_concrete" ] || [ -L "$m_PKG_DIR/$pkg_provider_global_concrete" ]
+    then
+      return 0
+    fi
+    pkg_provider_global_target_name=$pkg_provider_global_concrete
+  fi
+
+  _pkg_provider_global_plan_concrete \
+    "$pkg_provider_global_facility" \
+    "$pkg_provider_global_pkg" \
+    "$pkg_provider_global_osarch" \
+    "$pkg_provider_global_concrete" \
+    "$pkg_provider_global_target_name"
+}
+
+_pkg_provider_global_plan_selector()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_facility=$1
+  pkg_provider_global_selector=$2
+
+  [ -n "$pkg_provider_global_selector" ] || return 0
+  _pkg_provider_selector_validate "$pkg_provider_global_selector" || return 2
+  pkg_provider_global_plan_pkg=$pkg_provider_selector_pkg
+  pkg_provider_global_plan_version=$pkg_provider_selector_version
+  pkg_provider_global_plan_osarch=$pkg_provider_selector_osarch
+
+  if [ -n "$pkg_provider_global_plan_osarch" ]
+  then
+    if [ -n "$pkg_provider_global_plan_version" ]
+    then
+      _pkg_provider_global_plan_class "$pkg_provider_global_facility" "$pkg_provider_global_plan_pkg" "$pkg_provider_global_plan_version" "$pkg_provider_global_plan_osarch" 0
+    else
+      _pkg_provider_global_plan_class "$pkg_provider_global_facility" "$pkg_provider_global_plan_pkg" "" "$pkg_provider_global_plan_osarch" 1
+    fi
+    return $?
+  fi
+
+  _pkg_provider_global_plan_class "$pkg_provider_global_facility" "$pkg_provider_global_plan_pkg" "$pkg_provider_global_plan_version" "" 1 || return 1
+  for pkg_provider_global_each_osarch in \
+    linux-arm64 linux-x86_64 macos-arm64 macos-x86_64 windows-arm64 windows-x86_64
+  do
+    _pkg_provider_global_plan_class "$pkg_provider_global_facility" "$pkg_provider_global_plan_pkg" "$pkg_provider_global_plan_version" "$pkg_provider_global_each_osarch" 1 || return 1
+  done
+}
+
+_pkg_provider_global_plan_find()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_find_plan=$1
+  pkg_provider_global_find_public=$2
+  pkg_provider_global_found_target=
+  pkg_provider_global_found=0
+  [ -n "$pkg_provider_global_find_plan" ] || return 1
+
+  pkg_provider_global_tab="$(printf '\t')"
+  while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_find_path pkg_provider_global_find_target pkg_provider_global_find_extra
+  do
+    [ -n "$pkg_provider_global_find_path" ] && [ -n "$pkg_provider_global_find_target" ] && [ -z "$pkg_provider_global_find_extra" ] || return 2
+    if [ "$pkg_provider_global_find_path" = "$pkg_provider_global_find_public" ]
+    then
+      [ "$pkg_provider_global_found" -eq 0 ] || return 2
+      pkg_provider_global_found=1
+      pkg_provider_global_found_target=$pkg_provider_global_find_target
+    fi
+  done <<EOF_PROVIDER_GLOBAL_FIND
+$pkg_provider_global_find_plan
+EOF_PROVIDER_GLOBAL_FIND
+
+  [ "$pkg_provider_global_found" -eq 1 ]
+}
+
+_pkg_provider_global_plan_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_provider_global_validate_plan=$1
+  [ -n "$pkg_provider_global_validate_plan" ] || return 0
+
+  pkg_provider_global_seen=
+  pkg_provider_global_tab="$(printf '\t')"
+  while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_validate_public pkg_provider_global_validate_target pkg_provider_global_validate_extra
+  do
+    [ -n "$pkg_provider_global_validate_public" ] && [ -n "$pkg_provider_global_validate_target" ] && [ -z "$pkg_provider_global_validate_extra" ] || return 1
+    case "$pkg_provider_global_validate_public" in "$m_BIN_EXT_DIR"/* | "$m_BIN_DIR"/ext-*/*) : ;; *) return 1 ;; esac
+    case "$pkg_provider_global_validate_target" in ../../pkg/*/facility-cmd/*/*) : ;; *) return 1 ;; esac
+
+    if [ -n "$pkg_provider_global_seen" ]
+    then
+      while IFS= read -r pkg_provider_global_seen_public
+      do
+        [ "$pkg_provider_global_seen_public" != "$pkg_provider_global_validate_public" ] || return 1
+      done <<EOF_PROVIDER_GLOBAL_SEEN
+$pkg_provider_global_seen
+EOF_PROVIDER_GLOBAL_SEEN
+      pkg_provider_global_seen="$pkg_provider_global_seen
+$pkg_provider_global_validate_public"
+    else
+      pkg_provider_global_seen=$pkg_provider_global_validate_public
+    fi
+  done <<EOF_PROVIDER_GLOBAL_VALIDATE
+$pkg_provider_global_validate_plan
+EOF_PROVIDER_GLOBAL_VALIDATE
+}
+
+_pkg_provider_global_existing_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_old_plan=$1
+  pkg_provider_global_new_plan=$2
+  _pkg_provider_global_plan_validate "$pkg_provider_global_old_plan" || return 1
+  _pkg_provider_global_plan_validate "$pkg_provider_global_new_plan" || return 1
+
+  pkg_provider_global_tab="$(printf '\t')"
+  if [ -n "$pkg_provider_global_old_plan" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || return 1
+      if [ -e "$pkg_provider_global_public" ] || [ -L "$pkg_provider_global_public" ]
+      then
+        [ -L "$pkg_provider_global_public" ] || return 1
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || return 1
+        [ "$pkg_provider_global_actual" = "$pkg_provider_global_target" ] || return 1
+      fi
+    done <<EOF_PROVIDER_GLOBAL_OLD
+$pkg_provider_global_old_plan
+EOF_PROVIDER_GLOBAL_OLD
+  fi
+
+  if [ -n "$pkg_provider_global_new_plan" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || return 1
+      if [ -e "$pkg_provider_global_public" ] || [ -L "$pkg_provider_global_public" ]
+      then
+        _pkg_provider_global_plan_find "$pkg_provider_global_old_plan" "$pkg_provider_global_public" || return 1
+        [ -L "$pkg_provider_global_public" ] || return 1
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || return 1
+        [ "$pkg_provider_global_actual" = "$pkg_provider_global_found_target" ] || return 1
+      fi
+    done <<EOF_PROVIDER_GLOBAL_NEW
+$pkg_provider_global_new_plan
+EOF_PROVIDER_GLOBAL_NEW
+  fi
+}
+
+_pkg_provider_global_link_replace()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_public=$1
+  pkg_provider_global_target=$2
+  pkg_provider_global_parent=${pkg_provider_global_public%/*}
+  [ "$pkg_provider_global_parent" != "$pkg_provider_global_public" ] || return 1
+
+  if [ ! -e "$pkg_provider_global_parent" ] && [ ! -L "$pkg_provider_global_parent" ]
+  then
+    command -p -- mkdir -p -- "$pkg_provider_global_parent" || return 1
+  fi
+  [ -d "$pkg_provider_global_parent" ] && [ ! -L "$pkg_provider_global_parent" ] || return 1
+
+  pkg_provider_global_index=$((pkg_provider_global_index + 1))
+  pkg_provider_global_tmp="$pkg_provider_global_parent/.pkg-provider-$$-$pkg_provider_global_index"
+  [ ! -e "$pkg_provider_global_tmp" ] && [ ! -L "$pkg_provider_global_tmp" ] || return 1
+  command -p -- ln -s "$pkg_provider_global_target" "$pkg_provider_global_tmp" || return 1
+  if ! command -p -- mv -f -- "$pkg_provider_global_tmp" "$pkg_provider_global_public"
+  then
+    command -p -- rm -f -- "$pkg_provider_global_tmp" 2>/dev/null || :
+    return 1
+  fi
+}
+
+_pkg_provider_global_restore()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_restore_old=$1
+  pkg_provider_global_restore_new=$2
+  pkg_provider_global_index=0
+  pkg_provider_global_tab="$(printf '\t')"
+
+  if [ -n "$pkg_provider_global_restore_old" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || return 1
+      if [ -e "$pkg_provider_global_public" ] || [ -L "$pkg_provider_global_public" ]
+      then
+        [ -L "$pkg_provider_global_public" ] || return 1
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || return 1
+        if [ "$pkg_provider_global_actual" != "$pkg_provider_global_target" ]
+        then
+          _pkg_provider_global_plan_find "$pkg_provider_global_restore_new" "$pkg_provider_global_public" || return 1
+          [ "$pkg_provider_global_actual" = "$pkg_provider_global_found_target" ] || return 1
+        fi
+      fi
+      _pkg_provider_global_link_replace "$pkg_provider_global_public" "$pkg_provider_global_target" || return 1
+    done <<EOF_PROVIDER_GLOBAL_RESTORE_OLD
+$pkg_provider_global_restore_old
+EOF_PROVIDER_GLOBAL_RESTORE_OLD
+  fi
+
+  if [ -n "$pkg_provider_global_restore_new" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || return 1
+      if _pkg_provider_global_plan_find "$pkg_provider_global_restore_old" "$pkg_provider_global_public"
+      then
+        continue
+      fi
+      if [ -e "$pkg_provider_global_public" ] || [ -L "$pkg_provider_global_public" ]
+      then
+        [ -L "$pkg_provider_global_public" ] || return 1
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || return 1
+        [ "$pkg_provider_global_actual" = "$pkg_provider_global_target" ] || return 1
+        command -p -- rm -f -- "$pkg_provider_global_public" || return 1
+      fi
+    done <<EOF_PROVIDER_GLOBAL_RESTORE_NEW
+$pkg_provider_global_restore_new
+EOF_PROVIDER_GLOBAL_RESTORE_NEW
+  fi
+}
+
+_pkg_provider_global_reconcile_plans()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_global_old_plan=$1
+  pkg_provider_global_new_plan=$2
+  _pkg_provider_global_existing_validate "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" || return 1
+
+  pkg_provider_global_index=0
+  pkg_provider_global_tab="$(printf '\t')"
+
+  if [ -n "$pkg_provider_global_new_plan" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || {
+        _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+        return 1
+      }
+
+      if [ -L "$pkg_provider_global_public" ]
+      then
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || {
+          _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+          return 1
+        }
+        [ "$pkg_provider_global_actual" != "$pkg_provider_global_target" ] || continue
+      fi
+
+      if ! _pkg_provider_global_link_replace "$pkg_provider_global_public" "$pkg_provider_global_target"
+      then
+        _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+        return 1
+      fi
+    done <<EOF_PROVIDER_GLOBAL_APPLY_NEW
+$pkg_provider_global_new_plan
+EOF_PROVIDER_GLOBAL_APPLY_NEW
+  fi
+
+  if [ -n "$pkg_provider_global_old_plan" ]
+  then
+    while IFS="$pkg_provider_global_tab" read -r pkg_provider_global_public pkg_provider_global_target pkg_provider_global_extra
+    do
+      [ -z "$pkg_provider_global_extra" ] || {
+        _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+        return 1
+      }
+      if _pkg_provider_global_plan_find "$pkg_provider_global_new_plan" "$pkg_provider_global_public"
+      then
+        continue
+      fi
+      if [ -e "$pkg_provider_global_public" ] || [ -L "$pkg_provider_global_public" ]
+      then
+        [ -L "$pkg_provider_global_public" ] || {
+          _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+          return 1
+        }
+        pkg_provider_global_actual="$(command -p -- readlink "$pkg_provider_global_public")" || {
+          _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+          return 1
+        }
+        [ "$pkg_provider_global_actual" = "$pkg_provider_global_target" ] || {
+          _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+          return 1
+        }
+        if ! command -p -- rm -f -- "$pkg_provider_global_public"
+        then
+          _pkg_provider_global_restore "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan" >/dev/null 2>&1 || :
+          return 1
+        fi
+      fi
+    done <<EOF_PROVIDER_GLOBAL_APPLY_OLD
+$pkg_provider_global_old_plan
+EOF_PROVIDER_GLOBAL_APPLY_OLD
+  fi
+}
+
+_pkg_provider_global_reconcile()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_provider_global_facility=$1
+  pkg_provider_global_old_selector=$2
+  pkg_provider_global_new_selector=$3
+  _pkg_provider_facility_valid "$pkg_provider_global_facility" || return 2
+
+  pkg_provider_global_old_plan="$(_pkg_provider_global_plan_selector "$pkg_provider_global_facility" "$pkg_provider_global_old_selector")" || return 1
+  pkg_provider_global_new_plan="$(_pkg_provider_global_plan_selector "$pkg_provider_global_facility" "$pkg_provider_global_new_selector")" || return 1
+  _pkg_provider_global_reconcile_plans "$pkg_provider_global_old_plan" "$pkg_provider_global_new_plan"
+}
+
+pkg_provider_package_default_reconcile()
+(
+  [ "$#" -eq 4 ] || return 2
+  pkg_provider_transition_pkg=$1
+  pkg_provider_transition_osarch=$2
+  pkg_provider_transition_old=$3
+  pkg_provider_transition_new=$4
+
+  _pkg_provider_name_valid "$pkg_provider_transition_pkg" || return 2
+  if [ -n "$pkg_provider_transition_osarch" ]
+  then
+    _pkg_provider_osarch_valid "$pkg_provider_transition_osarch" || return 2
+    pkg_provider_transition_class="$pkg_provider_transition_pkg!$pkg_provider_transition_osarch"
+  else
+    pkg_provider_transition_class=$pkg_provider_transition_pkg
+  fi
+
+  if [ -n "$pkg_provider_transition_old" ]
+  then
+    _pkg_provider_resolved_validate "$pkg_provider_transition_old" "$pkg_provider_transition_pkg" "" "$pkg_provider_transition_osarch" || return 1
+  fi
+  if [ -n "$pkg_provider_transition_new" ]
+  then
+    _pkg_provider_resolved_validate "$pkg_provider_transition_new" "$pkg_provider_transition_pkg" "" "$pkg_provider_transition_osarch" || return 1
+  fi
+
+  _pkg_provider_system_conf || return 1
+  pkg_provider_transition_root="$pkg_provider_system_conf/provider/default"
+  if [ ! -e "$pkg_provider_transition_root" ] && [ ! -L "$pkg_provider_transition_root" ]
+  then
+    return 0
+  fi
+  [ -d "$pkg_provider_transition_root" ] && [ ! -L "$pkg_provider_transition_root" ] || return 1
+
+  pkg_provider_transition_old_plan=
+  pkg_provider_transition_new_plan=
+  for pkg_provider_transition_file in \
+    "$pkg_provider_transition_root"/* \
+    "$pkg_provider_transition_root"/.[!.]* \
+    "$pkg_provider_transition_root"/..?*
+  do
+    [ -e "$pkg_provider_transition_file" ] || [ -L "$pkg_provider_transition_file" ] || continue
+    [ -f "$pkg_provider_transition_file" ] && [ ! -L "$pkg_provider_transition_file" ] || return 1
+    pkg_provider_transition_facility=${pkg_provider_transition_file##*/}
+    _pkg_provider_facility_valid "$pkg_provider_transition_facility" || return 1
+    _pkg_provider_scalar_read "$pkg_provider_transition_file" || return 1
+    _pkg_provider_selector_validate "$pkg_provider_scalar" || return 1
+
+    pkg_provider_transition_selector_pkg=$pkg_provider_selector_pkg
+    pkg_provider_transition_selector_version=$pkg_provider_selector_version
+    pkg_provider_transition_selector_osarch=$pkg_provider_selector_osarch
+
+    [ "$pkg_provider_transition_selector_pkg" = "$pkg_provider_transition_pkg" ] || continue
+    [ -z "$pkg_provider_transition_selector_version" ] || continue
+    if [ -n "$pkg_provider_transition_selector_osarch" ]
+    then
+      [ "$pkg_provider_transition_selector_osarch" = "$pkg_provider_transition_osarch" ] || continue
+    fi
+
+    pkg_provider_transition_piece="$(_pkg_provider_global_plan_concrete \
+      "$pkg_provider_transition_facility" \
+      "$pkg_provider_transition_pkg" \
+      "$pkg_provider_transition_osarch" \
+      "$pkg_provider_transition_old" \
+      "$pkg_provider_transition_class")" || return 1
+    if [ -n "$pkg_provider_transition_piece" ]
+    then
+      if [ -n "$pkg_provider_transition_old_plan" ]
+      then
+        pkg_provider_transition_old_plan="$pkg_provider_transition_old_plan
+$pkg_provider_transition_piece"
+      else
+        pkg_provider_transition_old_plan=$pkg_provider_transition_piece
+      fi
+    fi
+
+    pkg_provider_transition_piece="$(_pkg_provider_global_plan_concrete \
+      "$pkg_provider_transition_facility" \
+      "$pkg_provider_transition_pkg" \
+      "$pkg_provider_transition_osarch" \
+      "$pkg_provider_transition_new" \
+      "$pkg_provider_transition_class")" || return 1
+    if [ -n "$pkg_provider_transition_piece" ]
+    then
+      if [ -n "$pkg_provider_transition_new_plan" ]
+      then
+        pkg_provider_transition_new_plan="$pkg_provider_transition_new_plan
+$pkg_provider_transition_piece"
+      else
+        pkg_provider_transition_new_plan=$pkg_provider_transition_piece
+      fi
+    fi
+  done
+
+  _pkg_provider_global_reconcile_plans "$pkg_provider_transition_old_plan" "$pkg_provider_transition_new_plan"
 )
 
 pkg_provider()
