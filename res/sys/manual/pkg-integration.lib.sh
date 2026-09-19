@@ -9,7 +9,10 @@ FUNCTIONS
     pkg_integrate <package> <version> <range-dir> <root-dir> [<osarch>]
         Validate a resolved package definition and extracted useful root, validate
         configured facility dependencies, materialize the managed concrete and its
-        command/environment/facility/state metadata, validate and materialize declarative facility command/environment projections, and index declared facilities.
+        command/environment/facility/state metadata, validate and materialize
+        declarative facility command/environment projections, and index declared
+        facilities. PATH is rejected as facility-env metadata because command-path
+        exposure is owned by facility-cmd publication.
 
         Dependency validation uses the consumer's configured binding or inherited
         system facility default. Integration stores dependency declarations but does
