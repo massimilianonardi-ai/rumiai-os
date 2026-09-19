@@ -24,15 +24,7 @@ DESCRIPTION
     require real provider/service validation.
 
 FUNCTIONS
-    pkg_facility_service_start_resolve <facility> <concrete-provider>
-        Validate the installed concrete's declared facility and materialized
-        facility-service start realization, then print the exact executable package
-        command pathname belonging to that concrete. The function reads installed
-        validated realization only; it does not read pkg-catalog, select a provider
-        or start a process.
-
-        Returns 0 on success, 1 for invalid/corrupt installed realization and 2 for
-        invalid invocation.
+    This library exposes no public callable functions.
 
 SEE ALSO
     pkg-facility.lib.sh

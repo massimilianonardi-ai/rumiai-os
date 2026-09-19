@@ -489,3 +489,48 @@ pkg_facility_provider_validate()
   _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" env || return 1
   _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" service
 }
+
+pkg_facility_service_start_resolve()
+(
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_service_runtime_facility=$1
+  pkg_facility_service_runtime_concrete_name=$2
+
+  _pkg_facility_name_valid "$pkg_facility_service_runtime_facility" || return 2
+  case "$pkg_facility_service_runtime_concrete_name" in
+    "" | */* | *'
+'*) return 2 ;;
+  esac
+  [ -n "${m_PKG_DIR-}" ] || return 1
+
+  pkg_facility_service_runtime_concrete="$m_PKG_DIR/$pkg_facility_service_runtime_concrete_name"
+  [ -d "$pkg_facility_service_runtime_concrete" ] && [ ! -L "$pkg_facility_service_runtime_concrete" ] || return 1
+  readpathce pkg_facility_service_runtime_concrete_resolved "$pkg_facility_service_runtime_concrete" || return 1
+
+  _pkg_facility_file_validate "$pkg_facility_service_runtime_concrete/facility" || return 1
+  pkg_facility_service_runtime_declared=0
+  while IFS= read -r pkg_facility_service_runtime_line
+  do
+    _pkg_facility_line_parse "$pkg_facility_service_runtime_line" || return 1
+    if [ "$pkg_facility_name" = "$pkg_facility_service_runtime_facility" ]
+    then
+      pkg_facility_service_runtime_declared=1
+      break
+    fi
+  done < "$pkg_facility_service_runtime_concrete/facility"
+  [ "$pkg_facility_service_runtime_declared" -eq 1 ] || return 1
+
+  _pkg_facility_service_realization_start_read \
+    "$pkg_facility_service_runtime_concrete/facility-service/$pkg_facility_service_runtime_facility" || return 1
+  pkg_facility_service_runtime_command=$pkg_facility_service_scalar
+  _pkg_facility_cmd_name_valid "$pkg_facility_service_runtime_command" || return 1
+
+  pkg_facility_service_runtime_command_path="$pkg_facility_service_runtime_concrete/cmd/$pkg_facility_service_runtime_command"
+  [ -f "$pkg_facility_service_runtime_command_path" ] && \
+  [ ! -L "$pkg_facility_service_runtime_command_path" ] && \
+  [ -x "$pkg_facility_service_runtime_command_path" ] || return 1
+  readpathce pkg_facility_service_runtime_command_resolved "$pkg_facility_service_runtime_command_path" || return 1
+  [ "$pkg_facility_service_runtime_command_resolved" = "$pkg_facility_service_runtime_concrete_resolved/cmd/$pkg_facility_service_runtime_command" ] || return 1
+
+  printf -- '%s\n' "$pkg_facility_service_runtime_command_resolved"
+)
