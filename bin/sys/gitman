@@ -629,7 +629,7 @@ gitman_action_menu()
 
   while :
   do
-    gitman_action_header="$gitman_action_repository_display [output: $gitman_output_mode]"
+    gitman_action_header="[output: $gitman_output_mode] $gitman_action_repository_display"
 
     gitman_action_result=$(
       command -- menu         -H "$gitman_action_header"         -F 'Enter: run | p: toggle output | Backspace/Escape: repositories'         -B "$gitman_last_error"         -K backspace -K p         --         'status@:=Status'         'log@:=Log'         'branch@:=Branches'         'diff@:=Diff'
