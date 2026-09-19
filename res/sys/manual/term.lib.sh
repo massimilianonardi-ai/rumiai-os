@@ -129,6 +129,10 @@ FUNCTIONS
     term_clear
         Clear the selected terminal through the terminfo clear capability.
 
+    term_line_clear
+        Clear from the current cursor position through the end of the current
+        terminal line using the terminfo el capability.
+
     term_key_is_text <key>
         Predicate for one complete text key.
 
