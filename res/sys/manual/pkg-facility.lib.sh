@@ -14,9 +14,9 @@ DESCRIPTION
 
         facility/<facility>/<compatibility>/<part>/...
 
-    The current trusted part types are cmd and env. Their schemas and provider
-    realization validation are delegated to internal type handlers. Unknown part
-    types and unknown provider realization surfaces are rejected.
+    The current trusted part types are cmd, env and service. Their schemas and
+    provider realization validation are delegated to internal type handlers.
+    Unknown part types and unknown provider realization surfaces are rejected.
 
 FUNCTIONS
     pkg_facility_contract_validate <contract-dir>
@@ -29,12 +29,14 @@ FUNCTIONS
     pkg_facility_provider_validate <catalog-root> <provider-definition-dir> <provider-root>
         Validate every facility declared by one provider definition against the
         exact contract under <catalog-root>/facility and validate the provider's
-        facility-cmd/facility-env realization against that contract and useful root.
+        facility-cmd/facility-env/facility-service realization against that
+        contract and useful root.
         provider-definition-dir must resolve beneath the same <catalog-root>/pkg
         tree, mechanically preserving the same-snapshot conformance boundary.
 
         A provider definition with no facility declaration is valid only when it
-        also contains no facility-cmd or facility-env realization.
+        also contains no facility-cmd, facility-env or facility-service
+        realization.
 
         The function performs no provider selection and no state mutation.
 
@@ -43,8 +45,8 @@ FUNCTIONS
         invocation.
 
 DEPENDENCIES
-    The library runs inside the m bootstrap environment and loads the trusted cmd
-    and env facility-part handler libraries.
+    The library runs inside the m bootstrap environment and loads the trusted cmd,
+    env and service facility-part handler libraries.
 
 SEE ALSO
     pkg-dependency.lib.sh

@@ -1,5 +1,6 @@
 . "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-cmd.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-env.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-service.lib.sh"
 
 _pkg_facility_name_valid()
 {
@@ -274,6 +275,7 @@ _pkg_facility_contract_part_validate()
   case "$pkg_facility_contract_part" in
     cmd) _pkg_facility_cmd_contract_validate "$pkg_facility_contract_part_dir" ;;
     env) _pkg_facility_env_contract_validate "$pkg_facility_contract_part_dir" ;;
+    service) _pkg_facility_service_contract_validate "$pkg_facility_contract_part_dir" ;;
     *) return 1 ;;
   esac
 }
@@ -346,6 +348,13 @@ _pkg_facility_provider_part_validate()
       _pkg_facility_env_provider_validate \
         "$pkg_facility_provider_contract_part" \
         "$pkg_facility_provider_definition/facility-env/$pkg_facility_provider_name" \
+        "$pkg_facility_provider_root"
+      ;;
+    service)
+      _pkg_facility_service_provider_validate \
+        "$pkg_facility_provider_contract_part" \
+        "$pkg_facility_provider_definition/facility-service/$pkg_facility_provider_name" \
+        "$pkg_facility_provider_definition" \
         "$pkg_facility_provider_root"
       ;;
     *)
@@ -421,7 +430,7 @@ _pkg_facility_provider_unknown_surfaces_reject()
   do
     [ -e "$pkg_facility_surface_entry" ] || [ -L "$pkg_facility_surface_entry" ] || continue
     case "${pkg_facility_surface_entry##*/}" in
-      facility-cmd | facility-env) : ;;
+      facility-cmd | facility-env | facility-service) : ;;
       *) return 1 ;;
     esac
   done
@@ -455,7 +464,9 @@ pkg_facility_provider_validate()
     [ ! -e "$pkg_facility_provider_definition/facility-cmd" ] && \
     [ ! -L "$pkg_facility_provider_definition/facility-cmd" ] && \
     [ ! -e "$pkg_facility_provider_definition/facility-env" ] && \
-    [ ! -L "$pkg_facility_provider_definition/facility-env" ]
+    [ ! -L "$pkg_facility_provider_definition/facility-env" ] && \
+    [ ! -e "$pkg_facility_provider_definition/facility-service" ] && \
+    [ ! -L "$pkg_facility_provider_definition/facility-service" ]
     return $?
   fi
 
@@ -475,5 +486,6 @@ pkg_facility_provider_validate()
   done < "$pkg_facility_provider_file"
 
   _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" cmd || return 1
-  _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" env
+  _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" env || return 1
+  _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" service
 }
