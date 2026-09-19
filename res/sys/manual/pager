@@ -1,28 +1,37 @@
 NAME
-    pager - present a file through the RumiAI technical pager abstraction
+    pager - present stdin or files through the RumiAI technical pager abstraction
 
 SYNOPSIS
-    pager <file>
+    pager [file ...]
 
 DESCRIPTION
     pager provides the technical paging boundary used by commands that need
-    terminal presentation without embedding host-specific pager logic.
+    terminal presentation without embedding host-specific pager selection.
 
-    Exactly one file operand is accepted. The file pathname is resolved through
-    the runtime path-resolution facility and must identify a readable regular
-    file.
+    With no file operands, pager reads standard input. This is the conventional
+    pager form used by programs that pipe their output to a pager command.
 
-    When standard output is not a terminal, pager copies the file directly to
-    standard output so pipelines and redirections remain non-interactive.
+    With one or more file operands, every pathname is resolved through the
+    runtime path-resolution facility and must identify a readable regular file.
+    Multiple files are presented in operand order.
 
-    When standard output is a terminal, pager selects the viewer according to
-    the current host policy.
+    pager intentionally provides the common pager role; it does not attempt to
+    reproduce every command-line option accepted by less or more.
+
+OUTPUT DESTINATION
+    When standard output is not a terminal, pager is non-interactive.
+
+    With no file operands it copies standard input directly to standard output.
+    With file operands it concatenates the resolved files to standard output in
+    operand order.
+
+    When standard output is a terminal, pager selects the host viewer described
+    below. The viewer reads standard input when no file operand is present and
+    receives the resolved file operands otherwise.
 
 HOST POLICY
     Linux
-        Prefer less. The common util-linux more implementation does not provide
-        the preferred bidirectional stay-at-end interaction in its normal host
-        configuration.
+        Prefer less.
 
         If less is unavailable, fall back to more. This deliberately accepts a
         less capable interaction rather than failing only because the preferred
@@ -31,17 +40,25 @@ HOST POLICY
     Other hosts
         Use more until a concrete host divergence requires a dedicated adapter.
 
-    When less is used, LESS, LESSOPEN and LESSCLOSE are neutralized for the
-    viewer invocation so caller configuration does not silently alter pager
-    behavior.
+CALLER ENVIRONMENT
+    pager does not erase environment intended for the selected viewer.
+
+    In particular, when less is selected, inherited variables such as LESS,
+    LESSOPEN and LESSCLOSE remain available to less. This allows callers such as
+    Git to retain their normal pager presentation policy while still using
+    pager as the pager command.
+
+    pager does not expose a separate user-configurable backend command. Backend
+    selection remains owned by pager itself.
 
 OPERANDS
-    <file>
-        Existing readable regular file to present.
+    file
+        Existing readable regular file to present. Zero or more file operands
+        are accepted.
 
 EXIT STATUS
     0   Success.
-    1   File resolution/access or presentation/backend failure.
+    1   Input/file resolution/access or presentation/backend failure.
     2   Invalid invocation.
 
 SEE ALSO
