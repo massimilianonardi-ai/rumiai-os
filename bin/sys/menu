@@ -1,0 +1,420 @@
+#!/usr/bin/env m
+
+. "$m_LIB_DIR/sys/sh/menu.lib.sh"
+
+menu_command_fail()
+{
+  if [ "$#" -gt 0 ]
+  then
+    fatal 2 execution invalid-arguments operation menu reason "$1"
+  fi
+
+  fatal 2 execution invalid-arguments operation menu
+}
+
+menu_command_key_decode()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$1" ] || return 1
+
+  case "$1" in
+    space) menu_command_decoded_key=' ' ;;
+    arrow_left) menu_command_decoded_key=left ;;
+    arrow_right) menu_command_decoded_key=right ;;
+    *) menu_command_decoded_key=$1 ;;
+  esac
+
+  return 0
+}
+
+menu_command_key_encode()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  case "$1" in
+    ' ') menu_command_encoded_key=space ;;
+    *) menu_command_encoded_key=$1 ;;
+  esac
+}
+
+menu_command_label_safe()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '%s' "$1" |
+    command -p tr '\n' '?' |
+    command -p awk '{ gsub(/[[:cntrl:]]/, "?"); printf "%s", $0 }'
+}
+
+menu_command_directory_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -d "$1" ] || return 1
+
+  (
+    CDPATH= cd -P -- "$1" 2>/dev/null || exit 1
+    command -p pwd -P
+  )
+}
+
+menu_command_directory_allowed()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  [ "$menu_command_confine" -eq 1 ] || return 0
+
+  if [ "$menu_command_root" = / ]
+  then
+    return 0
+  fi
+
+  case "$1" in
+    "$menu_command_root"|"$menu_command_root"/*) return 0 ;;
+  esac
+
+  return 1
+}
+
+menu_command_fs_record_add()
+{
+  [ "$#" -eq 3 ] || return 2
+
+  menu_command_record_category=$1
+  menu_command_record_path=$2
+  menu_command_record_name=$3
+
+  menu_command_record_label=$(menu_command_label_safe "$menu_command_record_name") || return 1
+  menu_command_record_sort_key=$(
+    printf '%s' "$menu_command_record_name" |
+      command -p od -An -tx1 2>/dev/null |
+      command -p tr -d '[:space:]'
+  ) || return 1
+  [ -n "$menu_command_record_sort_key" ] || return 1
+
+  array menu_command_fs_source_values add "$menu_command_record_path" || return 1
+  array menu_command_fs_source_labels add "$menu_command_record_label" || return 1
+  array menu_command_fs_source_values size menu_command_record_size || return 1
+  menu_command_record_index=$((menu_command_record_size - 1))
+  menu_command_record="$menu_command_record_category$menu_command_tab$menu_command_record_sort_key$menu_command_tab$menu_command_record_index"
+
+  if [ -n "$menu_command_sort_records" ]
+  then
+    menu_command_sort_records="$menu_command_sort_records$menu_command_newline$menu_command_record"
+  else
+    menu_command_sort_records=$menu_command_record
+  fi
+
+  return 0
+}
+
+menu_command_fs_load()
+{
+  array menu_command_fs_values || return 1
+  array menu_command_fs_labels || return 1
+  array menu_command_fs_source_values || return 1
+  array menu_command_fs_source_labels || return 1
+  menu_command_sort_records=
+
+  if [ "$menu_command_current" != / ]
+  then
+    menu_command_parent=$(menu_command_directory_resolve "$menu_command_current/..") || return 1
+
+    if menu_command_directory_allowed "$menu_command_parent"
+    then
+      array menu_command_fs_values add "$menu_command_parent" || return 1
+      array menu_command_fs_labels add '..' || return 1
+    fi
+  fi
+
+  menu_command_scan_prefix=$menu_command_current
+  [ "$menu_command_scan_prefix" != / ] || menu_command_scan_prefix=
+
+  for menu_command_entry_path in "$menu_command_scan_prefix"/*
+  do
+    [ -e "$menu_command_entry_path" ] || [ -L "$menu_command_entry_path" ] || continue
+    menu_command_entry_name=${menu_command_entry_path##*/}
+
+    if [ -d "$menu_command_entry_path" ]
+    then
+      menu_command_entry_category=1
+    elif [ "$menu_command_mixed" -eq 1 ]
+    then
+      menu_command_entry_category=1
+    else
+      menu_command_entry_category=2
+    fi
+
+    menu_command_fs_record_add "$menu_command_entry_category" "$menu_command_entry_path" "$menu_command_entry_name" || return 1
+  done
+
+  if [ "$menu_command_show_hidden" -eq 1 ]
+  then
+    for menu_command_entry_path in "$menu_command_scan_prefix"/.[!.]* "$menu_command_scan_prefix"/..?*
+    do
+      [ -e "$menu_command_entry_path" ] || [ -L "$menu_command_entry_path" ] || continue
+      menu_command_entry_name=${menu_command_entry_path##*/}
+
+      if [ -d "$menu_command_entry_path" ]
+      then
+        menu_command_entry_category=1
+      elif [ "$menu_command_mixed" -eq 1 ]
+      then
+        menu_command_entry_category=1
+      else
+        menu_command_entry_category=2
+      fi
+
+      menu_command_fs_record_add "$menu_command_entry_category" "$menu_command_entry_path" "$menu_command_entry_name" || return 1
+    done
+  fi
+
+  if [ -n "$menu_command_sort_records" ]
+  then
+    menu_command_sorted_records=$(printf '%s\n' "$menu_command_sort_records" | LC_ALL=C command -p sort) || return 1
+    menu_command_old_ifs=$IFS
+    IFS=$menu_command_newline
+    set -f
+
+    for menu_command_record in $menu_command_sorted_records
+    do
+      menu_command_record_index=${menu_command_record##*"$menu_command_tab"}
+      array menu_command_fs_source_values get "$menu_command_record_index" menu_command_record_path || {
+        set +f
+        IFS=$menu_command_old_ifs
+        return 1
+      }
+      array menu_command_fs_source_labels get "$menu_command_record_index" menu_command_record_label || {
+        set +f
+        IFS=$menu_command_old_ifs
+        return 1
+      }
+      array menu_command_fs_values add "$menu_command_record_path" || {
+        set +f
+        IFS=$menu_command_old_ifs
+        return 1
+      }
+      array menu_command_fs_labels add "$menu_command_record_label" || {
+        set +f
+        IFS=$menu_command_old_ifs
+        return 1
+      }
+    done
+
+    set +f
+    IFS=$menu_command_old_ifs
+  fi
+
+  menu_array_values=menu_command_fs_values
+  menu_array_labels=menu_command_fs_labels
+  return 0
+}
+
+menu_command_fs_header_update()
+{
+  if [ -n "$menu_command_base_header" ]
+  then
+    menu_header="$menu_command_base_header$menu_command_newline$menu_command_current"
+  else
+    menu_header=$menu_command_current
+  fi
+}
+
+menu_command_fs_provider()
+{
+  case "$1" in
+    count|item)
+      menu_array_provider "$@"
+      ;;
+    event)
+      [ "$#" -eq 5 ] || return 2
+
+      if [ "$2" = enter ]
+      then
+        if [ -d "$4" ]
+        then
+          menu_command_next=$(menu_command_directory_resolve "$4") || {
+            menu_provider_action=ignore
+            return 0
+          }
+
+          if menu_command_directory_allowed "$menu_command_next"
+          then
+            menu_command_current=$menu_command_next
+            menu_command_fs_load || return 1
+            menu_command_fs_header_update
+            menu_provider_action=reset
+          else
+            menu_provider_action=ignore
+          fi
+        else
+          menu_provider_action=ignore
+        fi
+      fi
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+menu_command_result_print()
+{
+  menu_command_key_encode "$menu_result_key" || return 1
+  set -- "$menu_command_encoded_key"
+
+  array menu_result_values size menu_command_result_count || return 1
+  menu_command_result_index=0
+
+  while [ "$menu_command_result_index" -lt "$menu_command_result_count" ]
+  do
+    array menu_result_values get "$menu_command_result_index" menu_command_result_value || return 1
+    set -- "$@" "$menu_command_result_value"
+    menu_command_result_index=$((menu_command_result_index + 1))
+  done
+
+  quote "$@" || return 1
+  printf '\n'
+}
+
+menu_reset || fatal 2 execution execution-failed operation menu reason menu-reset-failed
+array menu_command_action_keys || fatal 2 execution execution-failed operation menu reason action-key-storage-failed
+
+menu_command_directory=
+menu_command_confine=0
+menu_command_show_hidden=1
+menu_command_mixed=0
+menu_command_select_key_name=space
+menu_command_select_key_seen=0
+menu_command_directory_option_seen=0
+menu_command_directory_behavior_seen=0
+menu_command_base_header=
+
+OPTIND=1
+while getopts ':H:F:B:K:S:d:nmc' menu_command_option
+do
+  case "$menu_command_option" in
+    H)
+      menu_header=$OPTARG
+      menu_command_base_header=$OPTARG
+      ;;
+    F)
+      menu_footer=$OPTARG
+      ;;
+    B)
+      menu_bottom_footer=$OPTARG
+      ;;
+    K)
+      array menu_command_action_keys add "$OPTARG" || fatal 2 execution execution-failed operation menu reason action-key-storage-failed
+      ;;
+    S)
+      [ "$menu_command_select_key_seen" -eq 0 ] || menu_command_fail duplicate-selection-key-option
+      menu_command_select_key_name=$OPTARG
+      menu_command_select_key_seen=1
+      ;;
+    d)
+      [ "$menu_command_directory_option_seen" -eq 0 ] || menu_command_fail duplicate-directory-option
+      menu_command_directory=$OPTARG
+      menu_command_directory_option_seen=1
+      ;;
+    n)
+      menu_command_show_hidden=0
+      menu_command_directory_behavior_seen=1
+      ;;
+    m)
+      menu_command_mixed=1
+      menu_command_directory_behavior_seen=1
+      ;;
+    c)
+      menu_command_confine=1
+      menu_command_directory_behavior_seen=1
+      ;;
+    :)
+      menu_command_fail "option-$OPTARG-requires-argument"
+      ;;
+    \?)
+      menu_command_fail "invalid-option-$OPTARG"
+      ;;
+  esac
+done
+shift $((OPTIND - 1))
+
+menu_command_key_decode "$menu_command_select_key_name" || menu_command_fail invalid-selection-key
+menu_command_select_key=$menu_command_decoded_key
+menu_toggle_key_set "$menu_command_select_key" || menu_command_fail "$menu_error"
+
+array menu_command_action_keys size menu_command_action_key_count || fatal 2 execution execution-failed operation menu reason action-key-storage-failed
+menu_command_action_key_index=0
+while [ "$menu_command_action_key_index" -lt "$menu_command_action_key_count" ]
+do
+  array menu_command_action_keys get "$menu_command_action_key_index" menu_command_action_key_name || fatal 2 execution execution-failed operation menu reason action-key-storage-failed
+  menu_command_key_decode "$menu_command_action_key_name" || menu_command_fail invalid-action-key
+  menu_command_action_key=$menu_command_decoded_key
+  menu_key_add "$menu_command_action_key" || menu_command_fail "$menu_error"
+  menu_command_action_key_index=$((menu_command_action_key_index + 1))
+done
+
+if [ "$menu_command_directory_option_seen" -eq 1 ]
+then
+  [ "$#" -eq 0 ] || menu_command_fail directory-mode-does-not-accept-list-items
+  [ "$menu_command_action_key_count" -gt 0 ] || menu_command_fail directory-mode-requires-action-key
+
+  menu_command_root=$(menu_command_directory_resolve "$menu_command_directory") || menu_command_fail directory-unavailable
+  menu_command_current=$menu_command_root
+  menu_command_tab=$(printf '\tX')
+  menu_command_tab=${menu_command_tab%X}
+  menu_command_newline='
+'
+
+  array menu_command_fs_values || fatal 2 execution execution-failed operation menu reason filesystem-list-storage-failed
+  array menu_command_fs_labels || fatal 2 execution execution-failed operation menu reason filesystem-list-storage-failed
+  array menu_command_fs_source_values || fatal 2 execution execution-failed operation menu reason filesystem-list-storage-failed
+  array menu_command_fs_source_labels || fatal 2 execution execution-failed operation menu reason filesystem-list-storage-failed
+
+  menu_command_fs_load || fatal 2 execution execution-failed operation menu reason directory-read-failed
+  menu_command_fs_header_update
+  menu_run_provider menu_command_fs_provider
+else
+  [ "$menu_command_directory_behavior_seen" -eq 0 ] || menu_command_fail directory-option-required
+  [ "$#" -gt 0 ] || menu_command_fail list-is-empty
+
+  array menu_command_values || fatal 2 execution execution-failed operation menu reason list-storage-failed
+  array menu_command_labels || fatal 2 execution execution-failed operation menu reason list-storage-failed
+
+  for menu_command_item
+  do
+    case "$menu_command_item" in
+      *@:=*)
+        menu_command_value=${menu_command_item%%@:=*}
+        menu_command_label=${menu_command_item#*@:=}
+        ;;
+      *)
+        menu_command_value=$menu_command_item
+        menu_command_label=$menu_command_item
+        ;;
+    esac
+
+    array menu_command_values add "$menu_command_value" || fatal 2 execution execution-failed operation menu reason list-storage-failed
+    array menu_command_labels add "$menu_command_label" || fatal 2 execution execution-failed operation menu reason list-storage-failed
+  done
+
+  menu_array_values=menu_command_values
+  menu_array_labels=menu_command_labels
+  menu_run_provider menu_array_provider
+fi
+
+menu_command_status=$?
+case "$menu_command_status" in
+  0)
+    menu_command_result_print || fatal 2 execution execution-failed operation menu reason result-output-failed
+    exit 0
+    ;;
+  1)
+    exit 1
+    ;;
+  2)
+    fatal 2 execution execution-failed operation menu reason "$menu_error"
+    ;;
+  *)
+    exit "$menu_command_status"
+    ;;
+esac
