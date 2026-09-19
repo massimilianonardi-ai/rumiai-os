@@ -722,7 +722,13 @@ _menu_render_row()
     return 2
   }
 
-  printf '%-*s' "$_menu_term_cols" "$_menu_line" > "$term_tty_device" || return 2
+  if term_line_clear
+  then
+    printf '%s' "$_menu_line" > "$term_tty_device" || return 2
+  else
+    printf '%-*s' "$_menu_term_cols" "$_menu_line" > "$term_tty_device" || return 2
+  fi
+
   return 0
 }
 
@@ -807,6 +813,41 @@ _menu_render()
   return 0
 }
 
+_menu_render_viewport()
+{
+  _menu_remaining=$((_menu_item_count - _menu_top))
+
+  if [ "$_menu_remaining" -lt "$_menu_visible_rows" ]
+  then
+    _menu_render_rows=$_menu_remaining
+  else
+    _menu_render_rows=$_menu_visible_rows
+  fi
+
+  if [ "$_menu_render_rows" -ne "$_menu_visible_rows" ]
+  then
+    _menu_render || return 2
+    return 0
+  fi
+
+  _menu_row=0
+  _menu_index=$_menu_top
+
+  while [ "$_menu_row" -lt "$_menu_render_rows" ]
+  do
+    _menu_render_row "$_menu_index" "$_menu_row" || return 2
+    _menu_row=$((_menu_row + 1))
+    _menu_index=$((_menu_index + 1))
+  done
+
+  term_cursor_move 0 0 || {
+    _menu_fail "terminal does not support cursor positioning"
+    return 2
+  }
+
+  return 0
+}
+
 _menu_render_partial_row()
 {
   [ "$#" -eq 1 ] || return 2
@@ -814,12 +855,18 @@ _menu_render_partial_row()
   _menu_partial_old_lines=$_menu_term_lines
   _menu_partial_old_cols=$_menu_term_cols
   _menu_partial_old_top=$_menu_top
+  _menu_partial_old_header_lines=$_menu_header_lines
+  _menu_partial_old_footer_lines=$_menu_footer_lines
+  _menu_partial_old_bottom_footer_lines=$_menu_bottom_footer_lines
 
   _menu_update_geometry || return 2
   _menu_viewport_adjust
 
   if [ "$_menu_term_lines" -ne "$_menu_partial_old_lines" ] ||
      [ "$_menu_term_cols" -ne "$_menu_partial_old_cols" ] ||
+     [ "$_menu_header_lines" -ne "$_menu_partial_old_header_lines" ] ||
+     [ "$_menu_footer_lines" -ne "$_menu_partial_old_footer_lines" ] ||
+     [ "$_menu_bottom_footer_lines" -ne "$_menu_partial_old_bottom_footer_lines" ] ||
      [ "$_menu_top" -ne "$_menu_partial_old_top" ]
   then
     _menu_render || return 2
@@ -852,15 +899,26 @@ _menu_render_move()
   _menu_move_old_lines=$_menu_term_lines
   _menu_move_old_cols=$_menu_term_cols
   _menu_move_old_top=$_menu_top
+  _menu_move_old_header_lines=$_menu_header_lines
+  _menu_move_old_footer_lines=$_menu_footer_lines
+  _menu_move_old_bottom_footer_lines=$_menu_bottom_footer_lines
 
   _menu_update_geometry || return 2
   _menu_viewport_adjust
 
   if [ "$_menu_term_lines" -ne "$_menu_move_old_lines" ] ||
      [ "$_menu_term_cols" -ne "$_menu_move_old_cols" ] ||
-     [ "$_menu_top" -ne "$_menu_move_old_top" ]
+     [ "$_menu_header_lines" -ne "$_menu_move_old_header_lines" ] ||
+     [ "$_menu_footer_lines" -ne "$_menu_move_old_footer_lines" ] ||
+     [ "$_menu_bottom_footer_lines" -ne "$_menu_move_old_bottom_footer_lines" ]
   then
     _menu_render || return 2
+    return 0
+  fi
+
+  if [ "$_menu_top" -ne "$_menu_move_old_top" ]
+  then
+    _menu_render_viewport || return 2
     return 0
   fi
 
