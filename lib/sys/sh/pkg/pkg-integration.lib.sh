@@ -197,6 +197,7 @@ _pkg_integration_facility_cmd_validate()
 _pkg_integration_env_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
+  [ "$1" != PATH ] || return 1
   case "$1" in
     "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
   esac
