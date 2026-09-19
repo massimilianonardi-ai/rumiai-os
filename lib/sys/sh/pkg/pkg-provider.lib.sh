@@ -445,6 +445,221 @@ pkg_provider_effective_selector()
 )
 
 
+
+_pkg_provider_environment_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ "$1" != PATH ] || return 1
+  case "$1" in
+    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
+  esac
+}
+
+_pkg_provider_environment_relative_path_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | /* | */ | *//* | *'
+'*) return 1 ;;
+  esac
+  case "/$1/" in
+    */./* | */../*) return 1 ;;
+  esac
+}
+
+_pkg_provider_environment_plan()
+(
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_environment_facility=$1
+  pkg_provider_environment_name=$2
+
+  _pkg_provider_facility_valid "$pkg_provider_environment_facility" || return 2
+  _pkg_provider_concrete_parse "$pkg_provider_environment_name" || return 2
+
+  pkg_provider_environment_concrete="$m_PKG_DIR/$pkg_provider_environment_name"
+  pkg_provider_environment_root="$pkg_provider_environment_concrete/root"
+  [ -d "$pkg_provider_environment_concrete" ] && [ ! -L "$pkg_provider_environment_concrete" ] || return 1
+  [ -d "$pkg_provider_environment_root" ] && [ ! -L "$pkg_provider_environment_root" ] || return 1
+  readpathce pkg_provider_environment_root "$pkg_provider_environment_root" || return 1
+
+  pkg_provider_environment_file="$pkg_provider_environment_concrete/facility-env/$pkg_provider_environment_facility"
+  if [ ! -e "$pkg_provider_environment_file" ] && [ ! -L "$pkg_provider_environment_file" ]
+  then
+    return 0
+  fi
+
+  [ -f "$pkg_provider_environment_file" ] && [ ! -L "$pkg_provider_environment_file" ] && [ -r "$pkg_provider_environment_file" ] && [ ! -x "$pkg_provider_environment_file" ] || return 1
+
+  pkg_provider_environment_original="$(
+    command -p -- cat -- "$pkg_provider_environment_file" || exit 1
+    printf -- '%s' x
+  )" || return 1
+  pkg_provider_environment_sorted="$(
+    LC_ALL=C command -p -- sort < "$pkg_provider_environment_file" || exit 1
+    printf -- '%s' x
+  )" || return 1
+  [ "$pkg_provider_environment_original" = "$pkg_provider_environment_sorted" ] || return 1
+
+  pkg_provider_environment_tab="$(printf '\t')"
+  pkg_provider_environment_previous=
+  pkg_provider_environment_count=0
+
+  while IFS= read -r pkg_provider_environment_line
+  do
+    case "$pkg_provider_environment_line" in
+      *"$pkg_provider_environment_tab"*) : ;;
+      *) return 1 ;;
+    esac
+
+    pkg_provider_environment_variable=${pkg_provider_environment_line%%"$pkg_provider_environment_tab"*}
+    pkg_provider_environment_descriptor=${pkg_provider_environment_line#*"$pkg_provider_environment_tab"}
+    case "$pkg_provider_environment_descriptor" in *"$pkg_provider_environment_tab"*) return 1 ;; esac
+
+    _pkg_provider_environment_name_valid "$pkg_provider_environment_variable" || return 1
+    [ "$pkg_provider_environment_variable" != "$pkg_provider_environment_previous" ] || return 1
+    pkg_provider_environment_previous=$pkg_provider_environment_variable
+
+    case "$pkg_provider_environment_descriptor" in
+      root)
+        pkg_provider_environment_value=$pkg_provider_environment_root
+        ;;
+      "root-path "*)
+        pkg_provider_environment_relative=${pkg_provider_environment_descriptor#root-path }
+        _pkg_provider_environment_relative_path_valid "$pkg_provider_environment_relative" || return 1
+        [ -e "$pkg_provider_environment_root/$pkg_provider_environment_relative" ] || [ -L "$pkg_provider_environment_root/$pkg_provider_environment_relative" ] || return 1
+        readpathce pkg_provider_environment_resolved "$pkg_provider_environment_root/$pkg_provider_environment_relative" || return 1
+        case "$pkg_provider_environment_resolved" in
+          "$pkg_provider_environment_root"/*) : ;;
+          *) return 1 ;;
+        esac
+        pkg_provider_environment_value="$pkg_provider_environment_root/$pkg_provider_environment_relative"
+        ;;
+      literal)
+        pkg_provider_environment_value=
+        ;;
+      "literal "*)
+        pkg_provider_environment_value=${pkg_provider_environment_descriptor#literal }
+        ;;
+      *)
+        return 1
+        ;;
+    esac
+
+    printf -- '%s\t%s\n' "$pkg_provider_environment_variable" "$pkg_provider_environment_value" || return 1
+    pkg_provider_environment_count=$((pkg_provider_environment_count + 1))
+  done < "$pkg_provider_environment_file"
+
+  [ "$pkg_provider_environment_count" -gt 0 ]
+)
+
+_pkg_provider_environment_plan_apply()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$1" ] || return 0
+
+  pkg_provider_environment_apply_tab="$(printf '\t')"
+  while IFS="$pkg_provider_environment_apply_tab" read -r pkg_provider_environment_apply_variable pkg_provider_environment_apply_value pkg_provider_environment_apply_extra
+  do
+    [ -n "$pkg_provider_environment_apply_variable" ] && [ -z "$pkg_provider_environment_apply_extra" ] || return 1
+    _pkg_provider_environment_name_valid "$pkg_provider_environment_apply_variable" || return 1
+    export "$pkg_provider_environment_apply_variable=$pkg_provider_environment_apply_value" || return 1
+  done <<EOF_PROVIDER_ENVIRONMENT
+$1
+EOF_PROVIDER_ENVIRONMENT
+}
+
+pkg_provider_environment_apply()
+{
+  [ "$#" -eq 2 ] || return 2
+
+  pkg_provider_environment_apply_plan="$(_pkg_provider_environment_plan "$1" "$2")" || return $?
+  ( _pkg_provider_environment_plan_apply "$pkg_provider_environment_apply_plan" ) || return 1
+  _pkg_provider_environment_plan_apply "$pkg_provider_environment_apply_plan"
+}
+
+_pkg_provider_global_active_osarch()
+(
+  [ "$#" -eq 0 ] || return 2
+  [ -L "$m_BIN_EXT_OSARCH_DIR" ] || return 1
+
+  pkg_provider_global_osarch_target="$(command -p -- readlink "$m_BIN_EXT_OSARCH_DIR" 2>/dev/null)" || return 1
+  case "$pkg_provider_global_osarch_target" in
+    ext-*) pkg_provider_global_osarch=${pkg_provider_global_osarch_target#ext-} ;;
+    *) return 1 ;;
+  esac
+  case "$pkg_provider_global_osarch_target" in */*) return 1 ;; esac
+
+  _pkg_provider_osarch_valid "$pkg_provider_global_osarch" || return 1
+  [ -d "$m_BIN_DIR/$pkg_provider_global_osarch_target" ] || return 1
+  printf -- '%s\n' "$pkg_provider_global_osarch"
+)
+
+pkg_provider_global_environment_apply()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "${m_STATE_SYS_DIR-}" ] && [ -n "${m_BIN_EXT_OSARCH_DIR-}" ] || return 1
+
+  pkg_provider_global_environment_root="$m_STATE_SYS_DIR/sys/pkg/conf/provider/default"
+  if [ ! -e "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ]
+  then
+    return 0
+  fi
+  [ -d "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ] || return 1
+
+  pkg_provider_global_environment_files="$(
+    for pkg_provider_global_environment_file in "$pkg_provider_global_environment_root"/*
+    do
+      [ -e "$pkg_provider_global_environment_file" ] || [ -L "$pkg_provider_global_environment_file" ] || continue
+      printf -- '%s\n' "$pkg_provider_global_environment_file" || exit 1
+    done | LC_ALL=C command -p -- sort
+  )" || return 1
+  [ -n "$pkg_provider_global_environment_files" ] || return 0
+
+  pkg_provider_global_environment_osarch="$(_pkg_provider_global_active_osarch 2>/dev/null)" || pkg_provider_global_environment_osarch=
+  pkg_provider_global_environment_plan=
+
+  while IFS= read -r pkg_provider_global_environment_file
+  do
+    [ -n "$pkg_provider_global_environment_file" ] || continue
+    pkg_provider_global_environment_facility=${pkg_provider_global_environment_file##*/}
+    _pkg_provider_facility_valid "$pkg_provider_global_environment_facility" || return 1
+
+    pkg_provider_global_environment_selector="$(_pkg_provider_config_query "$pkg_provider_global_environment_file")" || return 1
+
+    if [ -n "$pkg_provider_global_environment_osarch" ]
+    then
+      pkg_provider_global_environment_concrete="$(pkg_provider_selector_resolve "$pkg_provider_global_environment_selector" "$pkg_provider_global_environment_osarch")"
+    else
+      pkg_provider_global_environment_concrete="$(pkg_provider_selector_resolve "$pkg_provider_global_environment_selector")"
+    fi
+    pkg_provider_global_environment_status=$?
+
+    case "$pkg_provider_global_environment_status" in
+      0) : ;;
+      1) continue ;;
+      *) return 1 ;;
+    esac
+
+    pkg_provider_global_environment_fragment="$(_pkg_provider_environment_plan "$pkg_provider_global_environment_facility" "$pkg_provider_global_environment_concrete")" || return 1
+    [ -n "$pkg_provider_global_environment_fragment" ] || continue
+
+    if [ -n "$pkg_provider_global_environment_plan" ]
+    then
+      pkg_provider_global_environment_plan="$pkg_provider_global_environment_plan
+$pkg_provider_global_environment_fragment"
+    else
+      pkg_provider_global_environment_plan=$pkg_provider_global_environment_fragment
+    fi
+  done <<EOF_PROVIDER_DEFAULTS
+$pkg_provider_global_environment_files
+EOF_PROVIDER_DEFAULTS
+
+  [ -n "$pkg_provider_global_environment_plan" ] || return 0
+
+  ( _pkg_provider_environment_plan_apply "$pkg_provider_global_environment_plan" ) || return 1
+  _pkg_provider_environment_plan_apply "$pkg_provider_global_environment_plan"
+}
+
 _pkg_provider_selector_matches_concrete()
 {
   [ "$#" -eq 2 ] || return 2
