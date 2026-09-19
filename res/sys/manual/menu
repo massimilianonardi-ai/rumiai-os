@@ -6,7 +6,7 @@ SYNOPSIS
          [-K action-key ...] [-M] [-S toggle-key] [--] item ...
 
     menu [-H header] [-F footer] [-B bottom-footer]
-         -K action-key [-K action-key ...]
+         [-K action-key ...]
          [-M] [-S toggle-key] [-P parent-key]
          [-n] [-m] [-c] -d directory
 
@@ -36,8 +36,14 @@ OPTIONS
 
     -K action-key
         Add an action key. May be repeated. List mode also always accepts Enter
-        as confirmation. Filesystem mode requires at least one -K because Enter
+        as confirmation.
+
+        Filesystem single-selection mode requires at least one -K because Enter
         is reserved for browsing.
+
+        Filesystem multi-selection mode may omit -K. When it does, Tab is the
+        fallback confirmation action. If any -K is supplied, only the explicit
+        action keys are used and Tab is not added implicitly.
 
     -M
         Enable multi-selection. Space is the default toggle key.
@@ -96,6 +102,12 @@ KEYS
         Filesystem mode only. Navigate to the current directory's parent by
         default, with the same confinement rules as entering ...
 
+    Tab
+        In filesystem multi-selection with no explicit -K, confirm the current
+        marked selection. This fallback is unavailable when Tab is already the
+        configured toggle or parent-navigation key; in that case an explicit
+        -K is required.
+
     Escape
         Cancel.
 
@@ -116,6 +128,9 @@ MULTI-SELECTION
     finishing the menu. If no item is marked when an action finishes, the
     current item is returned. If items are marked, only marked values are
     returned, in menu/provider order.
+
+    In filesystem mode, multi-selection with no explicit -K uses Tab as the
+    confirmation action. Supplying any explicit -K suppresses that fallback.
 
     Changing filesystem directory clears marks from the previous directory
     view.
