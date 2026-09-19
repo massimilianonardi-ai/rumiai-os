@@ -28,82 +28,6 @@ _pkg_launch_env_apply()
   . "$1" || return 1
 }
 
-_pkg_launch_env_name_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
-  esac
-}
-
-_pkg_launch_relative_path_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | /* | */ | *//* | *'
-'*) return 1 ;;
-  esac
-  case "/$1/" in
-    */./* | */../*) return 1 ;;
-  esac
-}
-
-_pkg_launch_provider_env_apply()
-{
-  [ "$#" -eq 3 ] || return 2
-  pkg_launch_provider_root=$1
-  pkg_launch_provider_concrete=$2
-  pkg_launch_provider_facility=$3
-  pkg_launch_provider_env="$pkg_launch_provider_concrete/facility-env/$pkg_launch_provider_facility"
-
-  if [ ! -e "$pkg_launch_provider_env" ] && [ ! -L "$pkg_launch_provider_env" ]
-  then
-    return 0
-  fi
-  [ -f "$pkg_launch_provider_env" ] && [ ! -L "$pkg_launch_provider_env" ] && [ -r "$pkg_launch_provider_env" ] && [ ! -x "$pkg_launch_provider_env" ] || return 1
-
-  pkg_launch_provider_tab="$(printf '\t')"
-  while IFS= read -r pkg_launch_provider_line
-  do
-    case "$pkg_launch_provider_line" in
-      *"$pkg_launch_provider_tab"*) : ;;
-      *) return 1 ;;
-    esac
-    pkg_launch_provider_variable=${pkg_launch_provider_line%%"$pkg_launch_provider_tab"*}
-    pkg_launch_provider_descriptor=${pkg_launch_provider_line#*"$pkg_launch_provider_tab"}
-    case "$pkg_launch_provider_descriptor" in *"$pkg_launch_provider_tab"*) return 1 ;; esac
-    _pkg_launch_env_name_valid "$pkg_launch_provider_variable" || return 1
-
-    case "$pkg_launch_provider_descriptor" in
-      root)
-        pkg_launch_provider_value=$pkg_launch_provider_root
-        ;;
-      "root-path "*)
-        pkg_launch_provider_relative=${pkg_launch_provider_descriptor#root-path }
-        _pkg_launch_relative_path_valid "$pkg_launch_provider_relative" || return 1
-        [ -e "$pkg_launch_provider_root/$pkg_launch_provider_relative" ] || [ -L "$pkg_launch_provider_root/$pkg_launch_provider_relative" ] || return 1
-        readpathce pkg_launch_provider_resolved "$pkg_launch_provider_root/$pkg_launch_provider_relative" || return 1
-        case "$pkg_launch_provider_resolved" in
-          "$pkg_launch_provider_root"/*) : ;;
-          *) return 1 ;;
-        esac
-        pkg_launch_provider_value="$pkg_launch_provider_root/$pkg_launch_provider_relative"
-        ;;
-      literal)
-        pkg_launch_provider_value=
-        ;;
-      "literal "*)
-        pkg_launch_provider_value=${pkg_launch_provider_descriptor#literal }
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-
-    export "$pkg_launch_provider_variable=$pkg_launch_provider_value" || return 1
-  done < "$pkg_launch_provider_env"
-}
-
 _pkg_launch_provider_apply()
 {
   [ "$#" -eq 2 ] || return 2
@@ -114,7 +38,6 @@ _pkg_launch_provider_apply()
 
   [ -d "$pkg_launch_provider_concrete" ] && [ ! -L "$pkg_launch_provider_concrete" ] || return 1
   [ -d "$pkg_launch_provider_root" ] && [ ! -L "$pkg_launch_provider_root" ] || return 1
-  readpathce pkg_launch_provider_root "$pkg_launch_provider_root" || return 1
 
   pkg_launch_provider_cmd="$pkg_launch_provider_concrete/facility-cmd/$pkg_launch_provider_facility"
   if [ -e "$pkg_launch_provider_cmd" ] || [ -L "$pkg_launch_provider_cmd" ]
@@ -124,7 +47,7 @@ _pkg_launch_provider_apply()
     export PATH
   fi
 
-  _pkg_launch_provider_env_apply "$pkg_launch_provider_root" "$pkg_launch_provider_concrete" "$pkg_launch_provider_facility"
+  pkg_provider_environment_apply "$pkg_launch_provider_facility" "$pkg_launch_provider_name"
 }
 
 _pkg_launch_dependencies_apply()
