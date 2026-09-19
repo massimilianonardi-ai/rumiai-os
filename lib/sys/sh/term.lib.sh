@@ -1,4 +1,3 @@
-#!/bin/sh
 
 # Reusable terminal, TTY and terminfo helpers.
 #
