@@ -1,0 +1,147 @@
+NAME
+    menu - interactive terminal selector and filesystem browser
+
+SYNOPSIS
+    menu [-H header] [-F footer] [-B bottom-footer]
+         [-K action-key ...] [-S toggle-key] [--] item ...
+
+    menu [-H header] [-F footer] [-B bottom-footer]
+         -K action-key [-K action-key ...] [-S toggle-key]
+         [-n] [-m] [-c] -d directory
+
+DESCRIPTION
+    menu displays an interactive list on the terminal while reserving standard
+    output for a machine-readable successful result.
+
+    In list mode, items come from command-line operands. In filesystem mode,
+    -d selects a starting directory and Enter browses subdirectories.
+
+    Space toggles multi-selection by default. If no item is marked when an
+    action finishes, the current item is returned. If items are marked, only
+    the marked values are returned, in menu/provider order.
+
+OPTIONS
+    -H header
+        Show header at the top of the menu. In filesystem mode the current
+        absolute directory follows this text on the next line.
+
+    -F footer
+        Show footer immediately after the visible items.
+
+    -B bottom-footer
+        Anchor footer text at the bottom of the terminal.
+
+    -K action-key
+        Add an action key. May be repeated. List mode also always accepts Enter
+        as confirmation. Filesystem mode requires at least one -K because Enter
+        is reserved for browsing.
+
+    -S toggle-key
+        Change the multi-selection toggle key. The default is space. The
+        configured toggle key is reserved and cannot also be an action key.
+
+    -d directory
+        Use filesystem mode rooted initially at directory.
+
+    -n
+        Filesystem mode only. Hide hidden entries. Hidden entries are shown by
+        default.
+
+    -m
+        Filesystem mode only. Mix directories and non-directories in one
+        lexical ordering. By default directories sort before other entries.
+
+    -c
+        Filesystem mode only. Confine browsing to the physically resolved
+        subtree of the starting directory. The parent entry is omitted at the
+        confinement root and directory symlinks cannot navigate outside it.
+
+LIST ITEMS
+    label
+        Display and return the same string.
+
+    value@:=label
+        Display label and return value. The first @:= separates value from
+        label.
+
+KEYS
+    Up, Down
+        Move one item.
+
+    PageUp, PageDown
+        Move by one visible page.
+
+    Home, End
+        Move to the first or last item.
+
+    Space
+        Toggle the current mark by default.
+
+    Enter
+        In list mode, finish with action key enter. In filesystem mode, enter a
+        selected directory; Enter on a non-directory does not finish.
+
+    Escape
+        Cancel.
+
+    Configurable action/toggle keys may be one text key or these named keys:
+
+        space nul tab backtab backspace left right insert delete f1 ... f20
+
+    arrow_left and arrow_right are accepted command-line aliases for left and
+    right. Navigation keys, Escape and Enter cannot be configured as -K/-S.
+
+FILESYSTEM MODE
+    The current directory is resolved physically and displayed in the header.
+    Hidden entries are included unless -n is used. Directory groups and mixed
+    listings use ascending bytewise lexical order.
+
+    Returned values are absolute selected paths. Display sanitization used to
+    keep unusual filenames on one terminal row does not replace the returned
+    path value.
+
+    Changing directory clears marks from the previous directory view.
+
+OUTPUT
+    On success, stdout contains one shell-safe serialized argument vector:
+
+        action-key value-1 ... value-n
+
+    The serialization is produced with the m quote primitive. To consume it:
+
+        result=$(menu ...)
+        status=$?
+        [ "$status" -eq 0 ] || exit "$status"
+        eval "set -- $result"
+        key=$1
+        shift
+
+    "$@" then contains the selected values exactly as shell strings. Do not use
+    unquoted word splitting such as set -- $(menu ...).
+
+    The same result can initialize an array after successful execution:
+
+        eval "array result set $result"
+
+    Canonical result key names include enter, space, tab, left, right and the
+    configured text/function-key token.
+
+RETURN STATUS
+    0   Successful action result.
+    1   User/provider cancellation.
+    2   Invalid invocation or menu/provider/terminal failure.
+
+    Signal-derived statuses from an interrupted interactive session are
+    propagated.
+
+FILES
+    bin/sys/menu
+        Public command.
+
+    lib/sys/sh/menu.lib.sh
+        Reusable menu engine.
+
+SEE ALSO
+    manual menu.lib.sh
+    manual term.lib.sh
+    manual array.lib.sh
