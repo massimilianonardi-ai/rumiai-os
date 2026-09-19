@@ -23,8 +23,8 @@ FUNCTIONS
     pkg_default_apply <package> <version> [<osarch>]
         Select an installed concrete as the package/platform default and publish its
         package commands. An empty version clears that package default. A transition
-        also reconciles global facility commands for configured unversioned facility
-        defaults that select this provider package/class.
+        also reconciles global facility commands whose configured provider selector
+        depends on the presence or current concrete of this package/class.
 
 RETURN STATUS
     Public functions return 0 on success, 1 when the requested integration state

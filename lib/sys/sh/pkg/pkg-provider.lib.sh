@@ -980,18 +980,46 @@ pkg_provider_package_default_reconcile()
     pkg_provider_transition_selector_osarch=$pkg_provider_selector_osarch
 
     [ "$pkg_provider_transition_selector_pkg" = "$pkg_provider_transition_pkg" ] || continue
-    [ -z "$pkg_provider_transition_selector_version" ] || continue
+
     if [ -n "$pkg_provider_transition_selector_osarch" ]
     then
       [ "$pkg_provider_transition_selector_osarch" = "$pkg_provider_transition_osarch" ] || continue
+      [ -z "$pkg_provider_transition_selector_version" ] || continue
+    fi
+
+    if [ -n "$pkg_provider_transition_selector_version" ]
+    then
+      if [ -n "$pkg_provider_transition_osarch" ]
+      then
+        pkg_provider_transition_selected_concrete="$pkg_provider_transition_pkg@$pkg_provider_transition_selector_version!$pkg_provider_transition_osarch"
+      else
+        pkg_provider_transition_selected_concrete="$pkg_provider_transition_pkg@$pkg_provider_transition_selector_version"
+      fi
+      pkg_provider_transition_target=$pkg_provider_transition_selected_concrete
+      if [ -n "$pkg_provider_transition_old" ]
+      then
+        pkg_provider_transition_old_source=$pkg_provider_transition_selected_concrete
+      else
+        pkg_provider_transition_old_source=
+      fi
+      if [ -n "$pkg_provider_transition_new" ]
+      then
+        pkg_provider_transition_new_source=$pkg_provider_transition_selected_concrete
+      else
+        pkg_provider_transition_new_source=
+      fi
+    else
+      pkg_provider_transition_target=$pkg_provider_transition_class
+      pkg_provider_transition_old_source=$pkg_provider_transition_old
+      pkg_provider_transition_new_source=$pkg_provider_transition_new
     fi
 
     pkg_provider_transition_piece="$(_pkg_provider_global_plan_concrete \
       "$pkg_provider_transition_facility" \
       "$pkg_provider_transition_pkg" \
       "$pkg_provider_transition_osarch" \
-      "$pkg_provider_transition_old" \
-      "$pkg_provider_transition_class")" || return 1
+      "$pkg_provider_transition_old_source" \
+      "$pkg_provider_transition_target")" || return 1
     if [ -n "$pkg_provider_transition_piece" ]
     then
       if [ -n "$pkg_provider_transition_old_plan" ]
@@ -1007,8 +1035,8 @@ $pkg_provider_transition_piece"
       "$pkg_provider_transition_facility" \
       "$pkg_provider_transition_pkg" \
       "$pkg_provider_transition_osarch" \
-      "$pkg_provider_transition_new" \
-      "$pkg_provider_transition_class")" || return 1
+      "$pkg_provider_transition_new_source" \
+      "$pkg_provider_transition_target")" || return 1
     if [ -n "$pkg_provider_transition_piece" ]
     then
       if [ -n "$pkg_provider_transition_new_plan" ]

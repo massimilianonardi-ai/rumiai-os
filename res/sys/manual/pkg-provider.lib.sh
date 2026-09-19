@@ -34,10 +34,12 @@ FUNCTIONS
         and 2 when the request or authoritative configuration cannot be validated.
 
     pkg_provider_package_default_reconcile <package> <osarch> <old-concrete> <new-concrete>
-        Reconcile global commands for unversioned facility defaults affected by one
-        package-default transition. osarch is empty for the generic package class.
-        The function preserves selector-based targets, updates command-set changes
-        and rejects unrelated external-command collisions.
+        Reconcile global commands affected by one package-default transition. For
+        unversioned facility selectors this updates the selected command set while
+        preserving selector-based targets. A pinned selector without osarch remains
+        pinned but is published or removed as the corresponding package class
+        appears or disappears. osarch is empty for the generic package class.
+        Unrelated external-command collisions are rejected.
 
     pkg_provider default <facility>
         Print the configured system default provider selector for the facility.
