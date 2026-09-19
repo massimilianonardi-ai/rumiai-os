@@ -1,31 +1,29 @@
-# POSIX-sh terminal-menu engine with pluggable list providers.
+# POSIX-sh terminal-menu engine with pluggable list providers and multi-selection.
 #
 # Dependencies:
 #   term.lib.sh   terminal/TTY/terminfo lifecycle and key decoding
-#   array.lib.sh  array-backed provider support
-#   map.lib.sh    custom-key set
-#   arg.lib.sh    quote(), sourced by array.lib.sh/map.lib.sh
-#
-# The menu layer deliberately contains no direct stty/tput/dd/od handling.
-# Terminal control and input are delegated to term.lib.sh; menu.lib.sh owns only
-# menu policy, provider dispatch, layout and rendering of ordinary text.
+#   array.lib.sh  array-backed provider/result support
+#   map.lib.sh    custom-key and selection sets
+#   core.lib.sh   quote(), loaded by the m runtime
 #
 # Public configuration variables:
 #   menu_header
 #   menu_footer
 #   menu_bottom_footer
-#   menu_array_values   array name used by menu_array_provider
-#   menu_array_labels   array name used by menu_array_provider
+#   menu_array_values    array name used by menu_array_provider
+#   menu_array_labels    array name used by menu_array_provider
 #
-# Public result variables set by menu_run_provider:
+# Public result state set by menu_run_provider:
 #   menu_result_key
-#   menu_result_value
+#   menu_result_value    first returned value, for single-result convenience
+#   menu_result_values   array containing every returned value in provider order
 #   menu_error
 #
 # Public functions:
 #   menu_reset
 #   menu_key_clear
 #   menu_key_add KEY
+#   menu_toggle_key_set KEY
 #   menu_run_provider PROVIDER
 #   menu_array_provider
 #
@@ -45,17 +43,22 @@
 #     The engine sets menu_provider_action=return before the call. The provider
 #     may leave it unchanged or set it to:
 #
-#       return  finish and return KEY + VALUE
-#       reload  query the provider again, preserving/clamping selection
-#       reset   query the provider again and select index 0
+#       return  finish and return the action key plus the marked values; when
+#               nothing is marked, return the current item
+#       reload  query the provider again, preserving/clamping cursor and valid
+#               marked indices
+#       reset   query the provider again and reset cursor and marked indices
 #       ignore  continue without redrawing
 #       cancel  finish as a user cancellation
 #
 # Enter is always delivered as an event. Escape and up/down/pageup/pagedown/
-# home/end are owned by the engine and cannot be configured. Other named keys
-# returned by term_read_key (including left/right, insert/delete, tab/backtab,
-# backspace, nul and f1..f20) and one text key can be configured with
-# menu_key_add.
+# home/end are owned by the engine and cannot be configured. The configured
+# multi-selection toggle key is also reserved. Other named keys returned by term_read_key
+# and one text key can be configured with menu_key_add.
+#
+# The toggle key is handled by the engine and is not delivered as an event.
+# Marks are index-based within the current provider view. reload preserves marks
+# whose indices remain valid; reset clears all marks.
 #
 # Array-backed provider
 # ---------------------
@@ -81,9 +84,9 @@
 #   2  invalid API usage or menu/provider/terminal failure
 #   signal-derived statuses are propagated by the session
 
-. array.lib.sh
-. map.lib.sh
-. term.lib.sh
+. "$m_LIB_DIR/sys/sh/array.lib.sh"
+. "$m_LIB_DIR/sys/sh/map.lib.sh"
+. "$m_LIB_DIR/sys/sh/term.lib.sh"
 
 #-------------------------------------------------------------------------------
 
@@ -92,18 +95,21 @@ menu_reset()
   menu_header=
   menu_footer=
   menu_bottom_footer=
+  _menu_toggle_key=' '
   menu_array_values=
   menu_array_labels=
   menu_result_key=
   menu_result_value=
   menu_error=
 
-  map menu__custom_keys || return 1
+  map _menu_custom_keys || return 1
+  map _menu_selected_indices || return 1
+  array menu_result_values || return 1
 }
 
 menu_key_clear()
 {
-  map menu__custom_keys
+  map _menu_custom_keys
 }
 
 menu_array_provider()
@@ -114,11 +120,11 @@ menu_array_provider()
       [ -n "$menu_array_values" ] || return 2
       [ -n "$menu_array_labels" ] || return 2
 
-      array "$menu_array_values" size menu__array_values_size || return "$?"
-      array "$menu_array_labels" size menu__array_labels_size || return "$?"
+      array "$menu_array_values" size _menu_array_values_size || return "$?"
+      array "$menu_array_labels" size _menu_array_labels_size || return "$?"
 
-      [ "$menu__array_values_size" = "$menu__array_labels_size" ] || return 1
-      menu_provider_count=$menu__array_values_size
+      [ "$_menu_array_values_size" = "$_menu_array_labels_size" ] || return 1
+      menu_provider_count=$_menu_array_values_size
       ;;
     item)
       [ "$#" -eq 2 ] || return 2
@@ -137,7 +143,7 @@ menu_array_provider()
   return 0
 }
 
-menu__key_is_reserved()
+_menu_key_is_engine_reserved()
 {
   [ "$#" -eq 1 ] || return 2
 
@@ -150,7 +156,7 @@ menu__key_is_reserved()
   return 1
 }
 
-menu__key_is_named_custom()
+_menu_key_is_named_custom()
 {
   [ "$#" -eq 1 ] || return 2
 
@@ -163,17 +169,26 @@ menu__key_is_named_custom()
   return 1
 }
 
-menu__key_is_configured()
+_menu_key_valid_configurable()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$1" ] || return 1
+
+  _menu_key_is_named_custom "$1" && return 0
+  term_key_is_text "$1"
+}
+
+_menu_key_is_configured()
 {
   [ "$#" -eq 1 ] || return 2
 
-  if map menu__custom_keys get "$1" menu__configured_value >/dev/null 2>&1
+  if map _menu_custom_keys get "$1" _menu_configured_value >/dev/null 2>&1
   then
-    unset menu__configured_value
+    unset _menu_configured_value
     return 0
   fi
 
-  unset menu__configured_value
+  unset _menu_configured_value
   return 1
 }
 
@@ -185,25 +200,31 @@ menu_key_add()
     return 2
   fi
 
-  if menu__key_is_reserved "$1"
+  if _menu_key_is_engine_reserved "$1"
   then
     menu_error="key is reserved: $1"
     return 2
   fi
 
-  if ! menu__key_is_named_custom "$1" && ! term_key_is_text "$1"
+  if [ "$1" = "$_menu_toggle_key" ]
+  then
+    menu_error="key is reserved by multi-selection"
+    return 2
+  fi
+
+  if ! _menu_key_valid_configurable "$1"
   then
     menu_error="invalid custom key: $1"
     return 2
   fi
 
-  if menu__key_is_configured "$1"
+  if _menu_key_is_configured "$1"
   then
     menu_error="duplicate custom key: $1"
     return 2
   fi
 
-  map menu__custom_keys put "$1" "1" || {
+  map _menu_custom_keys put "$1" "1" || {
     menu_error="cannot store custom key"
     return 1
   }
@@ -212,15 +233,46 @@ menu_key_add()
   return 0
 }
 
+menu_toggle_key_set()
+{
+  if [ "$#" -ne 1 ] || [ -z "$1" ]
+  then
+    menu_error="menu_toggle_key_set requires one non-empty key"
+    return 2
+  fi
+
+  if _menu_key_is_engine_reserved "$1"
+  then
+    menu_error="key is reserved by menu navigation: $1"
+    return 2
+  fi
+
+  if ! _menu_key_valid_configurable "$1"
+  then
+    menu_error="invalid multi-selection key: $1"
+    return 2
+  fi
+
+  if _menu_key_is_configured "$1"
+  then
+    menu_error="key is already configured as an action: $1"
+    return 2
+  fi
+
+  _menu_toggle_key=$1
+  menu_error=
+  return 0
+}
+
 #-------------------------------------------------------------------------------
 
-menu__fail()
+_menu_fail()
 {
-  menu__session_error=$1
+  _menu_session_error=$1
   return 2
 }
 
-menu__read_key()
+_menu_read_key()
 {
   [ "$#" -eq 1 ] || return 2
 
@@ -237,38 +289,38 @@ menu__read_key()
   esac
 
   term_read_key
-  menu__read_term_status=$?
+  _menu_read_term_status=$?
 
-  case "$menu__read_term_status" in
+  case "$_menu_read_term_status" in
     0) ;;
     3)
-      unset menu__read_term_status
+      unset _menu_read_term_status
       return 3
       ;;
     *)
-      unset menu__read_term_status
+      unset _menu_read_term_status
       return 1
       ;;
   esac
 
   case "$term_key" in
     text)
-      menu__key=$term_key_text
+      _menu_key=$term_key_text
       ;;
     unknown|control)
-      unset menu__read_term_status
+      unset _menu_read_term_status
       return 2
       ;;
     *)
-      menu__key=$term_key
+      _menu_key=$term_key
       ;;
   esac
 
-  unset menu__read_term_status
+  unset _menu_read_term_status
   return 0
 }
 
-menu__line_count()
+_menu_line_count()
 {
   [ "$#" -eq 1 ] || return 2
 
@@ -280,7 +332,7 @@ menu__line_count()
   fi
 }
 
-menu__print_block()
+_menu_print_block()
 {
   [ "$#" -eq 3 ] || return 2
 
@@ -299,7 +351,7 @@ menu__print_block()
     ' > "$term_tty_device"
 }
 
-menu__safe_item_text()
+_menu_safe_item_text()
 {
   [ "$#" -eq 2 ] || return 2
 
@@ -315,47 +367,47 @@ menu__safe_item_text()
 
 #-------------------------------------------------------------------------------
 
-menu__provider_count_get()
+_menu_provider_count_get()
 {
   menu_provider_count=
 
-  "$menu__provider" count >/dev/null || {
-    menu__fail "provider count operation failed"
+  "$_menu_provider" count >/dev/null || {
+    _menu_fail "provider count operation failed"
     return 2
   }
 
   case "$menu_provider_count" in
     ''|*[!0-9]*)
-      menu__fail "provider returned an invalid count"
+      _menu_fail "provider returned an invalid count"
       return 2
       ;;
   esac
 
   if [ "$menu_provider_count" -lt 1 ] 2>/dev/null
   then
-    menu__fail "provider returned an empty list"
+    _menu_fail "provider returned an empty list"
     return 2
   fi
 
-  menu__item_count=$menu_provider_count
+  _menu_item_count=$menu_provider_count
   return 0
 }
 
-menu__provider_item_get()
+_menu_provider_item_get()
 {
   [ "$#" -eq 1 ] || return 2
 
   menu_provider_value=
   menu_provider_label=
 
-  "$menu__provider" item "$1" >/dev/null || {
-    menu__fail "provider item operation failed at index $1"
+  "$_menu_provider" item "$1" >/dev/null || {
+    _menu_fail "provider item operation failed at index $1"
     return 2
   }
 
   case "$menu_provider_label" in
-    *"$menu__newline"*)
-      menu__fail "provider label contains a newline at index $1"
+    *"$_menu_newline"*)
+      _menu_fail "provider label contains a newline at index $1"
       return 2
       ;;
   esac
@@ -363,56 +415,171 @@ menu__provider_item_get()
   return 0
 }
 
-menu__provider_event()
+_menu_selection_clear()
+{
+  map _menu_selected_indices || {
+    _menu_fail "cannot reset multi-selection state"
+    return 2
+  }
+}
+
+_menu_selection_is_marked()
+{
+  [ "$#" -eq 1 ] || return 2
+  map _menu_selected_indices get "$1" _menu_selected_marker >/dev/null 2>&1
+}
+
+_menu_selection_toggle()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  if _menu_selection_is_marked "$1"
+  then
+    map _menu_selected_indices rem "$1" || {
+      _menu_fail "cannot remove multi-selection mark"
+      return 2
+    }
+  else
+    map _menu_selected_indices put "$1" "1" || {
+      _menu_fail "cannot store multi-selection mark"
+      return 2
+    }
+  fi
+
+  return 0
+}
+
+_menu_selection_prune()
+{
+  _menu_selection_keys=$(map _menu_selected_indices keys) || {
+    _menu_fail "cannot read multi-selection state"
+    return 2
+  }
+
+  if [ -n "$_menu_selection_keys" ]
+  then
+    eval "set -- $_menu_selection_keys" || {
+      _menu_fail "cannot decode multi-selection state"
+      return 2
+    }
+
+    for _menu_selection_index
+    do
+      case "$_menu_selection_index" in
+        ''|*[!0-9]*)
+          _menu_fail "invalid multi-selection index"
+          return 2
+          ;;
+      esac
+
+      if [ "$_menu_selection_index" -ge "$_menu_item_count" ]
+      then
+        map _menu_selected_indices rem "$_menu_selection_index" || {
+          _menu_fail "cannot prune multi-selection state"
+          return 2
+        }
+      fi
+    done
+  fi
+
+  unset _menu_selection_keys _menu_selection_index
+  return 0
+}
+
+_menu_result_collect()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  array _menu_session_values || {
+    _menu_fail "cannot reset menu result state"
+    return 2
+  }
+
+  map _menu_selected_indices size _menu_selected_count || {
+    _menu_fail "cannot read multi-selection size"
+    return 2
+  }
+
+  if [ "$_menu_selected_count" -eq 0 ]
+  then
+    _menu_provider_item_get "$1" || return 2
+    array _menu_session_values add "$menu_provider_value" || {
+      _menu_fail "cannot store menu result"
+      return 2
+    }
+    return 0
+  fi
+
+  _menu_result_index=0
+  while [ "$_menu_result_index" -lt "$_menu_item_count" ]
+  do
+    if _menu_selection_is_marked "$_menu_result_index"
+    then
+      _menu_provider_item_get "$_menu_result_index" || return 2
+      array _menu_session_values add "$menu_provider_value" || {
+        _menu_fail "cannot store menu result"
+        return 2
+      }
+    fi
+    _menu_result_index=$((_menu_result_index + 1))
+  done
+
+  unset _menu_result_index _menu_selected_count
+  return 0
+}
+
+_menu_provider_event()
 {
   [ "$#" -eq 2 ] || return 2
 
-  menu__event_key=$1
-  menu__event_index=$2
+  _menu_event_key=$1
+  _menu_event_index=$2
 
-  menu__provider_item_get "$menu__event_index" || return 2
+  _menu_provider_item_get "$_menu_event_index" || return 2
 
-  menu__event_value=$menu_provider_value
-  menu__event_label=$menu_provider_label
+  _menu_event_value=$menu_provider_value
+  _menu_event_label=$menu_provider_label
   menu_provider_action=return
 
-  "$menu__provider" event "$menu__event_key" "$menu__event_index" \
-    "$menu__event_value" "$menu__event_label" >/dev/null || {
-      menu__fail "provider event operation failed"
+  "$_menu_provider" event "$_menu_event_key" "$_menu_event_index" \
+    "$_menu_event_value" "$_menu_event_label" >/dev/null || {
+      _menu_fail "provider event operation failed"
       return 2
     }
 
   case "$menu_provider_action" in
     return|reload|reset|ignore|cancel) ;;
     *)
-      menu__fail "provider returned an invalid event action"
+      _menu_fail "provider returned an invalid event action"
       return 2
       ;;
   esac
 
   case "$menu_provider_action" in
     return)
-      menu__session_result_key=$menu__event_key
-      menu__session_result_value=$menu__event_value
+      _menu_result_collect "$_menu_event_index" || return 2
+      _menu_session_result_key=$_menu_event_key
       return 10
       ;;
     reload)
-      menu__provider_count_get || return 2
+      _menu_provider_count_get || return 2
+      _menu_selection_prune || return 2
 
-      if [ "$menu__selected" -ge "$menu__item_count" ]
+      if [ "$_menu_selected" -ge "$_menu_item_count" ]
       then
-        menu__selected=$((menu__item_count - 1))
+        _menu_selected=$((_menu_item_count - 1))
       fi
 
-      [ "$menu__selected" -ge 0 ] || menu__selected=0
-      menu__render_needed=1
+      [ "$_menu_selected" -ge 0 ] || _menu_selected=0
+      _menu_render_needed=1
       return 0
       ;;
     reset)
-      menu__provider_count_get || return 2
-      menu__selected=0
-      menu__top=0
-      menu__render_needed=1
+      _menu_provider_count_get || return 2
+      _menu_selection_clear || return 2
+      _menu_selected=0
+      _menu_top=0
+      _menu_render_needed=1
       return 0
       ;;
     ignore)
@@ -426,107 +593,116 @@ menu__provider_event()
 
 #-------------------------------------------------------------------------------
 
-menu__update_geometry()
+_menu_update_geometry()
 {
   term_size_update || {
-    menu__fail "cannot read terminal size"
+    _menu_fail "cannot read terminal size"
     return 2
   }
 
-  menu__term_lines=$term_rows
-  menu__term_cols=$term_cols
-  menu__header_lines=$(menu__line_count "$menu_header") || return 2
-  menu__footer_lines=$(menu__line_count "$menu_footer") || return 2
-  menu__bottom_footer_lines=$(menu__line_count "$menu_bottom_footer") || return 2
+  _menu_term_lines=$term_rows
+  _menu_term_cols=$term_cols
+  _menu_header_lines=$(_menu_line_count "$menu_header") || return 2
+  _menu_footer_lines=$(_menu_line_count "$menu_footer") || return 2
+  _menu_bottom_footer_lines=$(_menu_line_count "$menu_bottom_footer") || return 2
 
-  menu__visible_rows=$((menu__term_lines - menu__header_lines - menu__footer_lines - menu__bottom_footer_lines))
+  _menu_visible_rows=$((_menu_term_lines - _menu_header_lines - _menu_footer_lines - _menu_bottom_footer_lines))
 
-  if [ "$menu__visible_rows" -lt 1 ] || [ "$menu__term_cols" -lt 3 ]
+  if [ "$_menu_visible_rows" -lt 1 ] || [ "$_menu_term_cols" -lt 7 ]
   then
-    menu__fail "terminal is too small"
+    _menu_fail "terminal is too small"
     return 2
   fi
 
   return 0
 }
 
-menu__render()
+_menu_render()
 {
   term_clear || {
-    menu__fail "terminal does not support clear"
+    _menu_fail "terminal does not support clear"
     return 2
   }
 
   if [ -n "$menu_header" ]
   then
-    menu__print_block "$menu_header" "$menu__term_cols" "1" || {
-      menu__fail "cannot render menu header"
+    _menu_print_block "$menu_header" "$_menu_term_cols" "1" || {
+      _menu_fail "cannot render menu header"
       return 2
     }
   fi
 
-  menu__remaining=$((menu__item_count - menu__top))
+  _menu_remaining=$((_menu_item_count - _menu_top))
 
-  if [ "$menu__remaining" -lt "$menu__visible_rows" ]
+  if [ "$_menu_remaining" -lt "$_menu_visible_rows" ]
   then
-    menu__render_rows=$menu__remaining
+    _menu_render_rows=$_menu_remaining
   else
-    menu__render_rows=$menu__visible_rows
+    _menu_render_rows=$_menu_visible_rows
   fi
 
-  menu__row=0
-  menu__index=$menu__top
-  menu__last_menu_row=$((menu__render_rows - 1))
-  menu__text_width=$((menu__term_cols - 2))
+  _menu_row=0
+  _menu_index=$_menu_top
+  _menu_last_menu_row=$((_menu_render_rows - 1))
+  _menu_text_width=$((_menu_term_cols - 6))
 
-  while [ "$menu__row" -lt "$menu__render_rows" ]
+  while [ "$_menu_row" -lt "$_menu_render_rows" ]
   do
-    menu__provider_item_get "$menu__index" || return 2
-    menu__text=$(menu__safe_item_text "$menu_provider_label" "$menu__text_width") || {
-      menu__fail "cannot render menu item"
+    _menu_provider_item_get "$_menu_index" || return 2
+    _menu_text=$(_menu_safe_item_text "$menu_provider_label" "$_menu_text_width") || {
+      _menu_fail "cannot render menu item"
       return 2
     }
 
-    if [ "$menu__index" -eq "$menu__selected" ]
+    if [ "$_menu_index" -eq "$_menu_selected" ]
     then
-      printf '> %s' "$menu__text" > "$term_tty_device" || return 2
+      _menu_cursor='>'
     else
-      printf '  %s' "$menu__text" > "$term_tty_device" || return 2
+      _menu_cursor=' '
     fi
 
-    if [ "$menu__row" -lt "$menu__last_menu_row" ] || [ -n "$menu_footer" ]
+    if _menu_selection_is_marked "$_menu_index"
+    then
+      _menu_mark='[x]'
+    else
+      _menu_mark='[ ]'
+    fi
+
+    printf '%s %s %s' "$_menu_cursor" "$_menu_mark" "$_menu_text" > "$term_tty_device" || return 2
+
+    if [ "$_menu_row" -lt "$_menu_last_menu_row" ] || [ -n "$menu_footer" ]
     then
       printf '\n' > "$term_tty_device" || return 2
     fi
 
-    menu__row=$((menu__row + 1))
-    menu__index=$((menu__index + 1))
+    _menu_row=$((_menu_row + 1))
+    _menu_index=$((_menu_index + 1))
   done
 
   if [ -n "$menu_footer" ]
   then
-    menu__print_block "$menu_footer" "$menu__term_cols" "0" || {
-      menu__fail "cannot render menu footer"
+    _menu_print_block "$menu_footer" "$_menu_term_cols" "0" || {
+      _menu_fail "cannot render menu footer"
       return 2
     }
   fi
 
   if [ -n "$menu_bottom_footer" ]
   then
-    menu__bottom_footer_row=$((menu__term_lines - menu__bottom_footer_lines))
-    term_cursor_move "$menu__bottom_footer_row" 0 || {
-      menu__fail "terminal does not support cursor positioning"
+    _menu_bottom_footer_row=$((_menu_term_lines - _menu_bottom_footer_lines))
+    term_cursor_move "$_menu_bottom_footer_row" 0 || {
+      _menu_fail "terminal does not support cursor positioning"
       return 2
     }
 
-    menu__print_block "$menu_bottom_footer" "$menu__term_cols" "0" || {
-      menu__fail "cannot render bottom footer"
+    _menu_print_block "$menu_bottom_footer" "$_menu_term_cols" "0" || {
+      _menu_fail "cannot render bottom footer"
       return 2
     }
   fi
 
   term_cursor_move 0 0 || {
-    menu__fail "terminal does not support cursor positioning"
+    _menu_fail "terminal does not support cursor positioning"
     return 2
   }
 
@@ -535,147 +711,151 @@ menu__render()
 
 #-------------------------------------------------------------------------------
 
-menu__apply_key()
+_menu_apply_key()
 {
-  menu__action=ignore
+  _menu_action=ignore
 
-  case "$menu__key" in
+  case "$_menu_key" in
     escape)
-      menu__action=cancel
+      _menu_action=cancel
       ;;
     up)
-      if [ "$menu__selected" -gt 0 ]
+      if [ "$_menu_selected" -gt 0 ]
       then
-        menu__selected=$((menu__selected - 1))
-        menu__action=move
+        _menu_selected=$((_menu_selected - 1))
+        _menu_action=move
       fi
       ;;
     down)
-      if [ "$menu__selected" -lt "$((menu__item_count - 1))" ]
+      if [ "$_menu_selected" -lt "$((_menu_item_count - 1))" ]
       then
-        menu__selected=$((menu__selected + 1))
-        menu__action=move
+        _menu_selected=$((_menu_selected + 1))
+        _menu_action=move
       fi
       ;;
     pageup)
-      if [ "$menu__selected" -gt 0 ]
+      if [ "$_menu_selected" -gt 0 ]
       then
-        menu__selected=$((menu__selected - menu__visible_rows))
-        [ "$menu__selected" -ge 0 ] || menu__selected=0
-        menu__action=move
+        _menu_selected=$((_menu_selected - _menu_visible_rows))
+        [ "$_menu_selected" -ge 0 ] || _menu_selected=0
+        _menu_action=move
       fi
       ;;
     pagedown)
-      if [ "$menu__selected" -lt "$((menu__item_count - 1))" ]
+      if [ "$_menu_selected" -lt "$((_menu_item_count - 1))" ]
       then
-        menu__selected=$((menu__selected + menu__visible_rows))
-        if [ "$menu__selected" -ge "$menu__item_count" ]
+        _menu_selected=$((_menu_selected + _menu_visible_rows))
+        if [ "$_menu_selected" -ge "$_menu_item_count" ]
         then
-          menu__selected=$((menu__item_count - 1))
+          _menu_selected=$((_menu_item_count - 1))
         fi
-        menu__action=move
+        _menu_action=move
       fi
       ;;
     home)
-      if [ "$menu__selected" -ne 0 ]
+      if [ "$_menu_selected" -ne 0 ]
       then
-        menu__selected=0
-        menu__action=move
+        _menu_selected=0
+        _menu_action=move
       fi
       ;;
     end)
-      if [ "$menu__selected" -ne "$((menu__item_count - 1))" ]
+      if [ "$_menu_selected" -ne "$((_menu_item_count - 1))" ]
       then
-        menu__selected=$((menu__item_count - 1))
-        menu__action=move
+        _menu_selected=$((_menu_item_count - 1))
+        _menu_action=move
       fi
       ;;
     enter)
-      menu__action=event
+      _menu_action=event
+      ;;
+    *)
+      if [ "$_menu_key" = "$_menu_toggle_key" ]
+      then
+        _menu_action=toggle
+      elif _menu_key_is_configured "$_menu_key"
+      then
+        _menu_action=event
+      fi
       ;;
   esac
-
-  if [ "$menu__action" = "ignore" ] && menu__key_is_configured "$menu__key"
-  then
-    menu__action=event
-  fi
 }
 
 #-------------------------------------------------------------------------------
 
-menu__cleanup()
+_menu_cleanup()
 {
-  menu__cleanup_status=$?
+  _menu_cleanup_status=$?
   trap - 0 HUP INT QUIT TERM PIPE TSTP
 
-  if [ "$menu__cursor_hidden" -eq 1 ]
+  if [ "$_menu_cursor_hidden" -eq 1 ]
   then
     term_cursor_show || :
-    menu__cursor_hidden=0
+    _menu_cursor_hidden=0
   fi
 
-  if [ "$menu__keypad" -eq 1 ]
+  if [ "$_menu_keypad" -eq 1 ]
   then
     term_keypad_disable || :
-    menu__keypad=0
+    _menu_keypad=0
   fi
 
-  if [ "$menu__alt_screen" -eq 1 ]
+  if [ "$_menu_alt_screen" -eq 1 ]
   then
     term_screen_leave || :
-    menu__alt_screen=0
+    _menu_alt_screen=0
   fi
 
-  if [ "$menu__tty_saved" -eq 1 ]
+  if [ "$_menu_tty_saved" -eq 1 ]
   then
     term_tty_restore || :
-    menu__tty_saved=0
+    _menu_tty_saved=0
   fi
 
-  return "$menu__cleanup_status"
+  return "$_menu_cleanup_status"
 }
 
-menu__terminal_init()
+_menu_terminal_init()
 {
   term_tty_available || {
-    menu__fail "no usable terminal is available"
+    _menu_fail "no usable terminal is available"
     return 2
   }
 
   term_tty_save || {
-    menu__fail "cannot save terminal settings"
+    _menu_fail "cannot save terminal settings"
     return 2
   }
-  menu__tty_saved=1
+  _menu_tty_saved=1
 
   term_size_update || {
-    menu__fail "cannot read terminal size"
+    _menu_fail "cannot read terminal size"
     return 2
   }
 
   term_tty_blocking || {
-    menu__fail "cannot configure terminal"
+    _menu_fail "cannot configure terminal"
     return 2
   }
 
   term_keymap_init || {
-    menu__fail "cannot build terminal keymap"
+    _menu_fail "cannot build terminal keymap"
     return 2
   }
 
   if term_keypad_enable
   then
-    menu__keypad=1
+    _menu_keypad=1
   fi
 
   if term_screen_enter
   then
-    menu__alt_screen=1
+    _menu_alt_screen=1
   fi
 
   if term_cursor_hide
   then
-    menu__cursor_hidden=1
+    _menu_cursor_hidden=1
   fi
 
   return 0
@@ -683,12 +863,12 @@ menu__terminal_init()
 
 #-------------------------------------------------------------------------------
 
-menu__handle_event()
+_menu_handle_event()
 {
-  menu__provider_event "$menu__key" "$menu__selected"
-  menu__event_status=$?
+  _menu_provider_event "$_menu_key" "$_menu_selected"
+  _menu_event_status=$?
 
-  case "$menu__event_status" in
+  case "$_menu_event_status" in
     0) return 0 ;;
     10) return 10 ;;
     11) return 11 ;;
@@ -696,130 +876,161 @@ menu__handle_event()
   esac
 }
 
-menu__main_loop()
+_menu_handle_action()
 {
-  menu__provider_count_get || return 2
-  menu__selected=0
-  menu__top=0
-  menu__render_needed=1
+  case "$_menu_action" in
+    cancel)
+      return 11
+      ;;
+    event)
+      _menu_handle_event
+      return "$?"
+      ;;
+    toggle)
+      _menu_selection_toggle "$_menu_selected" || return 2
+      _menu_render_needed=1
+      return 0
+      ;;
+    move|ignore)
+      return 0
+      ;;
+    *)
+      _menu_fail "invalid internal menu action"
+      return 2
+      ;;
+  esac
+}
+
+_menu_main_loop()
+{
+  _menu_provider_count_get || return 2
+  _menu_selection_clear || return 2
+  _menu_selected=0
+  _menu_top=0
+  _menu_render_needed=1
 
   while :
   do
-    if [ "$menu__render_needed" -eq 1 ]
+    if [ "$_menu_render_needed" -eq 1 ]
     then
-      menu__update_geometry || return 2
+      _menu_update_geometry || return 2
 
-      if [ "$menu__selected" -lt "$menu__top" ]
+      if [ "$_menu_selected" -lt "$_menu_top" ]
       then
-        menu__top=$menu__selected
-      elif [ "$menu__selected" -ge "$((menu__top + menu__visible_rows))" ]
+        _menu_top=$_menu_selected
+      elif [ "$_menu_selected" -ge "$((_menu_top + _menu_visible_rows))" ]
       then
-        menu__top=$((menu__selected - menu__visible_rows + 1))
+        _menu_top=$((_menu_selected - _menu_visible_rows + 1))
       fi
 
-      menu__render || return 2
-      menu__render_needed=0
+      _menu_render || return 2
+      _menu_render_needed=0
     fi
 
-    menu__read_key blocking
-    menu__read_status=$?
+    _menu_read_key blocking
+    _menu_read_status=$?
 
-    case "$menu__read_status" in
+    case "$_menu_read_status" in
       0) ;;
       2) continue ;;
       *)
-        menu__fail "cannot read from terminal"
+        _menu_fail "cannot read from terminal"
         return 2
         ;;
     esac
 
-    menu__apply_key
+    _menu_apply_key
+    _menu_handle_action
+    _menu_action_status=$?
 
-    case "$menu__action" in
-      cancel)
-        return 1
-        ;;
-      event)
-        menu__handle_event
-        menu__event_status=$?
+    case "$_menu_action_status" in
+      0) ;;
+      10) return 0 ;;
+      11) return 1 ;;
+      *) return 2 ;;
+    esac
 
-        case "$menu__event_status" in
+    if [ "$_menu_action" = "move" ]
+    then
+      _menu_pending=0
+
+      while [ "$_menu_pending" -lt 64 ]
+      do
+        _menu_read_key nowait
+        _menu_read_status=$?
+
+        case "$_menu_read_status" in
           0) ;;
+          2)
+            _menu_pending=$((_menu_pending + 1))
+            continue
+            ;;
+          3)
+            break
+            ;;
+          *)
+            _menu_fail "cannot read queued terminal input"
+            return 2
+            ;;
+        esac
+
+        _menu_apply_key
+        _menu_handle_action
+        _menu_action_status=$?
+
+        case "$_menu_action_status" in
+          0)
+            if [ "$_menu_render_needed" -eq 1 ] && [ "$_menu_action" != "move" ]
+            then
+              break
+            fi
+            ;;
           10) return 0 ;;
           11) return 1 ;;
           *) return 2 ;;
         esac
-        ;;
-      move)
-        menu__pending=0
 
-        while [ "$menu__pending" -lt 64 ]
-        do
-          menu__read_key nowait
-          menu__read_status=$?
+        _menu_pending=$((_menu_pending + 1))
+      done
 
-          case "$menu__read_status" in
-            0) ;;
-            2)
-              menu__pending=$((menu__pending + 1))
-              continue
-              ;;
-            3)
-              break
-              ;;
-            *)
-              menu__fail "cannot read queued terminal input"
-              return 2
-              ;;
-          esac
-
-          menu__apply_key
-
-          case "$menu__action" in
-            cancel)
-              return 1
-              ;;
-            event)
-              menu__handle_event
-              menu__event_status=$?
-
-              case "$menu__event_status" in
-                0)
-                  if [ "$menu__render_needed" -eq 1 ]
-                  then
-                    break
-                  fi
-                  ;;
-                10) return 0 ;;
-                11) return 1 ;;
-                *) return 2 ;;
-              esac
-              ;;
-          esac
-
-          menu__pending=$((menu__pending + 1))
-        done
-
-        menu__render_needed=1
-        ;;
-    esac
+      _menu_render_needed=1
+    fi
   done
 }
 
 #-------------------------------------------------------------------------------
 
-menu__session()
+_menu_session_emit_result()
 {
-  menu__provider=$1
-  menu__tty_saved=0
-  menu__keypad=0
-  menu__alt_screen=0
-  menu__cursor_hidden=0
-  menu__session_result_key=
-  menu__session_result_value=
-  menu__session_error=
+  set -- "$_menu_session_result_key"
 
-  trap 'menu__cleanup' 0
+  array _menu_session_values size _menu_session_value_count || return 2
+  _menu_session_value_index=0
+
+  while [ "$_menu_session_value_index" -lt "$_menu_session_value_count" ]
+  do
+    array _menu_session_values get "$_menu_session_value_index" _menu_session_value || return 2
+    set -- "$@" "$_menu_session_value"
+    _menu_session_value_index=$((_menu_session_value_index + 1))
+  done
+
+  quote "$@" || return 2
+  printf '\n'
+}
+
+_menu_session()
+{
+  _menu_provider=$1
+  _menu_tty_saved=0
+  _menu_keypad=0
+  _menu_alt_screen=0
+  _menu_cursor_hidden=0
+  _menu_session_result_key=
+  _menu_session_error=
+
+  array _menu_session_values || return 2
+
+  trap '_menu_cleanup' 0
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 131' QUIT
@@ -827,29 +1038,28 @@ menu__session()
   trap 'exit 143' TERM
   trap 'exit 148' TSTP
 
-  menu__terminal_init
-  menu__status=$?
+  _menu_terminal_init
+  _menu_status=$?
 
-  if [ "$menu__status" -eq 0 ]
+  if [ "$_menu_status" -eq 0 ]
   then
-    menu__main_loop
-    menu__status=$?
+    _menu_main_loop
+    _menu_status=$?
   fi
 
-  case "$menu__status" in
+  case "$_menu_status" in
     0)
-      menu__session_record=$(quote "$menu__session_result_key" "$menu__session_result_value") || {
+      _menu_session_emit_result || {
         printf '%s\n' "cannot serialize menu result"
         return 2
       }
-      printf '%s\n' "$menu__session_record"
       ;;
     2)
-      printf '%s\n' "$menu__session_error"
+      printf '%s\n' "$_menu_session_error"
       ;;
   esac
 
-  return "$menu__status"
+  return "$_menu_status"
 }
 
 menu_run_provider()
@@ -857,6 +1067,10 @@ menu_run_provider()
   menu_result_key=
   menu_result_value=
   menu_error=
+  array menu_result_values || {
+    menu_error="cannot reset public menu result"
+    return 1
+  }
 
   if [ "$#" -ne 1 ] || [ -z "$1" ]
   then
@@ -864,44 +1078,48 @@ menu_run_provider()
     return 2
   fi
 
-  menu__record=$(menu__session "$1")
-  menu__status=$?
+  _menu_record=$(_menu_session "$1")
+  _menu_status=$?
 
-  case "$menu__status" in
+  case "$_menu_status" in
     0)
-      # menu__record is produced only by quote(), so eval reparses a shell-safe
-      # serialized argument list rather than provider data as code.
-      if ! eval "set -- $menu__record"
+      if ! eval "set -- $_menu_record"
       then
         menu_error="invalid internal menu result"
         return 2
       fi
 
-      if [ "$#" -ne 2 ]
+      if [ "$#" -lt 2 ]
       then
         menu_error="invalid internal menu result"
         return 2
       fi
 
       menu_result_key=$1
-      menu_result_value=$2
+      shift
+      menu_result_value=$1
+
+      array menu_result_values set "$@" || {
+        menu_error="cannot store public menu result"
+        return 1
+      }
       return 0
       ;;
     1)
       return 1
       ;;
     2)
-      menu_error=$menu__record
+      menu_error=$_menu_record
       [ -n "$menu_error" ] || menu_error="menu engine failed"
       return 2
       ;;
     *)
-      return "$menu__status"
+      return "$_menu_status"
       ;;
   esac
 }
 
-menu__newline='
+_menu_newline='
 '
 
 menu_reset
