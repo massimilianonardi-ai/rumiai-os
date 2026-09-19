@@ -6,8 +6,9 @@ DESCRIPTION
     public pkg install command. It processes package operands independently where
     possible, materializes the managed package store on demand, snapshots the
     package catalog, resolves package repository metadata and artifacts, downloads
-    and verifies artifacts, extracts/materializes them, and delegates final
-    package integration to the package integration facilities.
+    and verifies artifacts, extracts/materializes them, validates any provider
+    realization against facility contracts from that exact catalog snapshot, and
+    delegates final package integration to the package integration facilities.
 
 FUNCTIONS
     pkg_install <package-spec>...

@@ -498,6 +498,12 @@ _pkg_install_one()
 
   pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
 
+  if ! pkg_facility_provider_validate "$pkg_install_catalog" "$pkg_install_selected_range" "$pkg_install_extract_dir"
+  then
+    _pkg_install_error provider-conformance-failed package "$pkg_install_pkg" version "$pkg_install_version"
+    return 1
+  fi
+
   if [ -n "$pkg_install_identity_osarch" ]
   then
     pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_selected_range" "$pkg_install_extract_dir" "$pkg_install_identity_osarch" || return 1

@@ -10,9 +10,15 @@ FUNCTIONS
         Validate a resolved package definition and extracted useful root, validate
         configured facility dependencies, materialize the managed concrete and its
         command/environment/facility/state metadata, validate and materialize
-        declarative facility command/environment projections, and index declared
-        facilities. PATH is rejected as facility-env metadata because command-path
-        exposure is owned by facility-cmd publication.
+        declarative facility command/environment projections plus service
+        realization metadata, and index declared facilities. PATH is rejected as
+        facility-env metadata because command-path exposure is owned by facility-cmd
+        publication.
+
+        pkg_integrate does not acquire or derive pkg-catalog context. The normal
+        pkg-install path performs exact-snapshot provider conformance before calling
+        integration; integration independently validates the local realization
+        structure it materializes.
 
         Dependency validation uses the consumer's configured binding or inherited
         system facility default. Integration stores dependency declarations but does

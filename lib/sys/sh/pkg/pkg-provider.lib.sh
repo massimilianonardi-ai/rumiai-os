@@ -647,7 +647,7 @@ _pkg_provider_global_environment_class_resolve()
   printf -- '%s\n' "$pkg_provider_global_environment_class_concrete"
 )
 
-_pkg_provider_global_environment_selector_resolve()
+_pkg_provider_global_selector_resolve()
 (
   [ "$#" -eq 1 ] || [ "$#" -eq 2 ] || return 2
   pkg_provider_global_environment_selector=$1
@@ -696,6 +696,37 @@ _pkg_provider_global_environment_selector_resolve()
   _pkg_provider_global_environment_class_resolve     "$pkg_provider_global_environment_selector_pkg"     "$pkg_provider_global_environment_selector_version"     ""     1
 )
 
+pkg_provider_default_resolve()
+(
+  [ "$#" -eq 1 ] || return 2
+  _pkg_provider_facility_valid "$1" || return 2
+
+  _pkg_provider_default_file "$1" || return 3
+  pkg_provider_default_resolve_file=$pkg_provider_config_file
+
+  if [ ! -e "$pkg_provider_default_resolve_file" ] && [ ! -L "$pkg_provider_default_resolve_file" ]
+  then
+    return 1
+  fi
+
+  pkg_provider_default_resolve_selector="$(_pkg_provider_config_query "$pkg_provider_default_resolve_file")" || return 3
+  pkg_provider_default_resolve_osarch="$(_pkg_provider_global_active_osarch 2>/dev/null)" || pkg_provider_default_resolve_osarch=
+
+  if [ -n "$pkg_provider_default_resolve_osarch" ]
+  then
+    pkg_provider_default_resolve_concrete="$(
+      _pkg_provider_global_selector_resolve "$pkg_provider_default_resolve_selector" "$pkg_provider_default_resolve_osarch"
+    )"
+  else
+    pkg_provider_default_resolve_concrete="$(
+      _pkg_provider_global_selector_resolve "$pkg_provider_default_resolve_selector"
+    )"
+  fi
+  [ "$?" -eq 0 ] || return 3
+
+  printf -- '%s\n' "$pkg_provider_default_resolve_concrete"
+)
+
 pkg_provider_global_environment_apply()
 {
   [ "$#" -eq 0 ] || return 2
@@ -730,9 +761,9 @@ pkg_provider_global_environment_apply()
 
     if [ -n "$pkg_provider_global_environment_osarch" ]
     then
-      pkg_provider_global_environment_concrete="$(_pkg_provider_global_environment_selector_resolve "$pkg_provider_global_environment_selector" "$pkg_provider_global_environment_osarch")"
+      pkg_provider_global_environment_concrete="$(_pkg_provider_global_selector_resolve "$pkg_provider_global_environment_selector" "$pkg_provider_global_environment_osarch")"
     else
-      pkg_provider_global_environment_concrete="$(_pkg_provider_global_environment_selector_resolve "$pkg_provider_global_environment_selector")"
+      pkg_provider_global_environment_concrete="$(_pkg_provider_global_selector_resolve "$pkg_provider_global_environment_selector")"
     fi
     pkg_provider_global_environment_status=$?
 

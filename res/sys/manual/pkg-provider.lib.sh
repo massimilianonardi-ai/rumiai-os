@@ -20,6 +20,16 @@ DESCRIPTION
     command publication and is invalid facility-env metadata.
 
 FUNCTIONS
+    pkg_provider_default_resolve <facility>
+        Resolve the configured system facility default to one installed concrete
+        provider using the same active global package-class semantics as global
+        facility publication/environment. Consumer bindings are not consulted.
+
+        Returns 0 and prints the concrete identity on success, 1 when no system
+        facility default is configured, 2 for invalid invocation/facility syntax,
+        and 3 when configured/default state exists but cannot be validated or
+        resolved.
+
     pkg_provider_effective_selector <consumer> <facility>
         Print the effective configured selector for the consumer/facility pair:
         the explicit consumer binding when present, otherwise the system facility
@@ -94,10 +104,15 @@ PROVIDER SELECTORS
     environment rewrite.
 
 RETURN STATUS
+    Unless a function documents a more specific status contract:
     0   Requested query or mutation succeeded.
     1   Required configured state is absent or configuration storage could not be
         read or changed safely.
     2   Invocation, consumer/facility name or provider-selector syntax is invalid.
+
+    pkg_provider_default_resolve additionally uses status 3 for an existing
+    configured/default state that is invalid or cannot resolve to an installed
+    concrete.
 
 DEPENDENCIES
     The library runs inside the m bootstrap environment and uses state-path for
