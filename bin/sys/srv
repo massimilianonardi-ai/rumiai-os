@@ -1,5 +1,8 @@
 #!/usr/bin/env m
 
+. "$m_LIB_DIR/sys/sh/pkg/pkg-provider.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility.lib.sh"
+
 srv_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -138,6 +141,7 @@ srv_runtime_read()
 {
   srv_owner=
   srv_command=
+  srv_provider=
 
   srv_runtime_pid_read || return 1
 
@@ -153,6 +157,18 @@ srv_runtime_read()
 
   srv_pid_valid "$srv_owner" || return 1
   [ -n "$srv_command" ] || return 1
+
+  if [ -e "$srv_runtime_dir/provider" ] || [ -L "$srv_runtime_dir/provider" ]
+  then
+    [ -f "$srv_runtime_dir/provider" ] && \
+    [ ! -L "$srv_runtime_dir/provider" ] && \
+    [ -r "$srv_runtime_dir/provider" ] || return 1
+    srv_provider="$(command -p -- cat "$srv_runtime_dir/provider" 2>/dev/null)" || return 1
+    case "$srv_provider" in
+      "" | */* | *'
+'*) return 1 ;;
+    esac
+  fi
 }
 
 srv_runtime_publish()
@@ -161,9 +177,12 @@ srv_runtime_publish()
   command -p -- rm -rf -- "$srv_runtime_tmp" 2>/dev/null
   command -p -- mkdir -- "$srv_runtime_tmp" || return 1
 
-  printf -- '%s\n' "$srv_pid" > "$srv_runtime_tmp/pid" && \
-  printf -- '%s\n' "$srv_caller_pid" > "$srv_runtime_tmp/owner" && \
-  printf -- '%s\n' "$srv_command" > "$srv_runtime_tmp/command" || {
+  {
+    printf -- '%s\n' "$srv_pid" > "$srv_runtime_tmp/pid" && \
+    printf -- '%s\n' "$srv_caller_pid" > "$srv_runtime_tmp/owner" && \
+    printf -- '%s\n' "$srv_command" > "$srv_runtime_tmp/command" && \
+    { [ -z "$srv_provider" ] || printf -- '%s\n' "$srv_provider" > "$srv_runtime_tmp/provider"; }
+  } || {
     command -p -- rm -rf -- "$srv_runtime_tmp" 2>/dev/null
     return 1
   }
@@ -199,11 +218,27 @@ srv_start()
     srv_runtime_remove || fatal 1 execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
   fi
 
-  srv_command_name="$srv_name-start"
-  readpathce srv_command "$srv_command_name" || \
-    fatal 127 execution command-not-found operation srv command "$srv_command_name"
-  [ -f "$srv_command" ] && [ -x "$srv_command" ] || \
-    fatal 126 execution execution-failed operation srv reason command-not-executable command "$srv_command"
+  srv_provider=
+  srv_provider="$(pkg_provider_default_resolve "$srv_name" 2>/dev/null)"
+  srv_provider_status=$?
+
+  case "$srv_provider_status" in
+    0)
+      srv_command="$(pkg_facility_service_start_resolve "$srv_name" "$srv_provider")" || \
+        fatal 1 execution execution-failed operation srv reason service-realization-invalid service "$srv_name" provider "$srv_provider"
+      ;;
+    1 | 2)
+      srv_provider=
+      srv_command_name="$srv_name-start"
+      readpathce srv_command "$srv_command_name" || \
+        fatal 127 execution command-not-found operation srv command "$srv_command_name"
+      [ -f "$srv_command" ] && [ -x "$srv_command" ] || \
+        fatal 126 execution execution-failed operation srv reason command-not-executable command "$srv_command"
+      ;;
+    *)
+      fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+      ;;
+  esac
 
   command -p -- nohup "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
   srv_pid=$!

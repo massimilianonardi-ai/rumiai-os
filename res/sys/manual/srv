@@ -10,13 +10,18 @@ DESCRIPTION
     layer. The service process remains a foreground program from its own point of
     view; srv performs the surrounding background lifecycle management.
 
-    A service named <service> is launched through the command:
+    For a provider-backed service, <service> is a facility identity. srv resolves
+    the configured system facility default to one installed concrete provider,
+    validates that concrete's materialized facility-service start realization, and
+    launches the exact package command belonging to that concrete. Consumer package
+    bindings are not consulted. The normal package launcher remains responsible for
+    package HOME, environment, and dependency preparation.
 
-        <service>-start
-
-    The launch target is resolved before the service is started. If that target is
-    a package-integrated command, the normal package launcher remains responsible
-    for package HOME, environment, and dependency preparation.
+    During migration, when no system facility default applies (or a legacy service
+    name is outside facility-name grammar), srv retains the historical
+    <service>-start PATH lookup as a compatibility path. A configured facility
+    default that cannot resolve, or whose selected concrete has no valid service
+    realization, fails instead of falling back to PATH.
 
 COMMANDS
     start <service>
@@ -41,7 +46,14 @@ STATE
         state-path user sys srv run
         state-path user sys srv log
 
-    Runtime metadata below those roots is private to srv.
+    Runtime metadata below those roots is private to srv. Provider-backed running
+    instances persist the selected concrete provider identity together with PID,
+    caller-owner and exact command identity. Later facility-default changes do not
+    retarget the running instance; stop operates on recorded runtime state and does
+    not resolve another provider.
+
+    Legacy runtime records without provider metadata remain readable during the
+    migration compatibility period.
 
 READINESS
     Successful start establishes that the launched process survived the initial
@@ -52,8 +64,9 @@ EXIT STATUS
           idempotent stop cases where the service is not running.
     1     A lifecycle operation failed.
     2     The invocation or service name is invalid.
-    126   The resolved <service>-start target is not executable.
-    127   The <service>-start target cannot be resolved.
+    126   The legacy compatibility <service>-start target is not executable.
+    127   No provider-backed default applies and the legacy compatibility
+          <service>-start target cannot be resolved.
 
 EXAMPLES
     Start a service named web:
@@ -69,4 +82,5 @@ EXAMPLES
         srv stop -f web
 
 SEE ALSO
+    pkg
     state-path
