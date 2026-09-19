@@ -673,6 +673,70 @@ _menu_update_geometry()
   return 0
 }
 
+_menu_render_row()
+{
+  [ "$#" -eq 2 ] || return 2
+
+  _menu_render_index=$1
+  _menu_render_row_index=$2
+
+  _menu_provider_item_get "$_menu_render_index" || return 2
+
+  if [ "$_menu_multiselect" -eq 1 ]
+  then
+    _menu_text_width=$((_menu_term_cols - 6))
+  else
+    _menu_text_width=$((_menu_term_cols - 2))
+  fi
+
+  _menu_text=$(_menu_safe_item_text "$menu_provider_label" "$_menu_text_width") || {
+    _menu_fail "cannot render menu item"
+    return 2
+  }
+
+  if [ "$_menu_render_index" -eq "$_menu_selected" ]
+  then
+    _menu_cursor='>'
+  else
+    _menu_cursor=' '
+  fi
+
+  if [ "$_menu_multiselect" -eq 1 ]
+  then
+    if _menu_selection_is_marked "$_menu_render_index"
+    then
+      _menu_mark='[x]'
+    else
+      _menu_mark='[ ]'
+    fi
+
+    _menu_line="$_menu_cursor $_menu_mark $_menu_text"
+  else
+    _menu_line="$_menu_cursor $_menu_text"
+  fi
+
+  _menu_screen_row=$((_menu_header_lines + _menu_render_row_index))
+
+  term_cursor_move "$_menu_screen_row" 0 || {
+    _menu_fail "terminal does not support cursor positioning"
+    return 2
+  }
+
+  printf '%-*s' "$_menu_term_cols" "$_menu_line" > "$term_tty_device" || return 2
+  return 0
+}
+
+_menu_viewport_adjust()
+{
+  if [ "$_menu_selected" -lt "$_menu_top" ]
+  then
+    _menu_top=$_menu_selected
+  elif [ "$_menu_selected" -ge "$((_menu_top + _menu_visible_rows))" ]
+  then
+    _menu_top=$((_menu_selected - _menu_visible_rows + 1))
+  fi
+}
+
 _menu_render()
 {
   term_clear || {
@@ -699,55 +763,22 @@ _menu_render()
 
   _menu_row=0
   _menu_index=$_menu_top
-  _menu_last_menu_row=$((_menu_render_rows - 1))
-
-  if [ "$_menu_multiselect" -eq 1 ]
-  then
-    _menu_text_width=$((_menu_term_cols - 6))
-  else
-    _menu_text_width=$((_menu_term_cols - 2))
-  fi
 
   while [ "$_menu_row" -lt "$_menu_render_rows" ]
   do
-    _menu_provider_item_get "$_menu_index" || return 2
-    _menu_text=$(_menu_safe_item_text "$menu_provider_label" "$_menu_text_width") || {
-      _menu_fail "cannot render menu item"
-      return 2
-    }
-
-    if [ "$_menu_index" -eq "$_menu_selected" ]
-    then
-      _menu_cursor='>'
-    else
-      _menu_cursor=' '
-    fi
-
-    if [ "$_menu_multiselect" -eq 1 ]
-    then
-      if _menu_selection_is_marked "$_menu_index"
-      then
-        _menu_mark='[x]'
-      else
-        _menu_mark='[ ]'
-      fi
-
-      printf '%s %s %s' "$_menu_cursor" "$_menu_mark" "$_menu_text" > "$term_tty_device" || return 2
-    else
-      printf '%s %s' "$_menu_cursor" "$_menu_text" > "$term_tty_device" || return 2
-    fi
-
-    if [ "$_menu_row" -lt "$_menu_last_menu_row" ] || [ -n "$menu_footer" ]
-    then
-      printf '\n' > "$term_tty_device" || return 2
-    fi
-
+    _menu_render_row "$_menu_index" "$_menu_row" || return 2
     _menu_row=$((_menu_row + 1))
     _menu_index=$((_menu_index + 1))
   done
 
   if [ -n "$menu_footer" ]
   then
+    _menu_footer_row=$((_menu_header_lines + _menu_render_rows))
+    term_cursor_move "$_menu_footer_row" 0 || {
+      _menu_fail "terminal does not support cursor positioning"
+      return 2
+    }
+
     _menu_print_block "$menu_footer" "$_menu_term_cols" "0" || {
       _menu_fail "cannot render menu footer"
       return 2
@@ -767,6 +798,82 @@ _menu_render()
       return 2
     }
   fi
+
+  term_cursor_move 0 0 || {
+    _menu_fail "terminal does not support cursor positioning"
+    return 2
+  }
+
+  return 0
+}
+
+_menu_render_partial_row()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  _menu_partial_old_lines=$_menu_term_lines
+  _menu_partial_old_cols=$_menu_term_cols
+  _menu_partial_old_top=$_menu_top
+
+  _menu_update_geometry || return 2
+  _menu_viewport_adjust
+
+  if [ "$_menu_term_lines" -ne "$_menu_partial_old_lines" ] ||
+     [ "$_menu_term_cols" -ne "$_menu_partial_old_cols" ] ||
+     [ "$_menu_top" -ne "$_menu_partial_old_top" ]
+  then
+    _menu_render || return 2
+    return 0
+  fi
+
+  if [ "$1" -lt "$_menu_top" ] ||
+     [ "$1" -ge "$((_menu_top + _menu_visible_rows))" ]
+  then
+    _menu_render || return 2
+    return 0
+  fi
+
+  _menu_partial_row=$(($1 - _menu_top))
+  _menu_render_row "$1" "$_menu_partial_row" || return 2
+
+  term_cursor_move 0 0 || {
+    _menu_fail "terminal does not support cursor positioning"
+    return 2
+  }
+
+  return 0
+}
+
+_menu_render_move()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  _menu_move_old_selected=$1
+  _menu_move_old_lines=$_menu_term_lines
+  _menu_move_old_cols=$_menu_term_cols
+  _menu_move_old_top=$_menu_top
+
+  _menu_update_geometry || return 2
+  _menu_viewport_adjust
+
+  if [ "$_menu_term_lines" -ne "$_menu_move_old_lines" ] ||
+     [ "$_menu_term_cols" -ne "$_menu_move_old_cols" ] ||
+     [ "$_menu_top" -ne "$_menu_move_old_top" ]
+  then
+    _menu_render || return 2
+    return 0
+  fi
+
+  if [ "$_menu_move_old_selected" -eq "$_menu_selected" ]
+  then
+    return 0
+  fi
+
+  _menu_move_old_row=$(($_menu_move_old_selected - _menu_top))
+  _menu_move_new_row=$(($_menu_selected - _menu_top))
+
+  _menu_render_row "$_menu_move_old_selected" "$_menu_move_old_row" || return 2
+  _menu_render_row "$_menu_selected" "$_menu_move_new_row" || return 2
 
   term_cursor_move 0 0 || {
     _menu_fail "terminal does not support cursor positioning"
@@ -955,7 +1062,7 @@ _menu_handle_action()
       ;;
     toggle)
       _menu_selection_toggle "$_menu_selected" || return 2
-      _menu_render_needed=1
+      _menu_row_render_needed=1
       return 0
       ;;
     move|ignore)
@@ -975,23 +1082,21 @@ _menu_main_loop()
   _menu_selected=0
   _menu_top=0
   _menu_render_needed=1
+  _menu_row_render_needed=0
 
   while :
   do
     if [ "$_menu_render_needed" -eq 1 ]
     then
       _menu_update_geometry || return 2
-
-      if [ "$_menu_selected" -lt "$_menu_top" ]
-      then
-        _menu_top=$_menu_selected
-      elif [ "$_menu_selected" -ge "$((_menu_top + _menu_visible_rows))" ]
-      then
-        _menu_top=$((_menu_selected - _menu_visible_rows + 1))
-      fi
-
+      _menu_viewport_adjust
       _menu_render || return 2
       _menu_render_needed=0
+      _menu_row_render_needed=0
+    elif [ "$_menu_row_render_needed" -eq 1 ]
+    then
+      _menu_render_partial_row "$_menu_selected" || return 2
+      _menu_row_render_needed=0
     fi
 
     _menu_read_key blocking
@@ -1006,6 +1111,7 @@ _menu_main_loop()
         ;;
     esac
 
+    _menu_move_from=$_menu_selected
     _menu_apply_key
     _menu_handle_action
     _menu_action_status=$?
@@ -1047,7 +1153,9 @@ _menu_main_loop()
 
         case "$_menu_action_status" in
           0)
-            if [ "$_menu_render_needed" -eq 1 ] && [ "$_menu_action" != "move" ]
+            if { [ "$_menu_render_needed" -eq 1 ] ||
+                 [ "$_menu_row_render_needed" -eq 1 ]; } &&
+               [ "$_menu_action" != "move" ]
             then
               break
             fi
@@ -1060,7 +1168,10 @@ _menu_main_loop()
         _menu_pending=$((_menu_pending + 1))
       done
 
-      _menu_render_needed=1
+      if [ "$_menu_render_needed" -eq 0 ]
+      then
+        _menu_render_move "$_menu_move_from" || return 2
+      fi
     fi
   done
 }
