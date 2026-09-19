@@ -31,23 +31,13 @@ then
   exit 0
 fi
 
-. "$m_LIB_DIR/sys/sh/osarch.lib.sh"
-
-case "$m_OSARCH_OS" in
-  linux)
-    if command -v -- less >/dev/null 2>&1
-    then
-      command -- less "$@" || \
-        fatal 1 execution execution-failed operation pager reason backend-failed backend less
-    else
-      command -p more "$@" || \
-        fatal 1 execution execution-failed operation pager reason backend-failed backend more
-    fi
-    ;;
-  *)
-    command -p more "$@" || \
-      fatal 1 execution execution-failed operation pager reason backend-failed backend more
-    ;;
-esac
+if command -v -- less >/dev/null 2>&1
+then
+  command -- less "$@" || \
+    fatal 1 execution execution-failed operation pager reason backend-failed backend less
+else
+  command -p more "$@" || \
+    fatal 1 execution execution-failed operation pager reason backend-failed backend more
+fi
 
 exit 0
