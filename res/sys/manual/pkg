@@ -75,8 +75,10 @@ COMMANDS
     provider default <facility> <provider-selector>
         Set the system default provider selector for the facility. Commands declared
         by that facility are reconciled into bin/ext or bin/ext-<osarch> according
-        to provider-selector and package-default semantics. Facility environment
-        metadata is not injected into the ambient m environment.
+        to provider-selector and package-default semantics. Every later m bootstrap
+        also re-resolves the facility default and applies the selected provider's
+        facility-env projection when that provider is resolvable for the active
+        platform class. Already-running processes are unchanged.
 
     provider default -u [--] <facility>
         Remove the configured system default provider selector and its owned global
