@@ -219,6 +219,34 @@ menu_command_fs_header_update()
   fi
 }
 
+menu_command_fs_navigate()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  menu_command_next=$(menu_command_directory_resolve "$1") || {
+    menu_provider_action=ignore
+    return 0
+  }
+
+  if [ "$menu_command_next" = "$menu_command_current" ]
+  then
+    menu_provider_action=ignore
+    return 0
+  fi
+
+  if menu_command_directory_allowed "$menu_command_next"
+  then
+    menu_command_current=$menu_command_next
+    menu_command_fs_load || return 1
+    menu_command_fs_header_update
+    menu_provider_action=reset
+  else
+    menu_provider_action=ignore
+  fi
+
+  return 0
+}
+
 menu_command_fs_provider()
 {
   case "$1" in
@@ -228,24 +256,14 @@ menu_command_fs_provider()
     event)
       [ "$#" -eq 5 ] || return 2
 
-      if [ "$2" = enter ]
+      if [ "$2" = "$menu_command_parent_key" ]
+      then
+        menu_command_fs_navigate "$menu_command_current/.." || return "$?"
+      elif [ "$2" = enter ]
       then
         if [ -d "$4" ]
         then
-          menu_command_next=$(menu_command_directory_resolve "$4") || {
-            menu_provider_action=ignore
-            return 0
-          }
-
-          if menu_command_directory_allowed "$menu_command_next"
-          then
-            menu_command_current=$menu_command_next
-            menu_command_fs_load || return 1
-            menu_command_fs_header_update
-            menu_provider_action=reset
-          else
-            menu_provider_action=ignore
-          fi
+          menu_command_fs_navigate "$4" || return "$?"
         else
           menu_provider_action=ignore
         fi
@@ -283,14 +301,17 @@ menu_command_directory=
 menu_command_confine=0
 menu_command_show_hidden=1
 menu_command_mixed=0
+menu_command_multiselect=0
 menu_command_select_key_name=space
 menu_command_select_key_seen=0
+menu_command_parent_key_name=backspace
+menu_command_parent_key_seen=0
 menu_command_directory_option_seen=0
 menu_command_directory_behavior_seen=0
 menu_command_base_header=
 
 OPTIND=1
-while getopts ':H:F:B:K:S:d:nmc' menu_command_option
+while getopts ':H:F:B:K:S:MP:d:nmc' menu_command_option
 do
   case "$menu_command_option" in
     H)
@@ -310,6 +331,16 @@ do
       [ "$menu_command_select_key_seen" -eq 0 ] || menu_command_fail duplicate-selection-key-option
       menu_command_select_key_name=$OPTARG
       menu_command_select_key_seen=1
+      menu_command_multiselect=1
+      ;;
+    M)
+      menu_command_multiselect=1
+      ;;
+    P)
+      [ "$menu_command_parent_key_seen" -eq 0 ] || menu_command_fail duplicate-parent-key-option
+      menu_command_parent_key_name=$OPTARG
+      menu_command_parent_key_seen=1
+      menu_command_directory_behavior_seen=1
       ;;
     d)
       [ "$menu_command_directory_option_seen" -eq 0 ] || menu_command_fail duplicate-directory-option
@@ -342,6 +373,11 @@ menu_command_key_decode "$menu_command_select_key_name" || menu_command_fail inv
 menu_command_select_key=$menu_command_decoded_key
 menu_toggle_key_set "$menu_command_select_key" || menu_command_fail "$menu_error"
 
+if [ "$menu_command_multiselect" -eq 1 ]
+then
+  menu_multiselect_enable || menu_command_fail "$menu_error"
+fi
+
 array menu_command_action_keys size menu_command_action_key_count || fatal 2 execution execution-failed operation menu reason action-key-storage-failed
 menu_command_action_key_index=0
 while [ "$menu_command_action_key_index" -lt "$menu_command_action_key_count" ]
@@ -357,6 +393,10 @@ if [ "$menu_command_directory_option_seen" -eq 1 ]
 then
   [ "$#" -eq 0 ] || menu_command_fail directory-mode-does-not-accept-list-items
   [ "$menu_command_action_key_count" -gt 0 ] || menu_command_fail directory-mode-requires-action-key
+
+  menu_command_key_decode "$menu_command_parent_key_name" || menu_command_fail invalid-parent-key
+  menu_command_parent_key=$menu_command_decoded_key
+  menu_key_add "$menu_command_parent_key" || menu_command_fail "$menu_error"
 
   menu_command_root=$(menu_command_directory_resolve "$menu_command_directory") || menu_command_fail directory-unavailable
   menu_command_current=$menu_command_root
