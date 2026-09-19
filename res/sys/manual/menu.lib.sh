@@ -3,7 +3,11 @@ NAME
 
 DESCRIPTION
     menu.lib.sh provides provider-driven menu rendering, terminal navigation,
-    configurable action keys, multi-selection and structured result state.
+    configurable action keys, optional multi-selection and structured result
+    state.
+
+    Single selection is the default. Multi-selection can be enabled explicitly
+    and disabled again through the public API.
 
     Terminal/TTY mechanics are delegated to term.lib.sh. The library uses
     array.lib.sh for array-backed providers/results and map.lib.sh for internal
@@ -34,26 +38,40 @@ PUBLIC RESULT STATE
 
     menu_result_values
         array.lib.sh array containing every returned value in provider order.
+        In single-selection mode it contains exactly one value.
 
     menu_error
         Failure detail for invalid API use or engine/provider/terminal failure.
 
 FUNCTIONS
     menu_reset
-        Reset headers/footers, action keys, the default Space toggle key and
-        public result state.
+        Reset headers/footers, action keys, public result state and
+        multi-selection configuration. Multi-selection becomes disabled and
+        Space becomes the configured but inactive toggle key.
 
     menu_key_clear
         Remove every configured action key.
 
     menu_key_add <key>
-        Add one action key. Navigation keys, Enter, Escape, the configured
-        multi-selection toggle and duplicates are rejected.
+        Add one action key. Navigation keys, Enter, Escape and duplicates are
+        rejected. The configured multi-selection toggle is also rejected while
+        multi-selection is enabled; while disabled it is not reserved.
+
+    menu_multiselect_enable
+        Enable multi-selection using the currently configured toggle key.
+        Fails if that key is already configured as an action key. Enabling
+        starts with no marks.
+
+    menu_multiselect_disable
+        Disable multi-selection and clear all current marks. The configured
+        toggle key stops being reserved.
 
     menu_toggle_key_set <key>
-        Change the multi-selection toggle key. The new key must be a valid
-        configurable terminal key, must not be navigation/Enter/Escape and
-        must not already be configured as an action key.
+        Change the configured multi-selection toggle key without changing
+        whether multi-selection is enabled. The key must be a valid
+        configurable terminal key and not navigation/Enter/Escape. If
+        multi-selection is currently enabled, it must not already be an action
+        key.
 
     menu_run_provider <provider-function>
         Run one interactive menu session against provider-function. On success,
@@ -83,12 +101,14 @@ PROVIDER CONTRACT
     The provider may leave it unchanged or set:
 
         return
-            Finish. If marks exist, return every marked value in provider
-            order; otherwise return the current value.
+            Finish. In single-selection mode return the current value. In
+            multi-selection mode return every marked value in provider order,
+            falling back to the current value when no mark exists.
 
         reload
-            Re-read the count, preserve/clamp the cursor, preserve marked
-            indices that remain valid and prune marks beyond the new count.
+            Re-read the count and preserve/clamp the cursor. When
+            multi-selection is enabled, preserve marked indices that remain
+            valid and prune marks beyond the new count.
 
         reset
             Re-read the count, select index 0 and clear all marks.
@@ -99,13 +119,21 @@ PROVIDER CONTRACT
         cancel
             Finish as cancellation.
 
-    Enter is always delivered as an event. The configured multi-selection key
-    is handled by the engine and is not delivered to the provider.
+    Enter is always delivered as an event. An enabled multi-selection toggle
+    key is handled by the engine and is not delivered to the provider.
 
-MULTI-SELECTION
-    Space is the default toggle key. Marks are index-based within the current
-    provider view. A provider that changes identity/order incompatibly with
-    index preservation must return reset rather than reload.
+SELECTION
+    Single selection is the default. The renderer shows only the cursor and
+    item label, and successful actions return exactly the current item.
+
+    Multi-selection is enabled only through menu_multiselect_enable. Space is
+    the default configured toggle key unless menu_toggle_key_set selects
+    another one. While enabled, the renderer adds mark boxes and the toggle key
+    marks/unmarks the current item without finishing the menu.
+
+    Marks are index-based within the current provider view. A provider that
+    changes identity/order incompatibly with index preservation must return
+    reset rather than reload.
 
 TERMINAL
     menu_run_provider uses the TTY selected by term_tty_device. Call
@@ -115,8 +143,8 @@ TERMINAL
     screen, keypad and cursor lifecycle through term.lib.sh.
 
 RETURN STATUS
-    menu_reset, menu_key_clear, menu_key_add, menu_toggle_key_set,
-    menu_array_provider:
+    menu_reset, menu_key_clear, menu_key_add, menu_multiselect_enable,
+    menu_multiselect_disable, menu_toggle_key_set, menu_array_provider:
         0   Success.
         1   Operational/storage failure where applicable.
         2   Invalid API usage/key/provider operation.
