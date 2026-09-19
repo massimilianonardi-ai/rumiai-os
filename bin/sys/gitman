@@ -37,12 +37,12 @@ gitman_repository_present()
 {
   [ "$#" -eq 1 ] || return 2
 
-  array gitman_repositories size gitman_repository_count || return 1
+  array gitman_repositories size gitman_repository_count || return 2
   gitman_repository_index=0
 
   while [ "$gitman_repository_index" -lt "$gitman_repository_count" ]
   do
-    array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 1
+    array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 2
     [ "$gitman_repository_value" != "$1" ] || return 0
     gitman_repository_index=$((gitman_repository_index + 1))
   done
@@ -120,10 +120,18 @@ gitman_candidate_process()
 
   if gitman_candidate_resolve "$1"
   then
-    if ! gitman_repository_present "$gitman_candidate_repository"
-    then
-      array gitman_repositories add "$gitman_candidate_repository" || return 1
-    fi
+    gitman_repository_present "$gitman_candidate_repository"
+    gitman_repository_present_status=$?
+
+    case "$gitman_repository_present_status" in
+      0) : ;;
+      1)
+        array gitman_repositories add "$gitman_candidate_repository" || return 1
+        ;;
+      *)
+        return 1
+        ;;
+    esac
   else
     gitman_candidate_status=$?
     [ "$gitman_candidate_status" -eq 1 ] || return "$gitman_candidate_status"
@@ -256,7 +264,7 @@ gitman_repository_menu()
   do
     array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 2
     gitman_repository_label=$(gitman_display_safe "$gitman_repository_value") || return 2
-    set -- "$@" "$gitman_repository_index@:=\$gitman_repository_label"
+    set -- "$@" "$gitman_repository_index@:=$gitman_repository_label"
     gitman_repository_index=$((gitman_repository_index + 1))
   done
 
@@ -337,7 +345,7 @@ gitman_remove_menu()
   do
     array gitman_repositories get "$gitman_repository_index" gitman_repository_value || return 2
     gitman_repository_label=$(gitman_display_safe "$gitman_repository_value") || return 2
-    set -- "$@" "$gitman_repository_index@:=\$gitman_repository_label"
+    set -- "$@" "$gitman_repository_index@:=$gitman_repository_label"
     gitman_repository_index=$((gitman_repository_index + 1))
   done
 
@@ -504,12 +512,16 @@ do
     continue
   fi
 
-  if ! gitman_repository_menu
-  then
-    gitman_repository_menu_status=$?
-    [ "$gitman_repository_menu_status" -eq 1 ] && exit 0
-    fatal 1 execution execution-failed operation gitman reason repository-menu-failed
-  fi
+  gitman_repository_menu
+  gitman_repository_menu_status=$?
+
+  case "$gitman_repository_menu_status" in
+    0) ;;
+    1) exit 0 ;;
+    *)
+      fatal 1 execution execution-failed operation gitman reason repository-menu-failed
+      ;;
+  esac
 
   case "$gitman_repository_menu_key" in
     enter)
