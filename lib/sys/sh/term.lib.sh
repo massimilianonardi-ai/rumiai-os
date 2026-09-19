@@ -34,6 +34,8 @@
 #       Move the cursor using zero-based terminal coordinates.
 #   term_clear
 #       Clear the selected terminal using its terminfo capability.
+#   term_line_clear
+#       Clear from the current cursor position to end of line using terminfo.
 #   term_key_is_text KEY
 #       Return success when KEY is one complete text key: printable ASCII or
 #       one valid non-ASCII UTF-8 scalar value.
@@ -442,6 +444,12 @@ term_clear()
 {
   [ "$#" -eq 0 ] || return 2
   _term_tput clear
+}
+
+term_line_clear()
+{
+  [ "$#" -eq 0 ] || return 2
+  _term_tput el
 }
 
 term_key_is_text()
