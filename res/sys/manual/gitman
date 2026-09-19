@@ -91,6 +91,7 @@ REPOSITORY MENU
         r       remove repositories with a multi-selection list
         c       clear all repositories from the in-memory set
         s       save the current repository set to configuration
+        e       edit the repositories configuration
         Escape  exit gitman
 
     Remove and clear affect only gitman's in-memory list. They never remove
@@ -114,6 +115,45 @@ SAVE CONFIGURATION
     save replaces the configuration with the current repositories in menu order
     and clears the current error. A save failure leaves the in-memory repository
     set unchanged and reports the failure in the bottom footer.
+
+EDIT CONFIGURATION
+    The e action edits:
+
+        <gitman-conf>/repositories
+
+    with an external text editor selected in this order:
+
+        VISUAL
+        EDITOR
+        vi
+
+    An empty or unset VISUAL falls through to EDITOR; an empty or unset EDITOR
+    falls through to vi. nano is not a required or implicit dependency. To use
+    it, set VISUAL=nano or EDITOR=nano.
+
+    VISUAL and EDITOR are treated as executable identities/pathnames, not as
+    shell fragments. gitman does not evaluate them as arbitrary shell command
+    strings.
+
+    The repository-menu session has already restored the normal terminal before
+    the editor is started. gitman creates the configuration directory if needed
+    but does not implicitly save the current repository set before editing.
+
+    If the editor exits unsuccessfully, gitman keeps the current repository set
+    and reports the editor status in the bottom footer.
+
+    After a successful edit, gitman asks whether to reset the current
+    repositories and reload the edited configuration. No is the default.
+    Choosing No or cancelling keeps the current repository set unchanged.
+
+    Choosing Yes clears the current set and reloads only entries from the
+    configuration file. Entries use the same decoding, Git validation,
+    physical normalization and deduplication rules as startup configuration.
+    Invalid entries are aggregated into the bottom-footer error.
+
+    Explicit post-edit reload does not apply the startup "." fallback. If no
+    valid repository remains after reload, gitman returns to filesystem
+    acquisition.
 
 GIT ACTION MENU
     Opening a repository shows these read-only actions:
@@ -183,9 +223,9 @@ TERMINAL BEHAVIOR
 
 CONFIGURATION
     gitman reads the optional repositories file at startup when no directory
-    operands are supplied. It writes that file only when the user explicitly
-    selects the repository-menu save action; in-memory add/remove/clear changes
-    are otherwise not persisted automatically.
+    operands are supplied. It changes that file only through explicit
+    repository-menu save or edit actions; in-memory add/remove/clear changes are
+    otherwise not persisted automatically.
 
 SIDE EFFECTS
     The first delivery contains no mutating Git action. gitman does not create,
@@ -200,7 +240,8 @@ EXIT STATUS
 
 DEPENDENCIES
     gitman requires the RumiAI commands menu, pager, read-key and state-path,
-    plus an available Git executable.
+    plus an available Git executable. Configuration editing uses VISUAL when
+    set, then EDITOR, and otherwise the POSIX vi fallback.
 
 SEE ALSO
     menu
