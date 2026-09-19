@@ -563,16 +563,16 @@ gitman_git_action_run()
 
   case "$gitman_action" in
     status)
-      command -- git -C "$gitman_action_repository" status --short --branch
+      command -- git -C "$gitman_action_repository" --no-pager status --short --branch
       ;;
     log)
-      command -- git -C "$gitman_action_repository" log --oneline --decorate --graph -n 50
+      command -- git -C "$gitman_action_repository" --no-pager log --oneline --decorate --graph -n 50
       ;;
     branch)
-      command -- git -C "$gitman_action_repository" branch -vv
+      command -- git -C "$gitman_action_repository" --no-pager branch -vv
       ;;
     diff)
-      command -- git -C "$gitman_action_repository" diff
+      command -- git -C "$gitman_action_repository" --no-pager diff
       ;;
     *)
       return 2
