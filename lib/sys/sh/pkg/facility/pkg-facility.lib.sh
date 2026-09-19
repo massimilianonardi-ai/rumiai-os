@@ -1,3 +1,6 @@
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-cmd.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-env.lib.sh"
+
 _pkg_facility_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -259,4 +262,206 @@ _pkg_facility_materialize()
   _pkg_facility_file_validate "$pkg_facility_source" || return 1
   command -p -- cp -- "$pkg_facility_source" "$pkg_facility_concrete/facility" || return 1
   _pkg_facility_file_validate "$pkg_facility_concrete/facility"
+}
+
+
+_pkg_facility_contract_part_validate()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_contract_part=$1
+  pkg_facility_contract_part_dir=$2
+
+  case "$pkg_facility_contract_part" in
+    cmd) _pkg_facility_cmd_contract_validate "$pkg_facility_contract_part_dir" ;;
+    env) _pkg_facility_env_contract_validate "$pkg_facility_contract_part_dir" ;;
+    *) return 1 ;;
+  esac
+}
+
+pkg_facility_contract_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_facility_contract_dir=$1
+
+  [ -d "$pkg_facility_contract_dir" ] && [ ! -L "$pkg_facility_contract_dir" ] || return 1
+  _pkg_facility_dir_entries_empty "$pkg_facility_contract_dir" && return 1
+
+  pkg_facility_contract_count=0
+  for pkg_facility_contract_part_dir in "$pkg_facility_contract_dir"/*
+  do
+    [ -e "$pkg_facility_contract_part_dir" ] || [ -L "$pkg_facility_contract_part_dir" ] || continue
+    [ -d "$pkg_facility_contract_part_dir" ] && [ ! -L "$pkg_facility_contract_part_dir" ] || return 1
+    pkg_facility_contract_part=${pkg_facility_contract_part_dir##*/}
+    _pkg_facility_contract_part_validate "$pkg_facility_contract_part" "$pkg_facility_contract_part_dir" || return 1
+    pkg_facility_contract_count=$((pkg_facility_contract_count + 1))
+  done
+
+  for pkg_facility_contract_hidden in "$pkg_facility_contract_dir"/.[!.]* "$pkg_facility_contract_dir"/..?*
+  do
+    [ -e "$pkg_facility_contract_hidden" ] || [ -L "$pkg_facility_contract_hidden" ] || continue
+    return 1
+  done
+
+  [ "$pkg_facility_contract_count" -gt 0 ]
+}
+
+_pkg_facility_declared_compatibility()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_declared_definition=$1
+  pkg_facility_declared_name=$2
+  pkg_facility_declared_file="$pkg_facility_declared_definition/facility"
+
+  _pkg_facility_file_validate "$pkg_facility_declared_file" || return 1
+  while IFS= read -r pkg_facility_declared_line
+  do
+    _pkg_facility_line_parse "$pkg_facility_declared_line" || return 1
+    if [ "$pkg_facility_name" = "$pkg_facility_declared_name" ]
+    then
+      pkg_facility_declared_compatibility=$pkg_facility_compatibility
+      return 0
+    fi
+  done < "$pkg_facility_declared_file"
+
+  return 1
+}
+
+_pkg_facility_provider_part_validate()
+{
+  [ "$#" -eq 5 ] || return 2
+  pkg_facility_provider_part=$1
+  pkg_facility_provider_contract_part=$2
+  pkg_facility_provider_definition=$3
+  pkg_facility_provider_root=$4
+  pkg_facility_provider_name=$5
+
+  case "$pkg_facility_provider_part" in
+    cmd)
+      _pkg_facility_cmd_provider_validate \
+        "$pkg_facility_provider_contract_part" \
+        "$pkg_facility_provider_definition/facility-cmd/$pkg_facility_provider_name" \
+        "$pkg_facility_provider_root"
+      ;;
+    env)
+      _pkg_facility_env_provider_validate \
+        "$pkg_facility_provider_contract_part" \
+        "$pkg_facility_provider_definition/facility-env/$pkg_facility_provider_name" \
+        "$pkg_facility_provider_root"
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+_pkg_facility_provider_declared_validate()
+{
+  [ "$#" -eq 5 ] || return 2
+  pkg_facility_provider_catalog=$1
+  pkg_facility_provider_definition=$2
+  pkg_facility_provider_root=$3
+  pkg_facility_provider_name=$4
+  pkg_facility_provider_compatibility=$5
+  pkg_facility_provider_contract="$pkg_facility_provider_catalog/$pkg_facility_provider_name/$pkg_facility_provider_compatibility"
+
+  pkg_facility_contract_validate "$pkg_facility_provider_contract" || return 1
+
+  for pkg_facility_provider_contract_part in "$pkg_facility_provider_contract"/*
+  do
+    [ -e "$pkg_facility_provider_contract_part" ] || [ -L "$pkg_facility_provider_contract_part" ] || continue
+    pkg_facility_provider_part=${pkg_facility_provider_contract_part##*/}
+    _pkg_facility_provider_part_validate \
+      "$pkg_facility_provider_part" \
+      "$pkg_facility_provider_contract_part" \
+      "$pkg_facility_provider_definition" \
+      "$pkg_facility_provider_root" \
+      "$pkg_facility_provider_name" || return 1
+  done
+}
+
+_pkg_facility_provider_surface_validate()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_facility_surface_catalog=$1
+  pkg_facility_surface_definition=$2
+  pkg_facility_surface_type=$3
+  pkg_facility_surface_root="$pkg_facility_surface_definition/facility-$pkg_facility_surface_type"
+
+  if [ ! -e "$pkg_facility_surface_root" ] && [ ! -L "$pkg_facility_surface_root" ]
+  then
+    return 0
+  fi
+
+  [ -d "$pkg_facility_surface_root" ] && [ ! -L "$pkg_facility_surface_root" ] || return 1
+  _pkg_facility_dir_entries_empty "$pkg_facility_surface_root" && return 1
+
+  for pkg_facility_surface_entry in "$pkg_facility_surface_root"/*
+  do
+    [ -e "$pkg_facility_surface_entry" ] || [ -L "$pkg_facility_surface_entry" ] || continue
+    pkg_facility_surface_name=${pkg_facility_surface_entry##*/}
+    _pkg_facility_name_valid "$pkg_facility_surface_name" || return 1
+    _pkg_facility_declared_compatibility "$pkg_facility_surface_definition" "$pkg_facility_surface_name" || return 1
+    pkg_facility_surface_contract="$pkg_facility_surface_catalog/$pkg_facility_surface_name/$pkg_facility_declared_compatibility/$pkg_facility_surface_type"
+    [ -d "$pkg_facility_surface_contract" ] && [ ! -L "$pkg_facility_surface_contract" ] || return 1
+  done
+
+  for pkg_facility_surface_hidden in "$pkg_facility_surface_root"/.[!.]* "$pkg_facility_surface_root"/..?*
+  do
+    [ -e "$pkg_facility_surface_hidden" ] || [ -L "$pkg_facility_surface_hidden" ] || continue
+    return 1
+  done
+}
+
+_pkg_facility_provider_unknown_surfaces_reject()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_facility_surface_definition=$1
+
+  for pkg_facility_surface_entry in "$pkg_facility_surface_definition"/facility-*
+  do
+    [ -e "$pkg_facility_surface_entry" ] || [ -L "$pkg_facility_surface_entry" ] || continue
+    case "${pkg_facility_surface_entry##*/}" in
+      facility-cmd | facility-env) : ;;
+      *) return 1 ;;
+    esac
+  done
+}
+
+pkg_facility_provider_validate()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_facility_provider_catalog=$1
+  pkg_facility_provider_definition=$2
+  pkg_facility_provider_root=$3
+  pkg_facility_provider_file="$pkg_facility_provider_definition/facility"
+
+  [ -d "$pkg_facility_provider_definition" ] && [ ! -L "$pkg_facility_provider_definition" ] || return 1
+  [ -d "$pkg_facility_provider_root" ] && [ ! -L "$pkg_facility_provider_root" ] || return 1
+  _pkg_facility_provider_unknown_surfaces_reject "$pkg_facility_provider_definition" || return 1
+
+  if [ ! -e "$pkg_facility_provider_file" ] && [ ! -L "$pkg_facility_provider_file" ]
+  then
+    [ ! -e "$pkg_facility_provider_definition/facility-cmd" ] && \
+    [ ! -L "$pkg_facility_provider_definition/facility-cmd" ] && \
+    [ ! -e "$pkg_facility_provider_definition/facility-env" ] && \
+    [ ! -L "$pkg_facility_provider_definition/facility-env" ]
+    return $?
+  fi
+
+  [ -d "$pkg_facility_provider_catalog" ] && [ ! -L "$pkg_facility_provider_catalog" ] || return 1
+  _pkg_facility_file_validate "$pkg_facility_provider_file" || return 1
+
+  while IFS= read -r pkg_facility_provider_line
+  do
+    _pkg_facility_line_parse "$pkg_facility_provider_line" || return 1
+    _pkg_facility_provider_declared_validate \
+      "$pkg_facility_provider_catalog" \
+      "$pkg_facility_provider_definition" \
+      "$pkg_facility_provider_root" \
+      "$pkg_facility_name" \
+      "$pkg_facility_compatibility" || return 1
+  done < "$pkg_facility_provider_file"
+
+  _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" cmd || return 1
+  _pkg_facility_provider_surface_validate "$pkg_facility_provider_catalog" "$pkg_facility_provider_definition" env
 }
