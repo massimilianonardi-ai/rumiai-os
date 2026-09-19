@@ -3,10 +3,11 @@ NAME
 
 SYNOPSIS
     menu [-H header] [-F footer] [-B bottom-footer]
-         [-K action-key ...] [-S toggle-key] [--] item ...
+         [-K action-key ...] [-M] [-S toggle-key] [--] item ...
 
     menu [-H header] [-F footer] [-B bottom-footer]
-         -K action-key [-K action-key ...] [-S toggle-key]
+         -K action-key [-K action-key ...]
+         [-M] [-S toggle-key] [-P parent-key]
          [-n] [-m] [-c] -d directory
 
 DESCRIPTION
@@ -16,9 +17,11 @@ DESCRIPTION
     In list mode, items come from command-line operands. In filesystem mode,
     -d selects a starting directory and Enter browses subdirectories.
 
-    Space toggles multi-selection by default. If no item is marked when an
-    action finishes, the current item is returned. If items are marked, only
-    the marked values are returned, in menu/provider order.
+    Single selection is the default. An action returns only the current item
+    and the renderer does not show multi-selection boxes.
+
+    -M explicitly enables multi-selection with Space as the default toggle.
+    -S toggle-key also enables multi-selection and uses toggle-key instead.
 
 OPTIONS
     -H header
@@ -36,9 +39,16 @@ OPTIONS
         as confirmation. Filesystem mode requires at least one -K because Enter
         is reserved for browsing.
 
+    -M
+        Enable multi-selection. Space is the default toggle key.
+
     -S toggle-key
-        Change the multi-selection toggle key. The default is space. The
-        configured toggle key is reserved and cannot also be an action key.
+        Enable multi-selection and use toggle-key as the mark toggle. If -M is
+        also present, -S determines the toggle key.
+
+    -P parent-key
+        Filesystem mode only. Replace the default Backspace parent-navigation
+        key. The configured parent key is reserved within filesystem mode.
 
     -d directory
         Use filesystem mode rooted initially at directory.
@@ -75,21 +85,40 @@ KEYS
         Move to the first or last item.
 
     Space
-        Toggle the current mark by default.
+        In default single-selection mode Space has no special meaning unless
+        configured as an action key. With -M it toggles the current mark.
 
     Enter
         In list mode, finish with action key enter. In filesystem mode, enter a
         selected directory; Enter on a non-directory does not finish.
 
+    Backspace
+        Filesystem mode only. Navigate to the current directory's parent by
+        default, with the same confinement rules as entering ...
+
     Escape
         Cancel.
 
-    Configurable action/toggle keys may be one text key or these named keys:
+    Configurable action/toggle/parent keys may be one text key or these named
+    keys:
 
         space nul tab backtab backspace left right insert delete f1 ... f20
 
     arrow_left and arrow_right are accepted command-line aliases for left and
-    right. Navigation keys, Escape and Enter cannot be configured as -K/-S.
+    right. Engine navigation keys, Escape and Enter cannot be configured as
+    -K/-S/-P. A key cannot serve simultaneously as action, enabled
+    multi-selection toggle and filesystem parent navigation.
+
+MULTI-SELECTION
+    Multi-selection is disabled by default.
+
+    With -M or -S, the active toggle key marks/unmarks the current item without
+    finishing the menu. If no item is marked when an action finishes, the
+    current item is returned. If items are marked, only marked values are
+    returned, in menu/provider order.
+
+    Changing filesystem directory clears marks from the previous directory
+    view.
 
 FILESYSTEM MODE
     The current directory is resolved physically and displayed in the header.
@@ -100,12 +129,18 @@ FILESYSTEM MODE
     keep unusual filenames on one terminal row does not replace the returned
     path value.
 
-    Changing directory clears marks from the previous directory view.
+    The visible .. entry remains present whenever parent navigation is allowed.
+    Backspace, or the key selected with -P, behaves as though .. had been
+    selected and entered. At /, and at the confinement root when -c is active,
+    the parent key is ignored.
 
 OUTPUT
     On success, stdout contains one shell-safe serialized argument vector:
 
         action-key value-1 ... value-n
+
+    In single-selection mode exactly one value follows the action key. In
+    multi-selection mode multiple values may follow.
 
     The serialization is produced with the m quote primitive. To consume it:
 
