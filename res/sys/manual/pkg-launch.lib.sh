@@ -26,7 +26,10 @@ FUNCTIONS
             exec
 
         Each selected provider facility command directory is prepended to PATH.
-        Facility environment records are applied without shell evaluation.
+        Facility environment records are applied through pkg-provider.lib.sh
+        without shell evaluation, using the same projection interpreter as global
+        facility-default bootstrap environment. PATH itself is not valid
+        facility-env metadata.
 
         The launcher replaces the current process with the upstream command and
         therefore returns only when validation/runtime preparation fails.
