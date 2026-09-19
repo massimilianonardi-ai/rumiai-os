@@ -119,45 +119,67 @@ GIT ACTION MENU
     Opening a repository shows these read-only actions:
 
         Status
-            git -C <repository> status --short --branch
+            git status --short --branch
 
         Log
-            git -C <repository> log --oneline --decorate --graph -n 50
+            git log --oneline --decorate --graph -n 50
 
         Branches
-            git -C <repository> branch -vv
+            git branch -vv
 
         Diff
-            git -C <repository> diff
+            git diff
 
-    Enter runs the selected action. Backspace is the default key for returning
-    to the repository menu. Escape also returns to the repository menu.
+    Enter runs the selected action. Backspace returns to the repository menu
+    and Escape does the same.
 
-    gitman preserves Git's ordinary pager-selection behavior. It does not
-    force --no-pager or override GIT_PAGER, PAGER, repository configuration or
-    user Git configuration.
+    p toggles the output presentation mode. The current mode is shown in the
+    menu header and persists for the rest of the gitman session, including when
+    another repository is opened.
 
-    When Git chooses a pager, that pager runs on the restored normal terminal.
-    After Git and any selected pager finish, gitman displays its explicit
-    "Press any key to continue..." pause before returning to the action menu.
+OUTPUT MODES
+    pager
+        This is the default mode.
+
+        gitman invokes every Git action with --paginate and selects the RumiAI
+        pager through GIT_PAGER=pager. It extends any existing LESS value with:
+
+            -R -+F -+X
+
+        -R retains raw control/color handling. -+F prevents less from exiting
+        only because the output fits on one screen. -+X re-enables normal
+        terminal initialization/deinitialization so the pager screen is
+        restored when the pager exits.
+
+        The pager exit is the acknowledgement step. gitman returns directly to
+        the Git action menu and does not show a second "Press any key" prompt.
+
+    terminal
+        gitman invokes every Git action with --no-pager. Output is intentionally
+        left in the normal terminal.
+
+        Before each command, gitman prints the repository and action so
+        accumulated output remains attributable. After the command it displays:
+
+            Press any key to continue...
+
+        and waits through read-key before recreating the Git action menu.
+
+    gitman does not clear the normal terminal or insert arbitrary batches of
+    blank lines to separate Git action output.
 
 TERMINAL BEHAVIOR
     The menu session completes and restores its terminal state before gitman
     launches the selected Git command.
 
-    Git therefore runs on the normal terminal, including any pager behavior
-    selected by Git itself.
+    In pager mode the selected pager owns the temporary presentation screen and
+    gitman recreates the action menu when that pager exits.
 
-    When the Git command finishes, gitman displays:
+    In terminal mode Git writes directly to the restored normal terminal and
+    read-key owns the explicit post-command acknowledgement.
 
-        Press any key to continue...
-
-    and waits through read-key. After one key is received, the Git action menu
-    is displayed again.
-
-    A non-zero Git command result does not end the gitman session. The Git
-    command output remains visible and the action menu shows a concise failure
-    in its bottom footer.
+    A non-zero Git command result does not end the gitman session. The action
+    menu reports a concise failure in its bottom footer.
 
 CONFIGURATION
     gitman reads the optional repositories file at startup when no directory
@@ -177,8 +199,8 @@ EXIT STATUS
     127   A required command is unavailable.
 
 DEPENDENCIES
-    gitman requires the RumiAI commands menu, read-key and state-path, plus an
-    available Git executable.
+    gitman requires the RumiAI commands menu, pager, read-key and state-path,
+    plus an available Git executable.
 
 SEE ALSO
     menu
