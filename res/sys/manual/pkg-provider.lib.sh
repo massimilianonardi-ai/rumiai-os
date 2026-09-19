@@ -7,12 +7,17 @@ DESCRIPTION
 
     Facility defaults are system-scoped package-subsystem configuration. A facility
     default owns global command publication for that facility through bin/ext and
-    bin/ext-<osarch>. Consumer bindings are system-scoped package configuration
-    stored as binding/<facility> beneath the consumer package conf area. A binding
-    file contains exactly one provider selector followed by newline.
+    bin/ext-<osarch> and contributes the selected provider's facility environment
+    to each new m bootstrap. Consumer bindings are system-scoped package
+    configuration stored as binding/<facility> beneath the consumer package conf
+    area. A binding file contains exactly one provider selector followed by newline.
 
-    Global publication contains commands only. facility-env remains a consumer-launch
-    projection and is not injected into ambient m or shell state.
+    Global environment is recomputed from authoritative selector intent rather than
+    stored as generated configuration. A valid ext-osarch selector chooses the
+    active platform class; otherwise only generic provider classes can contribute.
+    Facility defaults are applied in LC_ALL=C facility-name order and later
+    assignments win duplicate ordinary variables. PATH is reserved to facility
+    command publication and is invalid facility-env metadata.
 
 FUNCTIONS
     pkg_provider_effective_selector <consumer> <facility>
@@ -32,6 +37,17 @@ FUNCTIONS
         Return 0 when the concrete provider is currently selected by a system
         facility default or a system consumer binding, 1 when it is not referenced,
         and 2 when the request or authoritative configuration cannot be validated.
+
+    pkg_provider_environment_apply <facility> <concrete-provider>
+        Validate and apply one installed concrete provider's facility-env projection
+        to the current process. The projection is interpreted without shell
+        evaluation and is validated as a whole before export.
+
+    pkg_provider_global_environment_apply
+        Recompute and apply the environment of all currently resolvable system
+        facility defaults for this bootstrap. Unresolved valid selectors contribute
+        no environment. Returns non-zero for invalid/corrupt default or projection
+        data without selecting another provider.
 
     pkg_provider_package_default_reconcile <package> <osarch> <old-concrete> <new-concrete>
         Reconcile global commands affected by one package-default transition. For
@@ -73,6 +89,9 @@ PROVIDER SELECTORS
     This library stores selector intent; it does not install providers or choose a
     missing provider automatically. Unversioned global command links target provider
     package-default selectors; pinned selectors target pinned provider concretes.
+    Environment exposure is late-bound again by each new m bootstrap, so later
+    facility-default or provider-package-default changes require no generated
+    environment rewrite.
 
 RETURN STATUS
     0   Requested query or mutation succeeded.
