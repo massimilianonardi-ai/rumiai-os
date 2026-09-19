@@ -504,7 +504,7 @@ gitman_config_save()
     return 0
   }
 
-  gitman_conf_tmp="$gitman_conf_dir/.repositories.$"
+  gitman_conf_tmp="$gitman_conf_dir/.repositories.tmp"
   command -p -- rm -f -- "$gitman_conf_tmp" 2>/dev/null || {
     gitman_last_error='cannot save configuration: temporary-file cleanup failed'
     return 0
