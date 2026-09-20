@@ -6,7 +6,7 @@
 
 readpathce()
 {
-  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] && [ "$1" != "PATH" ] || return 1
 
   case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
 

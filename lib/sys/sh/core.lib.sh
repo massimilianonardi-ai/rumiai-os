@@ -36,7 +36,7 @@ fatal()
 
 readpathce()
 {
-  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] || return 1
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] && [ "$1" != "PATH" ] || return 1
 
   case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
 
@@ -292,6 +292,54 @@ quote()
     fi
   done
 )
+
+#-------------------------------------------------------------------------------
+
+pathsearch()
+{
+  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] && [ "$1" != "PATH" ] || return 1
+
+  case "$1" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
+
+  eval $1=''
+
+  if [ "${2#*/}" != "$2" ]
+  then
+    [ -f "$2" ] || return 3
+  else
+    [ -n "${PATH-}" ] || return 4
+
+    set -- "$1" "$(
+      set -eu
+      shift
+
+      pathsearch_path="$PATH:"
+
+      while [ -n "$pathsearch_path" ]
+      do
+        pathsearch_dir=${pathsearch_path%%:*}
+        pathsearch_path=${pathsearch_path#*:}
+
+        [ -n "$pathsearch_dir" ] || pathsearch_dir=.
+
+        pathsearch_candidate="$pathsearch_dir/$1"
+
+        if [ -f "$pathsearch_candidate" ]
+        then
+          printf -- '%s' "${pathsearch_candidate}x"
+          exit 0
+        fi
+      done
+
+      exit 1
+    )"
+
+    set -- "$1" "${2%x}"
+    [ -n "$2" ] || return 5
+  fi
+
+  readpathce "$1" "$2" || return 6
+}
 
 #-------------------------------------------------------------------------------
 
