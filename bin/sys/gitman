@@ -673,44 +673,54 @@ gitman_pause()
     fatal 1 execution execution-failed operation gitman reason key-read-failed
 }
 
-gitman_git_run()
+gitman_git_exec()
 {
   [ "$#" -ge 3 ] || return 2
-  gitman_git_run_repository=$1
-  gitman_git_run_action=$2
+  gitman_git_exec_repository=$1
+  gitman_git_exec_action=$2
   shift 2
 
   case "$gitman_output_mode" in
     pager)
       if [ -n "${LESS-}" ]
       then
-        gitman_git_run_less="$LESS -R -+F -+X"
+        gitman_git_exec_less="$LESS -R -+F -+X"
       else
-        gitman_git_run_less='-R -+F -+X'
+        gitman_git_exec_less='-R -+F -+X'
       fi
 
-      LESS=$gitman_git_run_less GIT_PAGER=pager \
-        command -- git --paginate -C "$gitman_git_run_repository" "$@"
-      gitman_git_run_status=$?
+      LESS=$gitman_git_exec_less GIT_PAGER=pager \
+        command -- git --paginate -C "$gitman_git_exec_repository" "$@"
+      gitman_git_exec_status=$?
       ;;
     terminal)
-      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_git_run_repository" "$gitman_git_run_action"
+      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_git_exec_repository" "$gitman_git_exec_action"
 
-      command -- git --no-pager -C "$gitman_git_run_repository" "$@"
-      gitman_git_run_status=$?
-
-      gitman_pause
+      command -- git --no-pager -C "$gitman_git_exec_repository" "$@"
+      gitman_git_exec_status=$?
       ;;
     *)
       return 2
       ;;
   esac
 
-  if [ "$gitman_git_run_status" -eq 0 ]
+  if [ "$gitman_git_exec_status" -eq 0 ]
   then
     gitman_last_error=
   else
-    gitman_last_error="git $gitman_git_run_action failed with status $gitman_git_run_status"
+    gitman_last_error="git $gitman_git_exec_action failed with status $gitman_git_exec_status"
+  fi
+
+  return 0
+}
+
+gitman_git_run()
+{
+  gitman_git_exec "$@" || return $?
+
+  if [ "$gitman_output_mode" = terminal ]
+  then
+    gitman_pause
   fi
 
   return 0
@@ -734,26 +744,81 @@ gitman_action_pull()
   gitman_git_run "$1" pull pull
 }
 
-gitman_action_commit()
+gitman_commit_message_acquire()
 {
-  [ "$#" -eq 1 ] || return 2
-
   printf '\nCommit message: ' > /dev/tty ||
     fatal 1 execution execution-failed operation gitman reason terminal-output-failed
 
   if ! IFS= read -r gitman_commit_message < /dev/tty
   then
     gitman_last_error='cannot read commit message'
-    return 0
+    return 1
   fi
 
   if [ -z "$gitman_commit_message" ]
   then
     gitman_last_error=
-    return 0
+    return 1
   fi
 
+  return 0
+}
+
+gitman_action_commit()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  gitman_commit_message_acquire || return 0
   gitman_git_run "$1" 'commit -m <commit-message>' commit -m "$gitman_commit_message"
+}
+
+gitman_action_sync_push()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_sync_repository=$1
+  gitman_sync_continue=1
+
+  gitman_sync_status=$(command -- git -C "$gitman_sync_repository" status --porcelain)
+  gitman_sync_status_code=$?
+
+  if [ "$gitman_sync_status_code" -ne 0 ]
+  then
+    gitman_last_error="git status --porcelain failed with status $gitman_sync_status_code"
+    gitman_sync_continue=0
+  elif [ -n "$gitman_sync_status" ]
+  then
+    if gitman_commit_message_acquire
+    then
+      gitman_git_exec "$gitman_sync_repository" 'add --all' add --all || return 2
+
+      if [ "$gitman_git_exec_status" -eq 0 ]
+      then
+        gitman_git_exec "$gitman_sync_repository" 'commit -m <commit-message>' commit -m "$gitman_commit_message" || return 2
+      fi
+
+      [ "$gitman_git_exec_status" -eq 0 ] || gitman_sync_continue=0
+    else
+      gitman_sync_continue=0
+    fi
+  fi
+
+  if [ "$gitman_sync_continue" -eq 1 ]
+  then
+    gitman_git_exec "$gitman_sync_repository" 'pull --no-rebase --no-edit' pull --no-rebase --no-edit || return 2
+    [ "$gitman_git_exec_status" -eq 0 ] || gitman_sync_continue=0
+  fi
+
+  if [ "$gitman_sync_continue" -eq 1 ]
+  then
+    gitman_git_exec "$gitman_sync_repository" push push || return 2
+  fi
+
+  if [ "$gitman_output_mode" = terminal ]
+  then
+    gitman_pause
+  fi
+
+  return 0
 }
 
 gitman_action_diff_staged()
@@ -1046,7 +1111,7 @@ gitman_repository_actions()
 {
   [ "$#" -eq 1 ] || return 2
 
-  gitman_action_group "$1" 'Git actions'     status 'Status: git status --short --branch'     diff 'Diff: git diff'     pull 'Pull: git pull'     commit 'Commit: git commit -m <commit-message>'     changes 'Changes >'     history 'History >'     branches 'Branches >'     remote 'Remote >'     stash 'Stash >'
+  gitman_action_group "$1" 'Git actions'     status 'Status: git status --short --branch'     diff 'Diff: git diff'     pull 'Pull: git pull'     commit 'Commit: git commit -m <commit-message>'     sync_push 'Sync + Push: git add --all → git commit -m <commit-message> → git pull --no-rebase --no-edit → git push'     changes 'Changes >'     history 'History >'     branches 'Branches >'     remote 'Remote >'     stash 'Stash >'
 }
 
 for gitman_required_command in git menu pager read-key state-path
