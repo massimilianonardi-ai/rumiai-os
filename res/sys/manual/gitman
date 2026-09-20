@@ -156,23 +156,78 @@ EDIT CONFIGURATION
     acquisition.
 
 GIT ACTION MENU
-    Opening a repository currently shows these actions:
+    Opening a repository shows a small set of frequent actions followed by
+    grouped submenus:
 
         Status: git status --short --branch
-        Log: git log --oneline --decorate --graph -n 50
-        Branches: git branch -vv
         Diff: git diff
+        Pull: git pull
+        Commit: git commit -m <commit-message>
+
+        Changes >
+        History >
+        Branches >
+        Remote >
+        Stash >
+
+    The grouped actions are:
+
+        Changes >
+            Diff staged: git diff --staged
+            Add all: git add --all
+
+        History >
+            Log: git log --oneline --decorate --graph -n 50
+            Show HEAD: git show HEAD
+
+        Branches >
+            List: git branch -vv
+            Switch >
+
+        Remote >
+            Remotes: git remote -v
+            Fetch: git fetch
+            Pull: git pull
+            Push: git push
+
+        Stash >
+            List: git stash list
+            Push: git stash push
+            Pop: git stash pop
 
     Leaf action labels show the concrete Git command or command template that
     will be executed. The displayed text is descriptive; it is not evaluated as
-    shell code.
+    shell code. Submenu labels are navigation only.
 
-    Enter runs the selected action. Backspace returns to the repository menu
-    and Escape does the same.
+    Enter runs a leaf action or opens a selected submenu. Backspace and Escape
+    return to the parent menu.
 
-    p toggles the output presentation mode. The current mode is shown in the
-    menu header and persists for the rest of the gitman session, including when
-    another repository is opened.
+    p toggles the output presentation mode in Git action menus. The current mode
+    is shown in the menu header and persists for the rest of the gitman session,
+    including across nested menus and repositories.
+
+COMMIT
+    Commit prompts for one commit-message line on the restored terminal and
+    executes:
+
+        git commit -m <commit-message>
+
+    An empty message cancels the action without invoking Git. A terminal input
+    failure is reported in the bottom footer.
+
+SWITCH BRANCH
+    Switch first enumerates local branches with:
+
+        git for-each-ref --format=%(refname:short) refs/heads
+
+    It then presents those branches in a menu. Each selectable branch displays
+    the concrete command that would be run, for example:
+
+        Switch: git switch feature/example
+
+    Selecting a branch executes git switch for that branch. Cancelling returns
+    to the Branches submenu without changing branch. If no local branch exists,
+    gitman reports that condition in the bottom footer.
 
 OUTPUT MODES
     pager
@@ -225,10 +280,13 @@ CONFIGURATION
     otherwise not persisted automatically.
 
 SIDE EFFECTS
-    The actions currently exposed by gitman are non-mutating Git inspection
-    actions. The gitman action model itself is not restricted to read-only
-    operations; when mutating actions are added, their concrete command or
-    command template is exposed by the corresponding leaf menu entry.
+    The action tree includes both inspection and mutating Git operations.
+    Commands such as git add --all, git commit -m, git pull, git switch,
+    git fetch, git push, git stash push and git stash pop have their normal Git
+    side effects on the selected working tree and, where applicable, its remote.
+
+    gitman does not hide those operations behind aggregate action names: each
+    leaf shows the concrete Git command or parameter template before execution.
 
 EXIT STATUS
     0     Normal user exit or cancellation.
