@@ -401,6 +401,8 @@ srv_host_systemd_call()
 {
   [ "$#" -ge 1 ] || return 2
 
+  HOME="$srv_host_home" \
+  XDG_CONFIG_HOME="$srv_host_home/.config" \
   XDG_RUNTIME_DIR="$srv_host_runtime" \
   DBUS_SESSION_BUS_ADDRESS="unix:path=$srv_host_runtime/bus" \
     "$srv_systemctl" --user "$@"
