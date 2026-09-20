@@ -6,8 +6,8 @@ SYNOPSIS
 
 DESCRIPTION
     gitman maintains an in-memory set of local, non-bare Git working trees and
-    provides interactive menus for selecting repositories and running read-only
-    Git inspection commands.
+    provides interactive menus for selecting repositories and running explicit
+    Git actions.
 
     Each accepted directory is normalized to the physical top-level directory
     reported by Git for that working tree. Different paths inside the same
@@ -156,19 +156,16 @@ EDIT CONFIGURATION
     acquisition.
 
 GIT ACTION MENU
-    Opening a repository shows these read-only actions:
+    Opening a repository currently shows these actions:
 
-        Status
-            git status --short --branch
+        Status: git status --short --branch
+        Log: git log --oneline --decorate --graph -n 50
+        Branches: git branch -vv
+        Diff: git diff
 
-        Log
-            git log --oneline --decorate --graph -n 50
-
-        Branches
-            git branch -vv
-
-        Diff
-            git diff
+    Leaf action labels show the concrete Git command or command template that
+    will be executed. The displayed text is descriptive; it is not evaluated as
+    shell code.
 
     Enter runs the selected action. Backspace returns to the repository menu
     and Escape does the same.
@@ -228,9 +225,10 @@ CONFIGURATION
     otherwise not persisted automatically.
 
 SIDE EFFECTS
-    The first delivery contains no mutating Git action. gitman does not create,
-    delete or modify repositories, change branches, stage files, commit, reset,
-    checkout, merge, rebase, fetch, pull, push or modify Git configuration.
+    The actions currently exposed by gitman are non-mutating Git inspection
+    actions. The gitman action model itself is not restricted to read-only
+    operations; when mutating actions are added, their concrete command or
+    command template is exposed by the corresponding leaf menu entry.
 
 EXIT STATUS
     0     Normal user exit or cancellation.
