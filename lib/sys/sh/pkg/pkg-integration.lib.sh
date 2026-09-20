@@ -113,17 +113,6 @@ _pkg_integration_env_validate()
   command -p -- sh -n "$1" >/dev/null 2>&1
 }
 
-_pkg_integration_relative_path_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in
-    "" | /* | */ | *//* | *'
-'*) return 1 ;;
-  esac
-  case "/$1/" in
-    */./* | */../*) return 1 ;;
-  esac
-}
 
 _pkg_integration_facility_declared()
 {
@@ -161,30 +150,7 @@ _pkg_integration_facility_cmd_validate()
     pkg_integration_projection_facility=${pkg_integration_facility_dir##*/}
     _pkg_facility_name_valid "$pkg_integration_projection_facility" || return 1
     _pkg_integration_facility_declared "$pkg_integration_projection_range" "$pkg_integration_projection_facility" || return 1
-    [ -d "$pkg_integration_facility_dir" ] && [ ! -L "$pkg_integration_facility_dir" ] || return 1
-    _pkg_integration_dir_entries_empty "$pkg_integration_facility_dir" && return 1
-
-    for pkg_integration_descriptor in "$pkg_integration_facility_dir"/*
-    do
-      [ -e "$pkg_integration_descriptor" ] || [ -L "$pkg_integration_descriptor" ] || continue
-      pkg_integration_projection_command=${pkg_integration_descriptor##*/}
-      _pkg_integration_command_name_valid "$pkg_integration_projection_command" || return 1
-      _pkg_integration_link_target_read "$pkg_integration_descriptor" || return 1
-      _pkg_integration_relative_path_valid "$pkg_integration_link_target" || return 1
-      [ -e "$pkg_integration_projection_root/$pkg_integration_link_target" ] || [ -L "$pkg_integration_projection_root/$pkg_integration_link_target" ] || return 1
-      readpathce pkg_integration_projection_resolved "$pkg_integration_projection_root/$pkg_integration_link_target" || return 1
-      case "$pkg_integration_projection_resolved" in
-        "$pkg_integration_projection_root"/*) : ;;
-        *) return 1 ;;
-      esac
-      [ -f "$pkg_integration_projection_resolved" ] && [ -x "$pkg_integration_projection_resolved" ] || return 1
-    done
-
-    for pkg_integration_hidden in "$pkg_integration_facility_dir"/.[!.]* "$pkg_integration_facility_dir"/..?*
-    do
-      [ -e "$pkg_integration_hidden" ] || [ -L "$pkg_integration_hidden" ] || continue
-      return 1
-    done
+    _pkg_facility_cmd_realization_validate "$pkg_integration_facility_dir" "$pkg_integration_projection_root" || return 1
   done
 
   for pkg_integration_hidden in "$pkg_integration_projection_dir"/.[!.]* "$pkg_integration_projection_dir"/..?*
@@ -192,44 +158,6 @@ _pkg_integration_facility_cmd_validate()
     [ -e "$pkg_integration_hidden" ] || [ -L "$pkg_integration_hidden" ] || continue
     return 1
   done
-}
-
-_pkg_integration_env_name_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  [ "$1" != PATH ] || return 1
-  case "$1" in
-    "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
-  esac
-}
-
-_pkg_integration_facility_env_descriptor_validate()
-{
-  [ "$#" -eq 2 ] || return 2
-  pkg_integration_projection_descriptor=$1
-  pkg_integration_projection_root=$2
-
-  case "$pkg_integration_projection_descriptor" in
-    root | literal)
-      return 0
-      ;;
-    "root-path "*)
-      pkg_integration_projection_relative=${pkg_integration_projection_descriptor#root-path }
-      _pkg_integration_relative_path_valid "$pkg_integration_projection_relative" || return 1
-      [ -e "$pkg_integration_projection_root/$pkg_integration_projection_relative" ] || [ -L "$pkg_integration_projection_root/$pkg_integration_projection_relative" ] || return 1
-      readpathce pkg_integration_projection_resolved "$pkg_integration_projection_root/$pkg_integration_projection_relative" || return 1
-      case "$pkg_integration_projection_resolved" in
-        "$pkg_integration_projection_root"/*) return 0 ;;
-        *) return 1 ;;
-      esac
-      ;;
-    "literal "*)
-      return 0
-      ;;
-    *)
-      return 1
-      ;;
-  esac
 }
 
 _pkg_integration_facility_env_validate()
@@ -246,7 +174,6 @@ _pkg_integration_facility_env_validate()
 
   [ -d "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ] || return 1
   _pkg_integration_dir_entries_empty "$pkg_integration_projection_dir" && return 1
-  pkg_integration_projection_tab="$(printf '\t')"
 
   for pkg_integration_env_file in "$pkg_integration_projection_dir"/*
   do
@@ -254,38 +181,7 @@ _pkg_integration_facility_env_validate()
     pkg_integration_projection_facility=${pkg_integration_env_file##*/}
     _pkg_facility_name_valid "$pkg_integration_projection_facility" || return 1
     _pkg_integration_facility_declared "$pkg_integration_projection_range" "$pkg_integration_projection_facility" || return 1
-    [ -f "$pkg_integration_env_file" ] && [ ! -L "$pkg_integration_env_file" ] && [ -r "$pkg_integration_env_file" ] && [ ! -x "$pkg_integration_env_file" ] || return 1
-
-    pkg_integration_env_original="$(
-      command -p -- cat -- "$pkg_integration_env_file" || exit 1
-      printf -- '%s' x
-    )" || return 1
-    pkg_integration_env_sorted="$(
-      LC_ALL=C command -p -- sort < "$pkg_integration_env_file" || exit 1
-      printf -- '%s' x
-    )" || return 1
-    [ "$pkg_integration_env_original" = "$pkg_integration_env_sorted" ] || return 1
-
-    pkg_integration_projection_count=0
-    pkg_integration_projection_previous=
-    while IFS= read -r pkg_integration_projection_line
-    do
-      case "$pkg_integration_projection_line" in
-        *"$pkg_integration_projection_tab"*) : ;;
-        *) return 1 ;;
-      esac
-      pkg_integration_projection_variable=${pkg_integration_projection_line%%"$pkg_integration_projection_tab"*}
-      pkg_integration_projection_descriptor=${pkg_integration_projection_line#*"$pkg_integration_projection_tab"}
-      case "$pkg_integration_projection_descriptor" in
-        *"$pkg_integration_projection_tab"*) return 1 ;;
-      esac
-      _pkg_integration_env_name_valid "$pkg_integration_projection_variable" || return 1
-      [ "$pkg_integration_projection_variable" != "$pkg_integration_projection_previous" ] || return 1
-      pkg_integration_projection_previous=$pkg_integration_projection_variable
-      _pkg_integration_facility_env_descriptor_validate "$pkg_integration_projection_descriptor" "$pkg_integration_projection_root" || return 1
-      pkg_integration_projection_count=$((pkg_integration_projection_count + 1))
-    done < "$pkg_integration_env_file"
-    [ "$pkg_integration_projection_count" -gt 0 ] || return 1
+    _pkg_facility_env_realization_validate "$pkg_integration_env_file" "$pkg_integration_projection_root" || return 1
   done
 
   for pkg_integration_hidden in "$pkg_integration_projection_dir"/.[!.]* "$pkg_integration_projection_dir"/..?*
@@ -294,7 +190,6 @@ _pkg_integration_facility_env_validate()
     return 1
   done
 }
-
 _pkg_integration_facility_service_validate()
 {
   [ "$#" -eq 2 ] || return 2

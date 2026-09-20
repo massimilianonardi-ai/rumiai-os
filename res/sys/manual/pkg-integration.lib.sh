@@ -17,8 +17,9 @@ FUNCTIONS
 
         pkg_integrate does not acquire or derive pkg-catalog context. The normal
         pkg-install path performs exact-snapshot provider conformance before calling
-        integration; integration independently validates the local realization
-        structure it materializes.
+        integration. Integration validates the local realization structure it
+        materializes through the same trusted cmd/env/service typed-part handlers,
+        while retaining package-definition envelope and declared-facility checks.
 
         Dependency validation uses the consumer's configured binding or inherited
         system facility default. Integration stores dependency declarations but does
