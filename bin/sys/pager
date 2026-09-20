@@ -1,43 +1,8 @@
-#!/usr/bin/env m
+#!/bin/sh
 
-pager_input_count=$#
-pager_input_index=0
-
-while [ "$pager_input_index" -lt "$pager_input_count" ]
-do
-  pager_source=$1
-  shift
-
-  readpathce pager_file "$pager_source" || \
-    fatal 1 execution execution-failed operation pager reason file-resolution-failed path "$pager_source"
-
-  [ -f "$pager_file" ] && [ -r "$pager_file" ] || \
-    fatal 1 execution execution-failed operation pager reason file-unavailable path "$pager_source"
-
-  set -- "$@" "$pager_file"
-  pager_input_index=$((pager_input_index + 1))
-done
-
-if ! [ -t 1 ]
+if command -v less >/dev/null 2>&1
 then
-  if [ "$#" -eq 0 ]
-  then
-    command -p cat || \
-      fatal 1 execution execution-failed operation pager reason output-failed input stdin
-  else
-    command -p cat "$@" || \
-      fatal 1 execution execution-failed operation pager reason output-failed
-  fi
-  exit 0
-fi
-
-if command -v -- less >/dev/null 2>&1
-then
-  command -- less "$@" || \
-    fatal 1 execution execution-failed operation pager reason backend-failed backend less
+  exec less "$@"
 else
-  command -p more "$@" || \
-    fatal 1 execution execution-failed operation pager reason backend-failed backend more
+  exec more "$@"
 fi
-
-exit 0
