@@ -219,6 +219,7 @@ srv_start()
   fi
 
   srv_provider=
+  srv_provider_backed=0
   srv_provider="$(pkg_provider_default_resolve "$srv_name" 2>/dev/null)"
   srv_provider_status=$?
 
@@ -226,6 +227,7 @@ srv_start()
     0)
       srv_command="$(pkg_facility_service_start_resolve "$srv_name" "$srv_provider")" || \
         fatal 1 execution execution-failed operation srv reason service-realization-invalid service "$srv_name" provider "$srv_provider"
+      srv_provider_backed=1
       ;;
     1 | 2)
       srv_provider=
@@ -240,7 +242,12 @@ srv_start()
       ;;
   esac
 
-  command -p -- nohup "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
+  if [ "$srv_provider_backed" -eq 1 ]
+  then
+    command -p -- nohup "$m_BOOTSTRAP_BIN" "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
+  else
+    command -p -- nohup "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
+  fi
   srv_pid=$!
   srv_unpublished_pid=$srv_pid
 
