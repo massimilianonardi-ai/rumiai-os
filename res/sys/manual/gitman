@@ -163,6 +163,8 @@ GIT ACTION MENU
         Diff: git diff
         Pull: git pull
         Commit: git commit -m <commit-message>
+        Sync + Push: git add --all → git commit -m <commit-message> →
+            git pull --no-rebase --no-edit → git push
 
         Changes >
         History >
@@ -215,6 +217,30 @@ COMMIT
     An empty message cancels the action without invoking Git. A terminal input
     failure is reported in the bottom footer.
 
+SYNC + PUSH
+    Sync + Push is a composite shortcut for the common publish workflow.
+
+    If local changes exist, gitman first asks for the commit message. An empty
+    message cancels before changing the staging area. With a non-empty message,
+    it runs:
+
+        git add --all
+        git commit -m <commit-message>
+
+    If the working tree is already clean, both steps are skipped.
+
+    It then runs:
+
+        git pull --no-rebase --no-edit
+        git push
+
+    git pull performs the fetch and integrates the configured upstream with
+    merge semantics; gitman does not add a redundant separate fetch or merge
+    step.
+
+    The workflow stops immediately on a failed add, commit or pull. In
+    particular, a merge conflict prevents git push from running.
+
 SWITCH BRANCH
     Switch first enumerates local branches with:
 
@@ -251,11 +277,13 @@ OUTPUT MODES
         left in the normal terminal.
 
         Before each command, gitman prints the repository and action so
-        accumulated output remains attributable. After the command it displays:
+        accumulated output remains attributable. A normal leaf action displays:
 
             Press any key to continue...
 
-        and waits through read-key before recreating the Git action menu.
+        after the command. A composite action such as Sync + Push runs its
+        internal Git sequence without intermediate acknowledgements and waits
+        once after the sequence stops or completes.
 
     gitman does not clear the normal terminal or insert arbitrary batches of
     blank lines to separate Git action output.
@@ -285,8 +313,10 @@ SIDE EFFECTS
     git fetch, git push, git stash push and git stash pop have their normal Git
     side effects on the selected working tree and, where applicable, its remote.
 
-    gitman does not hide those operations behind aggregate action names: each
-    leaf shows the concrete Git command or parameter template before execution.
+    gitman does not hide those operations behind opaque aggregate action names:
+    leaf entries show the concrete Git command or command sequence before
+    execution. Sync + Push may stage, commit, merge remote changes and push the
+    resulting branch.
 
 EXIT STATUS
     0     Normal user exit or cancellation.
