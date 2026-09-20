@@ -357,9 +357,24 @@ srv_host_user_run()
   fatal 1 execution execution-failed operation srv reason provider-exec-failed service "$srv_name"
 }
 
-srv_host_home_prepare()
+srv_host_account_prepare()
 {
-  srv_host_home=${HOME-}
+  srv_host_uid="$(command -p -- id -u 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name"
+  case "$srv_host_uid" in
+    "" | *[!0123456789]*) fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name" ;;
+  esac
+
+  srv_host_user_name="$(command -p -- id -un 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name"
+  case "$srv_host_user_name" in
+    "" | */* | *'
+'*) fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name" ;;
+  esac
+}
+
+srv_host_home_validate()
+{
   case "$srv_host_home" in
     /*) : ;;
     *) fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name" ;;
@@ -382,14 +397,35 @@ srv_host_systemd_arg_write()
   printf '"'
 }
 
+srv_host_systemd_call()
+{
+  [ "$#" -ge 1 ] || return 2
+
+  XDG_RUNTIME_DIR="$srv_host_runtime" \
+  DBUS_SESSION_BUS_ADDRESS="unix:path=$srv_host_runtime/bus" \
+    "$srv_systemctl" --user "$@"
+}
+
 srv_host_systemd_prepare()
 {
   srv_systemctl="$(command -p -v systemctl 2>/dev/null)" ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host systemd service "$srv_name"
-  "$srv_systemctl" --user show-environment >/dev/null 2>&1 ||
+  srv_getent="$(command -p -v getent 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name"
+
+  srv_host_account_prepare
+  srv_host_home="$(
+    "$srv_getent" passwd "$srv_host_uid" 2>/dev/null |
+      command -p -- awk -F: -v uid="$srv_host_uid" '$3 == uid { print $6; exit }'
+  )" || fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name"
+  srv_host_home_validate
+
+  srv_host_runtime="/run/user/$srv_host_uid"
+  [ -d "$srv_host_runtime" ] ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host systemd service "$srv_name"
+  srv_host_systemd_call show-environment >/dev/null 2>&1 ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host systemd service "$srv_name"
 
-  srv_host_home_prepare
   srv_host_unit="m-srv-$srv_name.service"
   srv_host_dir="$srv_host_home/.config/systemd/user"
   srv_host_manifest="$srv_host_dir/$srv_host_unit"
@@ -441,12 +477,12 @@ srv_host_systemd_install()
   command -p -- mv -- "$srv_host_tmp" "$srv_host_manifest" ||
     fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
 
-  "$srv_systemctl" --user daemon-reload ||
+  srv_host_systemd_call daemon-reload ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action install service "$srv_name"
-  if ! "$srv_systemctl" --user enable "$srv_host_unit"
+  if ! srv_host_systemd_call enable "$srv_host_unit"
   then
     command -p -- rm -f -- "$srv_host_manifest" 2>/dev/null
-    "$srv_systemctl" --user daemon-reload >/dev/null 2>&1 || :
+    srv_host_systemd_call daemon-reload >/dev/null 2>&1 || :
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action install service "$srv_name"
   fi
 }
@@ -462,14 +498,14 @@ srv_host_systemd_start()
   srv_host_systemd_manifest_require
   srv_host_provider_resolve "$srv_name" ||
     fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
-  "$srv_systemctl" --user start "$srv_host_unit" ||
+  srv_host_systemd_call start "$srv_host_unit" ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action start service "$srv_name"
 }
 
 srv_host_systemd_stop()
 {
   srv_host_systemd_manifest_require
-  "$srv_systemctl" --user stop "$srv_host_unit" ||
+  srv_host_systemd_call stop "$srv_host_unit" ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action stop service "$srv_name"
 }
 
@@ -478,7 +514,7 @@ srv_host_systemd_restart()
   srv_host_systemd_manifest_require
   srv_host_provider_resolve "$srv_name" ||
     fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
-  "$srv_systemctl" --user restart "$srv_host_unit" ||
+  srv_host_systemd_call restart "$srv_host_unit" ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action restart service "$srv_name"
 }
 
@@ -490,11 +526,11 @@ srv_host_systemd_uninstall()
   fi
   srv_host_systemd_manifest_require
 
-  "$srv_systemctl" --user stop "$srv_host_unit" >/dev/null 2>&1 || :
-  "$srv_systemctl" --user disable "$srv_host_unit" >/dev/null 2>&1 || :
+  srv_host_systemd_call stop "$srv_host_unit" >/dev/null 2>&1 || :
+  srv_host_systemd_call disable "$srv_host_unit" >/dev/null 2>&1 || :
   command -p -- rm -f -- "$srv_host_manifest" ||
     fatal 1 execution execution-failed operation srv reason host-registration-remove-failed service "$srv_name"
-  "$srv_systemctl" --user daemon-reload ||
+  srv_host_systemd_call daemon-reload ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action uninstall service "$srv_name"
 }
 
@@ -504,17 +540,21 @@ srv_host_launchd_prepare()
     fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
   srv_plutil="$(command -p -v plutil 2>/dev/null)" ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
-  srv_uid="$(command -p -- id -u 2>/dev/null)" ||
+  srv_dscl="$(command -p -v dscl 2>/dev/null)" ||
     fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name"
-  case "$srv_uid" in
-    "" | *[!0123456789]*) fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name" ;;
-  esac
 
-  srv_host_domain="gui/$srv_uid"
+  srv_host_account_prepare
+  srv_host_domain="gui/$srv_host_uid"
   "$srv_launchctl" print "$srv_host_domain" >/dev/null 2>&1 ||
     fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
 
-  srv_host_home_prepare
+  srv_host_home="$(
+    "$srv_dscl" . -read "/Users/$srv_host_user_name" NFSHomeDirectory 2>/dev/null |
+      command -p -- sed -n 's/^NFSHomeDirectory: //p' |
+      command -p -- sed -n '1p'
+  )" || fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name"
+  srv_host_home_validate
+
   srv_host_label="m.srv.$srv_name"
   srv_host_dir="$srv_host_home/Library/LaunchAgents"
   srv_host_manifest="$srv_host_dir/$srv_host_label.plist"
