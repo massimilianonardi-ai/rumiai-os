@@ -722,10 +722,62 @@ gitman_action_status()
   gitman_git_run "$1" status status --short --branch
 }
 
+gitman_action_diff()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" diff diff
+}
+
+gitman_action_pull()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" pull pull
+}
+
+gitman_action_commit()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '\nCommit message: ' > /dev/tty ||
+    fatal 1 execution execution-failed operation gitman reason terminal-output-failed
+
+  if ! IFS= read -r gitman_commit_message < /dev/tty
+  then
+    gitman_last_error='cannot read commit message'
+    return 0
+  fi
+
+  if [ -z "$gitman_commit_message" ]
+  then
+    gitman_last_error=
+    return 0
+  fi
+
+  gitman_git_run "$1" 'commit -m <commit-message>' commit -m "$gitman_commit_message"
+}
+
+gitman_action_diff_staged()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'diff --staged' diff --staged
+}
+
+gitman_action_add_all()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'add --all' add --all
+}
+
 gitman_action_log()
 {
   [ "$#" -eq 1 ] || return 2
   gitman_git_run "$1" log log --oneline --decorate --graph -n 50
+}
+
+gitman_action_show_head()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'show HEAD' show HEAD
 }
 
 gitman_action_branch()
@@ -734,10 +786,40 @@ gitman_action_branch()
   gitman_git_run "$1" branch branch -vv
 }
 
-gitman_action_diff()
+gitman_action_remotes()
 {
   [ "$#" -eq 1 ] || return 2
-  gitman_git_run "$1" diff diff
+  gitman_git_run "$1" 'remote -v' remote -v
+}
+
+gitman_action_fetch()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" fetch fetch
+}
+
+gitman_action_push()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" push push
+}
+
+gitman_action_stash_list()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'stash list' stash list
+}
+
+gitman_action_stash_push()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'stash push' stash push
+}
+
+gitman_action_stash_pop()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" 'stash pop' stash pop
 }
 
 gitman_action_menu()
@@ -814,23 +896,19 @@ gitman_action_dispatch()
   "$gitman_action_handler" "$1"
 }
 
-gitman_repository_actions()
+gitman_action_group()
 {
-  [ "$#" -eq 1 ] || return 2
+  [ "$#" -ge 4 ] || return 2
 
   while :
   do
-    gitman_action_menu "$1" 'Git actions' \
-      status 'Status: git status --short --branch' \
-      log 'Log: git log --oneline --decorate --graph -n 50' \
-      branch 'Branches: git branch -vv' \
-      diff 'Diff: git diff'
-    gitman_repository_actions_status=$?
+    gitman_action_menu "$@"
+    gitman_action_group_status=$?
 
-    case "$gitman_repository_actions_status" in
+    case "$gitman_action_group_status" in
       0) ;;
       1) return 0 ;;
-      *) return "$gitman_repository_actions_status" ;;
+      *) return "$gitman_action_group_status" ;;
     esac
 
     case "$gitman_action_menu_key" in
@@ -853,6 +931,122 @@ gitman_repository_actions()
         ;;
     esac
   done
+}
+
+gitman_action_switch()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_switch_repository=$1
+
+  array gitman_switch_branches || return 2
+  gitman_switch_refs=$(command -- git -C "$gitman_switch_repository" for-each-ref --format='%(refname:short)' refs/heads)
+  gitman_switch_refs_status=$?
+
+  if [ "$gitman_switch_refs_status" -ne 0 ]
+  then
+    gitman_last_error="git branch enumeration failed with status $gitman_switch_refs_status"
+    return 0
+  fi
+
+  while IFS= read -r gitman_switch_branch
+  do
+    [ -n "$gitman_switch_branch" ] || continue
+    array gitman_switch_branches add "$gitman_switch_branch" || return 2
+  done <<EOF_GITMAN_SWITCH
+$gitman_switch_refs
+EOF_GITMAN_SWITCH
+
+  array gitman_switch_branches size gitman_switch_count || return 2
+  if [ "$gitman_switch_count" -eq 0 ]
+  then
+    gitman_last_error='no local branches available'
+    return 0
+  fi
+
+  set --
+  gitman_switch_index=0
+
+  while [ "$gitman_switch_index" -lt "$gitman_switch_count" ]
+  do
+    array gitman_switch_branches get "$gitman_switch_index" gitman_switch_branch || return 2
+    gitman_switch_branch_display=$(gitman_display_safe "$gitman_switch_branch") || return 2
+    set -- "$@" "$gitman_switch_index@:=Switch: git switch $gitman_switch_branch_display"
+    gitman_switch_index=$((gitman_switch_index + 1))
+  done
+
+  gitman_switch_repository_display=$(gitman_display_safe "$gitman_switch_repository") || return 2
+  gitman_switch_result=$(
+    command -- menu       -H "[output: $gitman_output_mode] Switch branch | $gitman_switch_repository_display"       -F 'Enter: switch | Backspace/Escape: branches'       -B "$gitman_last_error"       -K backspace       -- "$@"
+  )
+  gitman_switch_status=$?
+
+  case "$gitman_switch_status" in
+    0) ;;
+    1) return 0 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_switch_status" ;;
+  esac
+
+  eval "set -- $gitman_switch_result" || gitman_menu_failure
+  [ "$#" -eq 2 ] || gitman_menu_failure
+
+  gitman_switch_key=$1
+  gitman_switch_index=$2
+
+  case "$gitman_switch_key" in
+    backspace)
+      return 0
+      ;;
+    enter)
+      case "$gitman_switch_index" in
+        ""|*[!0123456789]*)
+          return 2
+          ;;
+      esac
+      array gitman_switch_branches get "$gitman_switch_index" gitman_switch_branch || return 2
+      gitman_git_run "$gitman_switch_repository" 'switch <branch>' switch "$gitman_switch_branch"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+gitman_action_changes()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_group "$1" Changes     diff_staged 'Diff staged: git diff --staged'     add_all 'Add all: git add --all'
+}
+
+gitman_action_history()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_group "$1" History     log 'Log: git log --oneline --decorate --graph -n 50'     show_head 'Show HEAD: git show HEAD'
+}
+
+gitman_action_branches()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_group "$1" Branches     branch 'List: git branch -vv'     switch 'Switch >'
+}
+
+gitman_action_remote()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_group "$1" Remote     remotes 'Remotes: git remote -v'     fetch 'Fetch: git fetch'     pull 'Pull: git pull'     push 'Push: git push'
+}
+
+gitman_action_stash()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_action_group "$1" Stash     stash_list 'List: git stash list'     stash_push 'Push: git stash push'     stash_pop 'Pop: git stash pop'
+}
+
+gitman_repository_actions()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  gitman_action_group "$1" 'Git actions'     status 'Status: git status --short --branch'     diff 'Diff: git diff'     pull 'Pull: git pull'     commit 'Commit: git commit -m <commit-message>'     changes 'Changes >'     history 'History >'     branches 'Branches >'     remote 'Remote >'     stash 'Stash >'
 }
 
 for gitman_required_command in git menu pager read-key state-path
