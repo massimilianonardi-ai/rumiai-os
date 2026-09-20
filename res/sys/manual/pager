@@ -1,62 +1,52 @@
 NAME
-    pager - present stdin or files through the RumiAI technical pager abstraction
+    pager - select less when available, otherwise more
 
 SYNOPSIS
     pager [file ...]
 
 DESCRIPTION
-    pager provides the technical paging boundary used by commands that need
-    terminal presentation without embedding host-specific pager selection.
+    pager is a thin terminal-pager wrapper.
 
-    With no file operands, pager reads standard input. This is the conventional
-    pager form used by programs that pipe their output to a pager command.
+    It selects less when less is available through the current command
+    environment. Otherwise it selects more.
 
-    With one or more file operands, every pathname is resolved through the
-    runtime path-resolution facility and must identify a readable regular file.
-    Multiple files are presented in operand order.
+    With no file operands, the selected backend reads standard input.
 
-    pager intentionally provides the common pager role; it does not attempt to
-    reproduce every command-line option accepted by less or more.
+    With one or more file operands, pager passes the operands unchanged and in
+    their original order to the selected backend.
 
-OUTPUT DESTINATION
-    When standard output is not a terminal, pager is non-interactive.
-
-    With no file operands it copies standard input directly to standard output.
-    With file operands it concatenates the resolved files to standard output in
-    operand order.
-
-    When standard output is a terminal, pager selects the host viewer described
-    below. The viewer reads standard input when no file operand is present and
-    receives the resolved file operands otherwise.
+    pager does not inspect terminal state, resolve or validate file paths,
+    pre-read or concatenate input, rewrite backend diagnostics, or normalize
+    backend exit statuses. Interactive and redirected behavior therefore follow
+    the selected backend.
 
 BACKEND POLICY
-    Prefer less whenever it is available on the current host.
+    less
+        Preferred whenever available.
 
-    less is an optional host capability rather than a POSIX baseline
-    dependency. If it is unavailable, fall back to the POSIX more utility.
-    The fallback is deliberately accepted as a less capable paging experience
-    rather than failing solely because less is unavailable.
+    more
+        Fallback when less is unavailable.
+
+    Selection is based on command availability, not operating-system identity.
 
 CALLER ENVIRONMENT
-    pager does not erase environment intended for the selected viewer.
+    pager preserves the caller environment.
 
-    In particular, when less is selected, inherited variables such as LESS,
-    LESSOPEN and LESSCLOSE remain available to less. This allows callers such as
-    Git to retain their normal pager presentation policy while still using
-    pager as the pager command.
+    Variables consumed by the selected backend, including LESS, LESSOPEN and
+    LESSCLOSE, are not cleared or rewritten.
 
-    pager does not expose a separate user-configurable backend command. Backend
-    selection remains owned by pager itself.
+    pager does not expose separate backend configuration or arbitrary backend
+    command strings.
 
 OPERANDS
     file
-        Existing readable regular file to present. Zero or more file operands
-        are accepted.
+        File operand passed unchanged to the selected backend. Zero or more file
+        operands are accepted.
 
 EXIT STATUS
-    0   Success.
-    1   Input/file resolution/access or presentation/backend failure.
-    2   Invalid invocation.
+    The exit status is the status of the selected backend, or the shell
+    execution-failure status if that backend cannot be executed. pager does not
+    define a normalized backend-independent status mapping.
 
 SEE ALSO
     manual
