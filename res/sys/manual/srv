@@ -13,9 +13,11 @@ DESCRIPTION
     For a provider-backed service, <service> is a facility identity. srv resolves
     the configured system facility default to one installed concrete provider,
     validates that concrete's materialized facility-service start realization, and
-    launches the exact package command belonging to that concrete. Consumer package
-    bindings are not consulted. The normal package launcher remains responsible for
-    package HOME, environment, and dependency preparation.
+    launches the exact package command belonging to that concrete through the active
+    m bootstrap. This preserves m command dispatch and normal package-launcher
+    semantics independently of the host nohup PATH. Consumer package bindings are
+    not consulted. The normal package launcher remains responsible for package HOME,
+    environment, and dependency preparation.
 
     During migration, when no system facility default applies (or a legacy service
     name is outside facility-name grammar), srv retains the historical
