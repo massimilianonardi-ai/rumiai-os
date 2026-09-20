@@ -279,12 +279,13 @@ pkg_repository_compare_versions()
   _pkg_repository_nodejs_validate_version "$pkg_repository_nodejs_left" || return 1
   _pkg_repository_nodejs_validate_version "$pkg_repository_nodejs_right" || return 1
 
-  pkg_repository_nodejs_left_key="$(_pkg_repository_nodejs_release_order_key "$pkg_repository_nodejs_repository_dir" "$pkg_repository_nodejs_left")" || return 1
   if [ "$pkg_repository_nodejs_left" = "$pkg_repository_nodejs_right" ]
   then
     printf -- '0\n'
     return 0
   fi
+
+  pkg_repository_nodejs_left_key="$(_pkg_repository_nodejs_release_order_key "$pkg_repository_nodejs_repository_dir" "$pkg_repository_nodejs_left")" || return 1
 
   pkg_repository_nodejs_right_key="$(_pkg_repository_nodejs_release_order_key "$pkg_repository_nodejs_repository_dir" "$pkg_repository_nodejs_right")" || return 1
   pkg_repository_nodejs_order="$(LC_ALL=C command -p -- awk -v left="$pkg_repository_nodejs_left_key" -v right="$pkg_repository_nodejs_right_key" 'BEGIN {

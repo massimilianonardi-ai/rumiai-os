@@ -268,12 +268,13 @@ pkg_repository_compare_versions()
   _pkg_repository_netbeans_validate_version "$pkg_repository_netbeans_left" || return 1
   _pkg_repository_netbeans_validate_version "$pkg_repository_netbeans_right" || return 1
 
-  pkg_repository_netbeans_left_key="$(_pkg_repository_netbeans_release_order_key "$pkg_repository_netbeans_repository_dir" "$pkg_repository_netbeans_left")" || return 1
   if [ "$pkg_repository_netbeans_left" = "$pkg_repository_netbeans_right" ]
   then
     printf -- '0\n'
     return 0
   fi
+
+  pkg_repository_netbeans_left_key="$(_pkg_repository_netbeans_release_order_key "$pkg_repository_netbeans_repository_dir" "$pkg_repository_netbeans_left")" || return 1
 
   pkg_repository_netbeans_right_key="$(_pkg_repository_netbeans_release_order_key "$pkg_repository_netbeans_repository_dir" "$pkg_repository_netbeans_right")" || return 1
   pkg_repository_netbeans_order="$(LC_ALL=C command -p -- awk -v left="$pkg_repository_netbeans_left_key" -v right="$pkg_repository_netbeans_right_key" 'BEGIN {
