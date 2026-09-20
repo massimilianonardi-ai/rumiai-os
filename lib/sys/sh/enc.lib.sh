@@ -278,6 +278,8 @@ o2a()
 {
   (
     set -f
+    IFS=' 	
+'
 
     if [ "$#" -eq "0" ]
     then
@@ -286,8 +288,6 @@ o2a()
       _o2a_input="$*"
     fi
 
-    IFS=' 	
-'
     set -- $_o2a_input
 
     for _o2a_octet
