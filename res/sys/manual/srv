@@ -4,6 +4,11 @@ NAME
 SYNOPSIS
     srv start <service>
     srv stop [-f] <service>
+    srv host user install <service>
+    srv host user uninstall <service>
+    srv host user start <service>
+    srv host user stop <service>
+    srv host user restart <service>
 
 DESCRIPTION
     srv provides the portable local service lifecycle owned by the technical m
@@ -36,6 +41,27 @@ COMMANDS
         clean termination. If no active managed service remains, stop succeeds
         idempotently.
 
+    host user install <service>
+        Persist the service in the calling POSIX account's native user supervisor
+        without starting it in the current session. The service must currently
+        resolve through a valid system facility default/provider realization.
+
+    host user uninstall <service>
+        Stop/unload the hosted service when necessary and remove its persistent
+        native registration.
+
+    host user start <service>
+        Start the installed native user-supervisor registration. Current facility
+        default intent is resolved for this launch.
+
+    host user stop <service>
+        Stop/unload the current hosted process while leaving the native registration
+        installed.
+
+    host user restart <service>
+        Restart the installed hosted service through the native supervisor, resolving
+        current facility default intent for the replacement process.
+
 OPTIONS
     -f
         Apply only to stop. Bypass the normal caller-ownership check and explicitly
@@ -57,6 +83,27 @@ STATE
     Legacy runtime records without provider metadata remain readable during the
     migration compatibility period.
 
+HOST USER SUPERVISION
+    On Linux, srv uses the calling account's systemd user manager and persists a
+    user unit under ~/.config/systemd/user. The unit uses /bin/sh as the fixed
+    ExecStart executable and carries the exact m bootstrap, srv command, internal
+    foreground runner and service identity as separately serialized arguments. This
+    avoids systemd executable-path restrictions for relocatable RumiAI roots
+    containing spaces or metacharacters.
+
+    On macOS, srv uses the calling account's launchd gui/<uid> domain and persists a
+    LaunchAgent under ~/Library/LaunchAgents. ProgramArguments is constructed with
+    plutil so the exact argv values remain data rather than interpolated XML/shell
+    source.
+
+    The host supervisor manages the provider foreground process directly. It never
+    invokes portable srv start. The persistent registration does not freeze a
+    provider concrete: each host start/restart resolves the current system facility
+    default and provider service realization. User host integration does not enable
+    systemd linger or an automatic restart policy.
+
+    srv host system is not part of the implemented surface.
+
 READINESS
     Successful start establishes that the launched process survived the initial
     launch check. It does not establish application-specific readiness or health.
@@ -65,7 +112,7 @@ EXIT STATUS
     0     The requested lifecycle operation completed successfully. This includes
           idempotent stop cases where the service is not running.
     1     A lifecycle operation failed.
-    2     The invocation or service name is invalid.
+    2     The invocation, host scope/action, or service name is invalid.
     126   The legacy compatibility <service>-start target is not executable.
     127   No provider-backed default applies and the legacy compatibility
           <service>-start target cannot be resolved.
@@ -82,6 +129,11 @@ EXAMPLES
     Explicitly stop it despite caller-ownership metadata:
 
         srv stop -f web
+
+    Install and start it under the calling account's native host supervisor:
+
+        srv host user install web
+        srv host user start web
 
 SEE ALSO
     pkg

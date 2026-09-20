@@ -335,6 +335,374 @@ srv_stop()
   printf -- 'srv: %s stopped\n' "$srv_name"
 }
 
+srv_host_provider_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+  srv_name=$1
+
+  srv_provider="$(pkg_provider_default_resolve "$srv_name" 2>/dev/null)" || return 1
+  srv_command="$(pkg_facility_service_start_resolve "$srv_name" "$srv_provider")" || return 1
+}
+
+srv_host_user_run()
+{
+  [ "$#" -eq 1 ] || fatal 2 execution invalid-arguments operation srv
+  srv_name=$1
+  srv_name_valid "$srv_name" || fatal 2 execution invalid-arguments operation srv service "$srv_name"
+
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+
+  exec "$m_BOOTSTRAP_BIN" "$srv_command"
+  fatal 1 execution execution-failed operation srv reason provider-exec-failed service "$srv_name"
+}
+
+srv_host_home_prepare()
+{
+  srv_host_home=${HOME-}
+  case "$srv_host_home" in
+    /*) : ;;
+    *) fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name" ;;
+  esac
+  [ -d "$srv_host_home" ] ||
+    fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name"
+}
+
+srv_host_systemd_arg_write()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '"'
+  LC_ALL=C printf '%s' "$1" |
+    command -p -- od -A n -t x1 |
+    command -p -- awk '{
+      for (i = 1; i <= NF; i++)
+        printf "\\x%s", $i
+    }' || return 1
+  printf '"'
+}
+
+srv_host_systemd_prepare()
+{
+  srv_systemctl="$(command -p -v systemctl 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host systemd service "$srv_name"
+  "$srv_systemctl" --user show-environment >/dev/null 2>&1 ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host systemd service "$srv_name"
+
+  srv_host_home_prepare
+  srv_host_unit="m-srv-$srv_name.service"
+  srv_host_dir="$srv_host_home/.config/systemd/user"
+  srv_host_manifest="$srv_host_dir/$srv_host_unit"
+}
+
+srv_host_systemd_install()
+{
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+
+  command -p -- mkdir -p -- "$srv_host_dir" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  [ -d "$srv_host_dir" ] && [ ! -L "$srv_host_dir" ] ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+
+  if [ -e "$srv_host_manifest" ] || [ -L "$srv_host_manifest" ]
+  then
+    [ -f "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ] ||
+      fatal 1 execution execution-failed operation srv reason host-registration-invalid service "$srv_name"
+  fi
+
+  srv_host_tmp="$srv_host_manifest.tmp.$"
+  command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
+  umask 077
+  {
+    printf '%s\n' '[Unit]'
+    printf 'Description=RumiAI user service %s\n' "$srv_name"
+    printf '%s\n' ''
+    printf '%s\n' '[Service]'
+    printf '%s\n' 'Type=simple'
+    printf '%s' 'ExecStart=/bin/sh '
+    srv_host_systemd_arg_write "$m_BOOTSTRAP_BIN" || exit 1
+    printf ' '
+    srv_host_systemd_arg_write "$m_COMMAND_BIN" || exit 1
+    printf ' '
+    srv_host_systemd_arg_write '--host-user-run' || exit 1
+    printf ' '
+    srv_host_systemd_arg_write "$srv_name" || exit 1
+    printf '\n\n'
+    printf '%s\n' '[Install]'
+    printf '%s\n' 'WantedBy=default.target'
+  } > "$srv_host_tmp" || {
+    command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  }
+
+  command -p -- chmod 600 "$srv_host_tmp" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  command -p -- mv -- "$srv_host_tmp" "$srv_host_manifest" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+
+  "$srv_systemctl" --user daemon-reload ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action install service "$srv_name"
+  if ! "$srv_systemctl" --user enable "$srv_host_unit"
+  then
+    command -p -- rm -f -- "$srv_host_manifest" 2>/dev/null
+    "$srv_systemctl" --user daemon-reload >/dev/null 2>&1 || :
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action install service "$srv_name"
+  fi
+}
+
+srv_host_systemd_manifest_require()
+{
+  [ -f "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ] ||
+    fatal 1 execution execution-failed operation srv reason host-registration-missing service "$srv_name"
+}
+
+srv_host_systemd_start()
+{
+  srv_host_systemd_manifest_require
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+  "$srv_systemctl" --user start "$srv_host_unit" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action start service "$srv_name"
+}
+
+srv_host_systemd_stop()
+{
+  srv_host_systemd_manifest_require
+  "$srv_systemctl" --user stop "$srv_host_unit" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action stop service "$srv_name"
+}
+
+srv_host_systemd_restart()
+{
+  srv_host_systemd_manifest_require
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+  "$srv_systemctl" --user restart "$srv_host_unit" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action restart service "$srv_name"
+}
+
+srv_host_systemd_uninstall()
+{
+  if [ ! -e "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ]
+  then
+    return 0
+  fi
+  srv_host_systemd_manifest_require
+
+  "$srv_systemctl" --user stop "$srv_host_unit" >/dev/null 2>&1 || :
+  "$srv_systemctl" --user disable "$srv_host_unit" >/dev/null 2>&1 || :
+  command -p -- rm -f -- "$srv_host_manifest" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-remove-failed service "$srv_name"
+  "$srv_systemctl" --user daemon-reload ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action uninstall service "$srv_name"
+}
+
+srv_host_launchd_prepare()
+{
+  srv_launchctl="$(command -p -v launchctl 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
+  srv_plutil="$(command -p -v plutil 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
+  srv_uid="$(command -p -- id -u 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name"
+  case "$srv_uid" in
+    "" | *[!0123456789]*) fatal 1 execution execution-failed operation srv reason host-account-unavailable service "$srv_name" ;;
+  esac
+
+  srv_host_domain="gui/$srv_uid"
+  "$srv_launchctl" print "$srv_host_domain" >/dev/null 2>&1 ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-unavailable host launchd service "$srv_name"
+
+  srv_host_home_prepare
+  srv_host_label="m.srv.$srv_name"
+  srv_host_dir="$srv_host_home/Library/LaunchAgents"
+  srv_host_manifest="$srv_host_dir/$srv_host_label.plist"
+  srv_host_target="$srv_host_domain/$srv_host_label"
+}
+
+srv_host_launchd_install()
+{
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+
+  command -p -- mkdir -p -- "$srv_host_dir" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  [ -d "$srv_host_dir" ] && [ ! -L "$srv_host_dir" ] ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+
+  if [ -e "$srv_host_manifest" ] || [ -L "$srv_host_manifest" ]
+  then
+    [ -f "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ] ||
+      fatal 1 execution execution-failed operation srv reason host-registration-invalid service "$srv_name"
+  fi
+
+  srv_host_tmp="$srv_host_manifest.tmp.$"
+  command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
+  "$srv_plutil" -create xml1 "$srv_host_tmp" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  "$srv_plutil" -insert Label -string "$srv_host_label" "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments -array "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.0 -string "$m_BOOTSTRAP_BIN" "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.1 -string "$m_COMMAND_BIN" "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.2 -string '--host-user-run' "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.3 -string "$srv_name" "$srv_host_tmp" &&
+  "$srv_plutil" -insert RunAtLoad -bool true "$srv_host_tmp" ||
+    {
+      command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
+      fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+    }
+
+  command -p -- chmod 600 "$srv_host_tmp" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+  command -p -- mv -- "$srv_host_tmp" "$srv_host_manifest" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
+
+  if ! "$srv_launchctl" enable "$srv_host_target"
+  then
+    command -p -- rm -f -- "$srv_host_manifest" 2>/dev/null
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action install service "$srv_name"
+  fi
+}
+
+srv_host_launchd_manifest_require()
+{
+  [ -f "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ] ||
+    fatal 1 execution execution-failed operation srv reason host-registration-missing service "$srv_name"
+}
+
+srv_host_launchd_loaded()
+{
+  "$srv_launchctl" print "$srv_host_target" >/dev/null 2>&1
+}
+
+srv_host_launchd_wait_unloaded()
+{
+  srv_host_wait=0
+  while srv_host_launchd_loaded && [ "$srv_host_wait" -lt 10 ]
+  do
+    command -p -- sleep 1
+    srv_host_wait=$((srv_host_wait + 1))
+  done
+  ! srv_host_launchd_loaded
+}
+
+srv_host_launchd_start()
+{
+  srv_host_launchd_manifest_require
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+
+  if srv_host_launchd_loaded
+  then
+    "$srv_launchctl" kickstart "$srv_host_target" ||
+      fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action start service "$srv_name"
+  else
+    "$srv_launchctl" bootstrap "$srv_host_domain" "$srv_host_manifest" ||
+      fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action start service "$srv_name"
+  fi
+}
+
+srv_host_launchd_stop()
+{
+  srv_host_launchd_manifest_require
+  srv_host_launchd_loaded || return 0
+
+  "$srv_launchctl" bootout "$srv_host_target" ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action stop service "$srv_name"
+  srv_host_launchd_wait_unloaded ||
+    fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action stop service "$srv_name"
+}
+
+srv_host_launchd_restart()
+{
+  srv_host_launchd_manifest_require
+  srv_host_provider_resolve "$srv_name" ||
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+
+  if srv_host_launchd_loaded
+  then
+    "$srv_launchctl" kickstart -k "$srv_host_target" ||
+      fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action restart service "$srv_name"
+  else
+    "$srv_launchctl" bootstrap "$srv_host_domain" "$srv_host_manifest" ||
+      fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action restart service "$srv_name"
+  fi
+}
+
+srv_host_launchd_uninstall()
+{
+  if [ ! -e "$srv_host_manifest" ] && [ ! -L "$srv_host_manifest" ]
+  then
+    "$srv_launchctl" disable "$srv_host_target" >/dev/null 2>&1 || :
+    return 0
+  fi
+  srv_host_launchd_manifest_require
+
+  if srv_host_launchd_loaded
+  then
+    "$srv_launchctl" bootout "$srv_host_target" >/dev/null 2>&1 || :
+    srv_host_launchd_wait_unloaded ||
+      fatal 1 execution execution-failed operation srv reason host-supervisor-operation-failed action uninstall service "$srv_name"
+  fi
+
+  command -p -- rm -f -- "$srv_host_manifest" ||
+    fatal 1 execution execution-failed operation srv reason host-registration-remove-failed service "$srv_name"
+  "$srv_launchctl" disable "$srv_host_target" >/dev/null 2>&1 || :
+}
+
+srv_host_user()
+{
+  [ "$#" -eq 2 ] || fatal 2 execution invalid-arguments operation srv subcommand host
+  srv_host_action=$1
+  srv_name=$2
+  srv_name_valid "$srv_name" ||
+    fatal 2 execution invalid-arguments operation srv subcommand host service "$srv_name"
+
+  srv_host_os="$(command -p -- uname -s 2>/dev/null)" ||
+    fatal 1 execution execution-failed operation srv reason host-platform-unavailable service "$srv_name"
+
+  case "$srv_host_os" in
+    Linux)
+      srv_host_systemd_prepare
+      case "$srv_host_action" in
+        install) srv_host_systemd_install ;;
+        uninstall) srv_host_systemd_uninstall ;;
+        start) srv_host_systemd_start ;;
+        stop) srv_host_systemd_stop ;;
+        restart) srv_host_systemd_restart ;;
+        *) fatal 2 execution invalid-arguments operation srv subcommand host action "$srv_host_action" ;;
+      esac
+      ;;
+    Darwin)
+      srv_host_launchd_prepare
+      case "$srv_host_action" in
+        install) srv_host_launchd_install ;;
+        uninstall) srv_host_launchd_uninstall ;;
+        start) srv_host_launchd_start ;;
+        stop) srv_host_launchd_stop ;;
+        restart) srv_host_launchd_restart ;;
+        *) fatal 2 execution invalid-arguments operation srv subcommand host action "$srv_host_action" ;;
+      esac
+      ;;
+    *)
+      fatal 1 execution execution-failed operation srv reason unsupported-host host "$srv_host_os" service "$srv_name"
+      ;;
+  esac
+}
+
+srv_host()
+{
+  [ "$#" -ge 1 ] || fatal 2 execution invalid-arguments operation srv subcommand host
+  srv_host_scope=$1
+  shift
+
+  case "$srv_host_scope" in
+    user) srv_host_user "$@" ;;
+    *) fatal 2 execution invalid-arguments operation srv subcommand host scope "$srv_host_scope" ;;
+  esac
+}
+
 [ "$#" -ge 1 ] || fatal 2 execution invalid-arguments operation srv
 
 srv_subcommand=$1
@@ -346,6 +714,12 @@ case "$srv_subcommand" in
     ;;
   stop)
     srv_stop "$@"
+    ;;
+  host)
+    srv_host "$@"
+    ;;
+  --host-user-run)
+    srv_host_user_run "$@"
     ;;
   *)
     fatal 2 execution invalid-arguments operation srv subcommand "$srv_subcommand"
