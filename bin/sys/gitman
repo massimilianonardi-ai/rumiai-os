@@ -673,56 +673,31 @@ gitman_pause()
     fatal 1 execution execution-failed operation gitman reason key-read-failed
 }
 
-gitman_git_action_exec()
+gitman_git_run()
 {
-  [ "$#" -eq 3 ] || return 2
-  gitman_exec_paging=$1
-  gitman_exec_repository=$2
-  gitman_exec_action=$3
-
-  case "$gitman_exec_action" in
-    status)
-      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" status --short --branch
-      ;;
-    log)
-      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" log --oneline --decorate --graph -n 50
-      ;;
-    branch)
-      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" branch -vv
-      ;;
-    diff)
-      command -- git "$gitman_exec_paging" -C "$gitman_exec_repository" diff
-      ;;
-    *)
-      return 2
-      ;;
-  esac
-}
-
-gitman_git_action_run()
-{
-  [ "$#" -eq 2 ] || return 2
-  gitman_action_repository=$1
-  gitman_action=$2
+  [ "$#" -ge 3 ] || return 2
+  gitman_git_run_repository=$1
+  gitman_git_run_action=$2
+  shift 2
 
   case "$gitman_output_mode" in
     pager)
       if [ -n "${LESS-}" ]
       then
-        gitman_action_less="$LESS -R -+F -+X"
+        gitman_git_run_less="$LESS -R -+F -+X"
       else
-        gitman_action_less='-R -+F -+X'
+        gitman_git_run_less='-R -+F -+X'
       fi
 
-      LESS=$gitman_action_less GIT_PAGER=pager \
-        gitman_git_action_exec --paginate "$gitman_action_repository" "$gitman_action"
-      gitman_git_status=$?
+      LESS=$gitman_git_run_less GIT_PAGER=pager \
+        command -- git --paginate -C "$gitman_git_run_repository" "$@"
+      gitman_git_run_status=$?
       ;;
     terminal)
-      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_action_repository" "$gitman_action"
+      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_git_run_repository" "$gitman_git_run_action"
 
-      gitman_git_action_exec --no-pager "$gitman_action_repository" "$gitman_action"
-      gitman_git_status=$?
+      command -- git --no-pager -C "$gitman_git_run_repository" "$@"
+      gitman_git_run_status=$?
 
       gitman_pause
       ;;
@@ -731,45 +706,134 @@ gitman_git_action_run()
       ;;
   esac
 
-  if [ "$gitman_git_status" -eq 0 ]
+  if [ "$gitman_git_run_status" -eq 0 ]
   then
     gitman_last_error=
   else
-    gitman_last_error="git $gitman_action failed with status $gitman_git_status"
+    gitman_last_error="git $gitman_git_run_action failed with status $gitman_git_run_status"
   fi
 
   return 0
 }
 
-gitman_action_menu()
+gitman_action_status()
 {
   [ "$#" -eq 1 ] || return 2
-  gitman_action_repository=$1
-  gitman_action_repository_display=$(gitman_display_safe "$gitman_action_repository") || return 2
+  gitman_git_run "$1" status status --short --branch
+}
+
+gitman_action_log()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" log log --oneline --decorate --graph -n 50
+}
+
+gitman_action_branch()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" branch branch -vv
+}
+
+gitman_action_diff()
+{
+  [ "$#" -eq 1 ] || return 2
+  gitman_git_run "$1" diff diff
+}
+
+gitman_action_menu()
+{
+  [ "$#" -ge 4 ] || return 2
+  gitman_action_menu_repository=$1
+  gitman_action_menu_title=$2
+  shift 2
+
+  [ $(( $# % 2 )) -eq 0 ] || return 2
+
+  array gitman_action_menu_items || return 2
+
+  while [ "$#" -gt 0 ]
+  do
+    gitman_action_menu_id=$1
+    gitman_action_menu_label=$2
+    shift 2
+
+    case "$gitman_action_menu_id" in
+      ""|*[!abcdefghijklmnopqrstuvwxyz0123456789_]*)
+        return 2
+        ;;
+    esac
+
+    array gitman_action_menu_items add "$gitman_action_menu_id@:=$gitman_action_menu_label" || return 2
+  done
+
+  set --
+  array gitman_action_menu_items size gitman_action_menu_count || return 2
+  gitman_action_menu_index=0
+
+  while [ "$gitman_action_menu_index" -lt "$gitman_action_menu_count" ]
+  do
+    array gitman_action_menu_items get "$gitman_action_menu_index" gitman_action_menu_item || return 2
+    set -- "$@" "$gitman_action_menu_item"
+    gitman_action_menu_index=$((gitman_action_menu_index + 1))
+  done
+
+  gitman_action_menu_repository_display=$(gitman_display_safe "$gitman_action_menu_repository") || return 2
+  gitman_action_menu_header="[output: $gitman_output_mode] $gitman_action_menu_title | $gitman_action_menu_repository_display"
+
+  gitman_action_menu_result=$(
+    command -- menu       -H "$gitman_action_menu_header"       -F 'Enter: select | p: toggle output | Backspace/Escape: back'       -B "$gitman_last_error"       -K backspace -K p       -- "$@"
+  )
+  gitman_action_menu_status=$?
+
+  case "$gitman_action_menu_status" in
+    0) ;;
+    1) return 1 ;;
+    2) gitman_menu_failure ;;
+    *) exit "$gitman_action_menu_status" ;;
+  esac
+
+  eval "set -- $gitman_action_menu_result" || gitman_menu_failure
+  [ "$#" -eq 2 ] || gitman_menu_failure
+
+  gitman_action_menu_key=$1
+  gitman_action_menu_value=$2
+  return 0
+}
+
+gitman_action_dispatch()
+{
+  [ "$#" -eq 2 ] || return 2
+
+  case "$2" in
+    ""|*[!abcdefghijklmnopqrstuvwxyz0123456789_]*)
+      return 2
+      ;;
+  esac
+
+  gitman_action_handler="gitman_action_$2"
+  "$gitman_action_handler" "$1"
+}
+
+gitman_repository_actions()
+{
+  [ "$#" -eq 1 ] || return 2
 
   while :
   do
-    gitman_action_header="[output: $gitman_output_mode] $gitman_action_repository_display"
+    gitman_action_menu "$1" 'Git actions' \
+      status 'Status: git status --short --branch' \
+      log 'Log: git log --oneline --decorate --graph -n 50' \
+      branch 'Branches: git branch -vv' \
+      diff 'Diff: git diff'
+    gitman_repository_actions_status=$?
 
-    gitman_action_result=$(
-      command -- menu         -H "$gitman_action_header"         -F 'Enter: run | p: toggle output | Backspace/Escape: repositories'         -B "$gitman_last_error"         -K backspace -K p         --         'status@:=Status'         'log@:=Log'         'branch@:=Branches'         'diff@:=Diff'
-    )
-    gitman_action_status=$?
-
-    case "$gitman_action_status" in
+    case "$gitman_repository_actions_status" in
       0) ;;
       1) return 0 ;;
-      2) gitman_menu_failure ;;
-      *) exit "$gitman_action_status" ;;
+      *) return "$gitman_repository_actions_status" ;;
     esac
 
-    eval "set -- $gitman_action_result" || gitman_menu_failure
-    [ "$#" -eq 2 ] || gitman_menu_failure
-
-    gitman_action_key=$1
-    gitman_action_value=$2
-
-    case "$gitman_action_key" in
+    case "$gitman_action_menu_key" in
       backspace)
         return 0
         ;;
@@ -782,11 +846,10 @@ gitman_action_menu()
         gitman_last_error=
         ;;
       enter)
-        gitman_git_action_run "$gitman_action_repository" "$gitman_action_value" ||
-          fatal 1 execution execution-failed operation gitman reason git-action-failed
+        gitman_action_dispatch "$1" "$gitman_action_menu_value" || return 2
         ;;
       *)
-        gitman_menu_failure
+        return 2
         ;;
     esac
   done
@@ -853,7 +916,7 @@ do
       esac
       array gitman_repositories get "$gitman_repository_menu_index" gitman_repository_value ||
         gitman_menu_failure
-      gitman_action_menu "$gitman_repository_value" ||
+      gitman_repository_actions "$gitman_repository_value" ||
         fatal 1 execution execution-failed operation gitman reason action-menu-failed
       ;;
     a)
