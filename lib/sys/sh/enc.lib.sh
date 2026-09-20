@@ -265,9 +265,9 @@ a2o()
 {
   if [ "$#" -eq "0" ]
   then
-    od -A n -t o1
+    od -v -A n -t o1
   else
-    printf '%s' "$@" | od -A n -t o1
+    printf '%s' "$@" | od -v -A n -t o1
   fi
 }
 
@@ -277,8 +277,6 @@ a2o()
 o2a()
 {
   (
-    IFS='
-'
     set -f
 
     if [ "$#" -eq "0" ]
@@ -288,6 +286,8 @@ o2a()
       _o2a_input="$*"
     fi
 
+    IFS=' 	
+'
     set -- $_o2a_input
 
     for _o2a_octet
