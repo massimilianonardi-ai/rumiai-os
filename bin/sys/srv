@@ -449,7 +449,7 @@ srv_host_systemd_install()
       fatal 1 execution execution-failed operation srv reason host-registration-invalid service "$srv_name"
   fi
 
-  srv_host_tmp="$srv_host_manifest.tmp.$"
+  srv_host_tmp="$srv_host_manifest.tmp.$$"
   command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
   umask 077
   (
@@ -579,7 +579,7 @@ srv_host_launchd_install()
       fatal 1 execution execution-failed operation srv reason host-registration-invalid service "$srv_name"
   fi
 
-  srv_host_tmp="$srv_host_manifest.tmp.$"
+  srv_host_tmp="$srv_host_manifest.tmp.$$"
   command -p -- rm -f -- "$srv_host_tmp" 2>/dev/null
   "$srv_plutil" -create xml1 "$srv_host_tmp" ||
     fatal 1 execution execution-failed operation srv reason host-registration-write-failed service "$srv_name"
