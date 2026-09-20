@@ -247,6 +247,41 @@ pkg_repository_resolve_version()
 
   if [ "$#" -eq 1 ]
   then
+    pkg_repository_graalvm_body="$(_pkg_repository_graalvm_github_get "/releases/latest")" || return 1
+    json_object_read \
+      tag_name pkg_repository_graalvm_tag_token \
+      draft pkg_repository_graalvm_draft_token \
+      prerelease pkg_repository_graalvm_prerelease_token \
+      created_at pkg_repository_graalvm_created_token \
+      published_at pkg_repository_graalvm_published_token <<EOF_JSON
+$pkg_repository_graalvm_body
+EOF_JSON
+    [ "$?" -eq 0 ] || return 1
+
+    case "$pkg_repository_graalvm_tag_token" in
+      s:*) pkg_repository_graalvm_release_tag="${pkg_repository_graalvm_tag_token#s:}";;
+      *) return 1;;
+    esac
+    [ "$pkg_repository_graalvm_draft_token" = "b:false" ] || return 1
+    [ "$pkg_repository_graalvm_prerelease_token" = "b:false" ] || return 1
+    case "$pkg_repository_graalvm_created_token" in
+      s:*) pkg_repository_graalvm_created="${pkg_repository_graalvm_created_token#s:}";;
+      *) return 1;;
+    esac
+    case "$pkg_repository_graalvm_published_token" in
+      s:*) pkg_repository_graalvm_published="${pkg_repository_graalvm_published_token#s:}";;
+      *) return 1;;
+    esac
+    _pkg_repository_graalvm_validate_timestamp "$pkg_repository_graalvm_created" || return 1
+    _pkg_repository_graalvm_validate_timestamp "$pkg_repository_graalvm_published" || return 1
+
+    case "$pkg_repository_graalvm_release_tag" in
+      graal-25.*)
+        _pkg_repository_graalvm_tag_to_version "$pkg_repository_graalvm_release_tag"
+        return "$?"
+        ;;
+    esac
+
     pkg_repository_graalvm_versions="$(pkg_repository_list_versions "$1")" || return 1
     [ -n "$pkg_repository_graalvm_versions" ] || return 1
     printf '%s\n' "$pkg_repository_graalvm_versions" | LC_ALL=C command -p -- awk 'NF { latest=$0 } END { if (latest == "") exit 1; print latest }'
@@ -266,12 +301,13 @@ pkg_repository_compare_versions()
   _pkg_repository_graalvm_validate_version "$2" || return 1
   _pkg_repository_graalvm_validate_version "$3" || return 1
 
-  pkg_repository_graalvm_left_key="$(_pkg_repository_graalvm_release_order_key "$1" "$2")" || return 1
   if [ "$2" = "$3" ]
   then
     printf -- '0\n'
     return 0
   fi
+
+  pkg_repository_graalvm_left_key="$(_pkg_repository_graalvm_release_order_key "$1" "$2")" || return 1
   pkg_repository_graalvm_right_key="$(_pkg_repository_graalvm_release_order_key "$1" "$3")" || return 1
 
   pkg_repository_graalvm_order="$(LC_ALL=C command -p -- awk -v left="$pkg_repository_graalvm_left_key" -v right="$pkg_repository_graalvm_right_key" 'BEGIN {
