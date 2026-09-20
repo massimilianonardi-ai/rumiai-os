@@ -3,12 +3,19 @@
 
 # encodes stdin to stdout using GNU GnuPG symmetric OCB encryption
 #
-# Requires GNU gpg in PATH with support for --use-ocb-sym.
-# If gpg is unavailable or does not support --use-ocb-sym, returns 1
-# before consuming stdin or asking for a password.
+# Requires GNU gpg in PATH with symmetric OCB encryption support.
+# encode() prefers --use-ocb-sym and falls back to --force-ocb when the
+# installed gpg advertises only the older option. If neither option is
+# available, returns 1 before consuming stdin or asking for a passphrase.
 #
-# ENC_PASS may provide the passphrase. If ENC_PASS is unset or empty,
-# the passphrase is read twice from /dev/tty using _enc_password_read().
+# m_ENC_PASS may provide the passphrase as a shell variable. It should not be
+# exported. If non-empty, encode() copies it into subshell positional state,
+# unsets m_ENC_PASS before executing any external command, and supplies the
+# passphrase to gpg only through file descriptor 3.
+#
+# If m_ENC_PASS is unset or empty, GnuPG/Pinentry acquires the passphrase
+# interactively. Encryption requests one passphrase repetition for
+# confirmation.
 #
 # Encryption uses:
 #
@@ -23,11 +30,12 @@
 # The output is the binary OpenPGP stream produced directly by gpg.
 # No temporary files or in-memory ciphertext buffering are used.
 #
-# The passphrase is supplied through a dedicated file descriptor and
-# does not appear in the gpg command line or environment.
-#
-# Passphrases containing newline characters are rejected because
+# Supplied passphrases containing newline characters are rejected because
 # --passphrase-fd reads only the first line.
+#
+# Encryption is streaming. If gpg fails after writing output, stdout may
+# already contain a partial OpenPGP stream. Callers replacing durable
+# ciphertext must therefore commit the output only after a zero exit status.
 #
 # Returns:
 #
@@ -41,45 +49,46 @@ encode()
 
   [ "$#" -eq "0" ] || return 2
 
-  command -v gpg >/dev/null 2>&1 || return 1
+  if [ -n "${m_ENC_PASS-}" ]
+  then
+    set -- "$m_ENC_PASS"
+  else
+    set -- ''
+  fi
+  unset m_ENC_PASS
 
-  gpg --no-options --dump-options 2>/dev/null |
-    grep -qx -e '--use-ocb-sym' ||
+  case "$1" in
+    *'
+'*) return 1 ;;
+  esac
+
+  unset _enc_gpg_options
+  _enc_gpg_options="$(command gpg --no-options --dump-options 2>/dev/null)" ||
     return 1
 
-  if [ "${ENC_PASS+x}" != "x" ] || [ -z "$ENC_PASS" ]
+  if printf '%s\n' "$_enc_gpg_options" |
+     command grep -qx -e '--use-ocb-sym'
   then
-    ENC_PASS="$(_enc_password_read "Encryption password: ")" || return 1
-    [ -n "$ENC_PASS" ] || return 1
-
-    _enc_password_confirm="$(
-      _enc_password_read "Verify encryption password: "
-    )" || return 1
-
-    [ "$ENC_PASS" = "$_enc_password_confirm" ] || return 1
-
-    unset _enc_password_confirm
+    set -- "$1" '--use-ocb-sym'
+  elif printf '%s\n' "$_enc_gpg_options" |
+       command grep -qx -e '--force-ocb'
+  then
+    set -- "$1" '--force-ocb'
+  else
+    return 1
   fi
 
-  _enc_password="$ENC_PASS"
-  unset ENC_PASS
+  unset _enc_gpg_options
 
-  _enc_nl='
-'
-
-  [ "${_enc_password%%"$_enc_nl"*}" = "$_enc_password" ] ||
-    return 1
-
-  exec 3<&0 || return 1
-
-  printf '%s\n' "$_enc_password" |
-    gpg \
+  if [ -n "$1" ]
+  then
+    command gpg \
       --no-options \
       --batch \
       --no-tty \
       --quiet \
       --pinentry-mode loopback \
-      --passphrase-fd 4 \
+      --passphrase-fd 3 \
       --no-symkey-cache \
       --gnupg \
       --cipher-algo AES256 \
@@ -88,59 +97,32 @@ encode()
       --s2k-count 65011712 \
       --no-compress \
       --chunk-size 16 \
-      --use-ocb-sym \
+      "$2" \
       --output - \
       --symmetric \
-      4<&0 0<&3 3<&- ||
-    return 1
-}
-
-#------------------------------------------------------------------------------
-
-# authenticated password-based encryption envelope
-#
-# Format version 1:
-#
-#   ENC1
-#   SALT:<16 lowercase hex digits>
-#   HMAC:<64 lowercase hex digits>
-#   <OpenSSL base64 ciphertext>
-#
-# The ciphertext is AES-256-CBC encrypted with PBKDF2-HMAC-SHA256 using
-# 600000 iterations and OpenSSL's embedded random salt. The envelope payload
-# (magic, MAC salt and base64 ciphertext) is authenticated with HMAC-SHA256
-# before any plaintext is emitted. The MAC key is independently derived from
-# the password with PBKDF2-HMAC-SHA256, the envelope MAC salt and a fixed
-# domain-separation prefix.
-#
-# The Base64 ciphertext is buffered in shell memory. encode and decode do not
-# create temporary files; memory use is therefore proportional to ciphertext
-# size while plaintext remains streamed directly through OpenSSL.
-
-_enc_password_read()
-(
-  set +x
-
-  [ "$#" -eq "1" ] || return 2
-  [ -r "/dev/tty" ] && [ -w "/dev/tty" ] || return 1
-
-  _enc_tty_settings="$(stty -g < "/dev/tty")" || return 1
-
-  trap 'stty "$_enc_tty_settings" < "/dev/tty" >/dev/null 2>&1' 0
-  trap 'exit 1' HUP INT QUIT TERM
-
-  stty -echo < "/dev/tty" || return 1
-  printf '%s' "$1" > "/dev/tty" || return 1
-
-  IFS= read -r _enc_password < "/dev/tty"
-  _enc_read_status="$?"
-
-  stty "$_enc_tty_settings" < "/dev/tty" || return 1
-  printf '\n' > "/dev/tty" || return 1
-
-  [ "$_enc_read_status" -eq "0" ] || return 1
-
-  printf '%s' "$_enc_password"
+      3<<EOF_PASS ||
+        return 1
+$1
+EOF_PASS
+  else
+    command gpg \
+      --no-options \
+      --no-tty \
+      --quiet \
+      --no-symkey-cache \
+      --gnupg \
+      --passphrase-repeat 1 \
+      --cipher-algo AES256 \
+      --s2k-mode 3 \
+      --s2k-digest-algo SHA256 \
+      --s2k-count 65011712 \
+      --no-compress \
+      --chunk-size 16 \
+      "$2" \
+      --output - \
+      --symmetric ||
+        return 1
+  fi
 )
 
 #------------------------------------------------------------------------------
@@ -150,8 +132,13 @@ _enc_password_read()
 # Requires GNU gpg in PATH. OCB messages generated by encode() require
 # GnuPG with OCB decryption support.
 #
-# ENC_PASS may provide the passphrase. If ENC_PASS is unset or empty,
-# the passphrase is read from /dev/tty using _enc_password_read().
+# m_ENC_PASS may provide the passphrase as a shell variable. It should not be
+# exported. If non-empty, decode() copies it into subshell positional state,
+# unsets m_ENC_PASS before executing gpg, and supplies the passphrase only
+# through file descriptor 3.
+#
+# If m_ENC_PASS is unset or empty, GnuPG/Pinentry acquires the passphrase
+# interactively.
 #
 # Decryption is intentionally streaming and best-effort.
 #
@@ -176,10 +163,7 @@ _enc_password_read()
 #
 # No temporary files or ciphertext buffering are used.
 #
-# The passphrase is supplied through a dedicated file descriptor and
-# does not appear in the gpg command line or environment.
-#
-# Passphrases containing newline characters are rejected because
+# Supplied passphrases containing newline characters are rejected because
 # --passphrase-fd reads only the first line.
 #
 # Returns:
@@ -194,40 +178,48 @@ decode()
 
   [ "$#" -eq "0" ] || return 2
 
-  command -v gpg >/dev/null 2>&1 || return 1
-
-  if [ "${ENC_PASS+x}" != "x" ] || [ -z "$ENC_PASS" ]
+  if [ -n "${m_ENC_PASS-}" ]
   then
-    ENC_PASS="$(_enc_password_read "Decryption password: ")" || return 1
-    [ -n "$ENC_PASS" ] || return 1
+    set -- "$m_ENC_PASS"
+  else
+    set -- ''
   fi
+  unset m_ENC_PASS
 
-  _enc_password="$ENC_PASS"
-  unset ENC_PASS
+  case "$1" in
+    *'
+'*) return 1 ;;
+  esac
 
-  _enc_nl='
-'
-
-  [ "${_enc_password%%"$_enc_nl"*}" = "$_enc_password" ] ||
-    return 1
-
-  exec 3<&0 || return 1
-
-  printf '%s\n' "$_enc_password" |
-    gpg \
+  if [ -n "$1" ]
+  then
+    command gpg \
       --no-options \
       --batch \
       --no-tty \
       --quiet \
       --pinentry-mode loopback \
-      --passphrase-fd 4 \
+      --passphrase-fd 3 \
       --no-symkey-cache \
       --gnupg \
       --output - \
       --decrypt \
-      4<&0 0<&3 3<&- ||
-    return 1
-}
+      3<<EOF_PASS ||
+        return 1
+$1
+EOF_PASS
+  else
+    command gpg \
+      --no-options \
+      --no-tty \
+      --quiet \
+      --no-symkey-cache \
+      --gnupg \
+      --output - \
+      --decrypt ||
+        return 1
+  fi
+)
 
 #------------------------------------------------------------------------------
 
