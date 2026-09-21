@@ -322,7 +322,9 @@ encoded_file_edit()
 
     _encoded_file_edit_tmp=$_encoded_file_edit_candidate
 
-    command -p cp -p --       "$_encoded_file_edit_file"       "$_encoded_file_edit_tmp" ||
+    command -p cp -p -- \
+      "$_encoded_file_edit_file" \
+      "$_encoded_file_edit_tmp" ||
         return 1
 
     decode < "$_encoded_file_edit_file" |
@@ -337,11 +339,15 @@ encoded_file_edit()
 
     if [ "$_encoded_file_edit_preserve_timestamp" -eq "1" ]
     then
-      command -p touch -m -r         "$_encoded_file_edit_file"         "$_encoded_file_edit_tmp" ||
+      command -p touch -m -r \
+        "$_encoded_file_edit_file" \
+        "$_encoded_file_edit_tmp" ||
           return 1
     fi
 
-    command -p mv -f --       "$_encoded_file_edit_tmp"       "$_encoded_file_edit_file" ||
+    command -p mv -f -- \
+      "$_encoded_file_edit_tmp" \
+      "$_encoded_file_edit_file" ||
         return 1
 
     _encoded_file_edit_tmp=
