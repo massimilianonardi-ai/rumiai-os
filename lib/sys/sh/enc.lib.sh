@@ -267,6 +267,7 @@ EOF
 # Returns 0 when every file is committed and non-zero on invalid invocation,
 # cancellation or any resolution, pipeline, metadata, concurrency or commit
 # failure.
+
 encoded_file_edit()
 (
   set +x
