@@ -33,9 +33,13 @@ vsed_terminal_close()
     vsed_keypad=0
   fi
 
-  if [ "$vsed_screen" -eq 1 ]
+  if [ "${term_tty_saved-}" = true ]
   then
     term_clear >/dev/null 2>&1 || :
+  fi
+
+  if [ "$vsed_screen" -eq 1 ]
+  then
     term_screen_leave >/dev/null 2>&1 || vsed_close_status=1
     vsed_screen=0
   fi
@@ -386,12 +390,11 @@ vsed_render()
   else
     vsed_mark=' '
   fi
-  printf 'vsed%s %s/%s:%s  ^X save  Esc cancel' \
-    "$vsed_mark" \
-    "$((vsed_current_line + 1))" \
-    "$vsed_line_count" \
-    "$((vsed_cursor_col + 1))" > "$term_tty_device" || return 1
-  term_line_clear || return 1
+  vsed_status_text="vsed$vsed_mark $((vsed_current_line + 1))/$vsed_line_count:$((vsed_cursor_col + 1))  ^X save  Esc cancel"
+  vsed_saved_hscroll=$vsed_hscroll
+  vsed_hscroll=0
+  vsed_render_line "$vsed_status_text" || return 1
+  vsed_hscroll=$vsed_saved_hscroll
 
   vsed_cursor_row=$((vsed_current_line - vsed_view_top))
   vsed_screen_col=$((vsed_cursor_col - vsed_hscroll))
@@ -434,8 +437,11 @@ vsed_save()
 vsed_run()
 {
   term_tty_save || return 1
-  term_screen_enter || return 1
-  vsed_screen=1
+
+  if term_screen_enter
+  then
+    vsed_screen=1
+  fi
 
   if term_keypad_enable
   then
