@@ -91,19 +91,7 @@ _pkg_repository_geoserver_validate_exact_release()
   _pkg_repository_geoserver_validate_repository "$1" || return 1
   _pkg_repository_geoserver_validate_version "$2" || return 1
 
-  body="$(_pkg_repository_geoserver_github_get "/releases/tags/$2")" || return 1
-  json_object_read \
-    tag_name tag_token \
-    draft draft_token \
-    prerelease prerelease_token <<EOF_JSON
-$body
-EOF_JSON
-  [ "$?" -eq 0 ] || return 1
-
-  case "$tag_token" in s:*) tag=${tag_token#s:};; *) return 1;; esac
-  [ "$tag" = "$2" ] || return 1
-  [ "$draft_token" = b:false ] || return 1
-  [ "$prerelease_token" = b:false ] || return 1
+  _pkg_repository_geoserver_artifact_metadata "$2" "geoserver-$2-bin.zip" >/dev/null
 )
 
 _pkg_repository_geoserver_versions()

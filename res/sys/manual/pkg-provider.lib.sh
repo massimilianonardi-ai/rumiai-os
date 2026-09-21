@@ -8,7 +8,10 @@ DESCRIPTION
     Facility defaults are system-scoped package-subsystem configuration. A facility
     default owns global command publication for that facility through bin/ext and
     bin/ext-<osarch> and contributes the selected provider's facility environment
-    to each new m bootstrap. Consumer bindings are system-scoped package
+    to each new m bootstrap. Facility-default selectors are non-secret runtime
+    selection metadata: their storage is read-only/traversable for runtime accounts
+    that must resolve global/system-host intent, while mutation remains protected by
+    normal filesystem ownership. Consumer bindings are system-scoped package
     configuration stored as binding/<facility> beneath the consumer package conf
     area. A binding file contains exactly one provider selector followed by newline.
 
@@ -29,6 +32,12 @@ FUNCTIONS
         facility default is configured, 2 for invalid invocation/facility syntax,
         and 3 when configured/default state exists but cannot be validated or
         resolved.
+
+    pkg_provider_default_runtime_access_prepare <facility>
+        Prepare the configured facility-default selector for read-only resolution
+        by a non-owner runtime account. The function changes only traversal/read
+        permissions on the facility-default configuration path; it does not change
+        selector intent, provider installation or consumer bindings.
 
     pkg_provider_effective_selector <consumer> <facility>
         Print the effective configured selector for the consumer/facility pair:

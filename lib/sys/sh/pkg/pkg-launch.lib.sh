@@ -14,6 +14,28 @@ _pkg_launch_name_valid()
   esac
 }
 
+_pkg_launch_state_context_set()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  pkg_launch_state_scope=user
+  pkg_launch_state_instance=
+
+  case "${m_PKG_LAUNCH_CONTEXT-}" in
+    "")
+      [ -z "${m_PKG_LAUNCH_STATE_INSTANCE-}" ] || return 1
+      ;;
+    system-service)
+      _pkg_launch_name_valid "${m_PKG_LAUNCH_STATE_INSTANCE-}" || return 1
+      pkg_launch_state_scope=system
+      pkg_launch_state_instance=$m_PKG_LAUNCH_STATE_INSTANCE
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 _pkg_launch_env_apply()
 {
   [ "$#" -eq 1 ] || return 2
@@ -172,14 +194,31 @@ launcher()
     return 1
   }
 
-  pkg_launch_home="$(command -- state-path user pkg "$pkg_launch_pkg" home)" || {
-    _pkg_launch_error home-state-invalid
+  _pkg_launch_state_context_set || {
+    _pkg_launch_error state-context-invalid
     return 1
   }
-  pkg_launch_conf="$(command -- state-path user pkg "$pkg_launch_pkg" conf)" || {
-    _pkg_launch_error conf-state-invalid
-    return 1
-  }
+
+  if [ -n "$pkg_launch_state_instance" ]
+  then
+    pkg_launch_home="$(command -- state-path "$pkg_launch_state_scope" pkg "$pkg_launch_pkg" home "$pkg_launch_state_instance")" || {
+      _pkg_launch_error home-state-invalid
+      return 1
+    }
+    pkg_launch_conf="$(command -- state-path "$pkg_launch_state_scope" pkg "$pkg_launch_pkg" conf "$pkg_launch_state_instance")" || {
+      _pkg_launch_error conf-state-invalid
+      return 1
+    }
+  else
+    pkg_launch_home="$(command -- state-path "$pkg_launch_state_scope" pkg "$pkg_launch_pkg" home)" || {
+      _pkg_launch_error home-state-invalid
+      return 1
+    }
+    pkg_launch_conf="$(command -- state-path "$pkg_launch_state_scope" pkg "$pkg_launch_pkg" conf)" || {
+      _pkg_launch_error conf-state-invalid
+      return 1
+    }
+  fi
 
   umask 077
   command -p -- mkdir -p -- "$pkg_launch_home" || {
@@ -205,10 +244,14 @@ launcher()
     pkg_launch_link_text \
     pkg_launch_target \
     pkg_launch_home \
-    pkg_launch_conf
+    pkg_launch_conf \
+    pkg_launch_state_scope \
+    pkg_launch_state_instance
 
   HOME=$pkg_launch_home
   export -- HOME
+
+  unset m_PKG_LAUNCH_CONTEXT m_PKG_LAUNCH_STATE_INSTANCE
 
   _pkg_launch_env_apply "$pkg_launch_concrete/env" || {
     _pkg_launch_error package-env-invalid

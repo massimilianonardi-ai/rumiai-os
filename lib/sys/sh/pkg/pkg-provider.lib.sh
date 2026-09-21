@@ -120,10 +120,15 @@ _pkg_provider_config_query()
 
 _pkg_provider_config_set()
 {
-  [ "$#" -eq 2 ] || return 2
+  [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
   pkg_provider_config_path=$1
   pkg_provider_config_selector=$2
+  pkg_provider_config_mode=${3-600}
   _pkg_provider_selector_validate "$pkg_provider_config_selector" || return 2
+  case "$pkg_provider_config_mode" in
+    600 | 644) : ;;
+    *) return 2 ;;
+  esac
 
   pkg_provider_config_dir=${pkg_provider_config_path%/*}
   [ "$pkg_provider_config_dir" != "$pkg_provider_config_path" ] || return 1
@@ -137,9 +142,14 @@ _pkg_provider_config_set()
     [ -f "$pkg_provider_config_path" ] && [ ! -L "$pkg_provider_config_path" ] || return 1
   fi
 
-  pkg_provider_config_tmp="$pkg_provider_config_dir/.selector-$$"
+  pkg_provider_config_tmp="$pkg_provider_config_dir/.selector-$"
   [ ! -e "$pkg_provider_config_tmp" ] && [ ! -L "$pkg_provider_config_tmp" ] || return 1
   if ! printf -- '%s\n' "$pkg_provider_config_selector" > "$pkg_provider_config_tmp"
+  then
+    command -p -- rm -f -- "$pkg_provider_config_tmp" 2>/dev/null
+    return 1
+  fi
+  if ! command -p -- chmod "$pkg_provider_config_mode" "$pkg_provider_config_tmp"
   then
     command -p -- rm -f -- "$pkg_provider_config_tmp" 2>/dev/null
     return 1
@@ -151,6 +161,41 @@ _pkg_provider_config_set()
   fi
   _pkg_provider_scalar_read "$pkg_provider_config_path" || return 1
   [ "$pkg_provider_scalar" = "$pkg_provider_config_selector" ]
+}
+
+_pkg_provider_default_parent_access_prepare()
+{
+  [ "$#" -eq 0 ] || return 2
+  _pkg_provider_system_conf || return 1
+  pkg_provider_default_access_provider="$pkg_provider_system_conf/provider"
+  pkg_provider_default_access_root="$pkg_provider_default_access_provider/default"
+
+  umask 077
+  command -p -- mkdir -p -- "$pkg_provider_default_access_root" || return 1
+
+  for pkg_provider_default_access_dir in \
+    "$m_STATE_SYS_DIR/sys" \
+    "$m_STATE_SYS_DIR/sys/pkg" \
+    "$pkg_provider_system_conf" \
+    "$pkg_provider_default_access_provider" \
+    "$pkg_provider_default_access_root"
+  do
+    [ -d "$pkg_provider_default_access_dir" ] && [ ! -L "$pkg_provider_default_access_dir" ] || return 1
+    command -p -- chmod 711 "$pkg_provider_default_access_dir" || return 1
+  done
+}
+
+pkg_provider_default_runtime_access_prepare()
+{
+  [ "$#" -eq 1 ] || return 2
+  _pkg_provider_default_file "$1" || return $?
+  pkg_provider_default_runtime_file=$pkg_provider_config_file
+
+  [ -f "$pkg_provider_default_runtime_file" ] && \
+  [ ! -L "$pkg_provider_default_runtime_file" ] || return 1
+
+  _pkg_provider_default_parent_access_prepare || return 1
+  command -p -- chmod 644 "$pkg_provider_default_runtime_file"
 }
 
 _pkg_provider_config_unset()
@@ -220,6 +265,7 @@ _pkg_provider_default()
   fi
 
   _pkg_provider_selector_validate "$2" || return 2
+  _pkg_provider_default_parent_access_prepare || return 1
   pkg_provider_new_selector=$2
   pkg_provider_old_selector=
   if [ -e "$pkg_provider_config_file" ] || [ -L "$pkg_provider_config_file" ]
@@ -230,7 +276,7 @@ _pkg_provider_default()
   fi
 
   _pkg_provider_global_reconcile "$1" "$pkg_provider_old_selector" "$pkg_provider_new_selector" || return 1
-  if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector"
+  if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector" 644
   then
     _pkg_provider_global_reconcile "$1" "$pkg_provider_new_selector" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
     return 1
