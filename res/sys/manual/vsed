@@ -8,12 +8,13 @@ SYNOPSIS
 DESCRIPTION
     vsed is a minimal visual stream editor for sensitive text.
 
-    With no operand, vsed reads the complete initial document from standard
-    input, edits it in memory, and writes the saved result to standard output.
+    With no operand, vsed reads standard input when it is not a terminal. If
+    standard input is a terminal, vsed starts immediately with an empty
+    document. Saving writes the result to standard output.
 
-    With one file operand, vsed loads that existing readable/writable regular
-    file, edits it in memory, and writes the saved result directly back to the
-    same file.
+    With one file operand, vsed loads an existing readable/writable regular
+    file. If the pathname does not exist, vsed starts with an empty document
+    and creates that file only when the session is saved.
 
     The interactive interface uses /dev/tty. UI text is never written to stdout.
 
@@ -73,7 +74,9 @@ MEMORY-ONLY SECURITY
     loaded.
 
     In stream mode, saved plaintext is written only to stdout. In file mode,
-    saved plaintext is written only to the selected file.
+    saved plaintext is written only to the selected file. A new selected file
+    is created under umask 077 only when the session is saved; cancellation
+    leaves the pathname absent.
 
     File-mode save is deliberately direct rather than atomic: avoiding a
     plaintext staging file means an I/O failure during save can leave a
@@ -98,7 +101,9 @@ SAVE FIDELITY
 
 OPERANDS
     file
-        Existing readable and writable regular file to load and save in place.
+        Existing readable/writable regular file to edit in place, or a
+        non-existing pathname to create on save from an initially empty
+        document.
 
 EXIT STATUS
     0

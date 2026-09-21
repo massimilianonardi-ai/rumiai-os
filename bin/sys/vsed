@@ -15,6 +15,7 @@ vsed_keypad=0
 vsed_modified=0
 vsed_mode=
 vsed_path=
+vsed_new_file=0
 vsed_current_line=0
 vsed_left=
 vsed_right=
@@ -426,11 +427,21 @@ vsed_save()
   then
     vsed_output_buffer
   else
-    if [ "$vsed_modified" -eq 0 ]
+    if [ "$vsed_modified" -eq 0 ] && [ "$vsed_new_file" -eq 0 ]
     then
       return 0
     fi
-    vsed_output_buffer > "$vsed_path"
+
+    if [ "$vsed_new_file" -eq 1 ]
+    then
+      (
+        umask 077
+        set -C
+        vsed_output_buffer > "$vsed_path"
+      )
+    else
+      vsed_output_buffer > "$vsed_path"
+    fi
   fi
 }
 
@@ -531,11 +542,24 @@ if [ "$#" -eq 1 ]
 then
   vsed_mode=file
   vsed_path=$1
-  [ -f "$vsed_path" ] && [ -r "$vsed_path" ] && [ -w "$vsed_path" ] || vsed_fail 2 'file is not a readable and writable regular file'
-  vsed_load < "$vsed_path"
+
+  if [ -e "$vsed_path" ] || [ -L "$vsed_path" ]
+  then
+    [ -f "$vsed_path" ] && [ -r "$vsed_path" ] && [ -w "$vsed_path" ] ||
+      vsed_fail 2 'file is not a readable and writable regular file'
+    vsed_load < "$vsed_path"
+  else
+    vsed_new_file=1
+    vsed_load < /dev/null
+  fi
 else
   vsed_mode=stdout
-  vsed_load
+  if [ -t 0 ]
+  then
+    vsed_load < /dev/null
+  else
+    vsed_load
+  fi
 fi
 
 vsed_load_status=$?
