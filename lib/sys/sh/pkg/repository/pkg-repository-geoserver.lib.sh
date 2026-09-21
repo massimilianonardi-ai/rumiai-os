@@ -76,43 +76,148 @@ BEGIN {
 }'
 }
 
-_pkg_repository_geoserver_root_get()
+_pkg_repository_geoserver_github_get()
 {
-  [ "$#" -eq 0 ] || return 2
-  http-fetch -- 'https://sourceforge.net/projects/geoserver/files/GeoServer/?format=json'
+  [ "$#" -eq 1 ] || return 2
+  http-fetch \
+    -H 'Accept: application/vnd.github+json' \
+    -H 'X-GitHub-Api-Version: 2026-03-10' \
+    -- "https://api.github.com/repos/geoserver/geoserver$1"
 }
 
-_pkg_repository_geoserver_folder_get()
+_pkg_repository_geoserver_validate_exact_release()
+(
+  [ "$#" -eq 2 ] || return 2
+  _pkg_repository_geoserver_validate_repository "$1" || return 1
+  _pkg_repository_geoserver_validate_version "$2" || return 1
+
+  body="$(_pkg_repository_geoserver_github_get "/releases/tags/$2")" || return 1
+  json_object_read \
+    tag_name tag_token \
+    draft draft_token \
+    prerelease prerelease_token <<EOF_JSON
+$body
+EOF_JSON
+  [ "$?" -eq 0 ] || return 1
+
+  case "$tag_token" in s:*) tag=${tag_token#s:};; *) return 1;; esac
+  [ "$tag" = "$2" ] || return 1
+  [ "$draft_token" = b:false ] || return 1
+  [ "$prerelease_token" = b:false ] || return 1
+)
+
+_pkg_repository_geoserver_versions()
+(
+  [ "$#" -eq 1 ] || return 2
+  _pkg_repository_geoserver_validate_repository "$1" || return 1
+
+  page=1
+  keys=
+  lf='
+'
+  tab="$(printf '\t')"
+
+  while :
+  do
+    body="$(_pkg_repository_geoserver_github_get "/releases?per_page=100&page=$page")" || return 1
+    records="$(printf '%s\n' "$body" | json_array_object_fields tag_name draft prerelease)" || return 1
+    count=0
+
+    if [ -n "$records" ]
+    then
+      while IFS="$tab" read -r tag_token draft_token prerelease_token extra
+      do
+        [ -z "$extra" ] || return 1
+        count=$((count + 1))
+
+        case "$tag_token" in s:*) version=${tag_token#s:};; *) return 1;; esac
+        case "$draft_token" in b:true) continue;; b:false) :;; *) return 1;; esac
+        case "$prerelease_token" in b:true) continue;; b:false) :;; *) return 1;; esac
+        _pkg_repository_geoserver_validate_version "$version" || continue
+        key="$(_pkg_repository_geoserver_version_key "$version")" || return 1
+        if [ -n "$keys" ]
+        then
+          keys="$keys$lf$key"
+        else
+          keys=$key
+        fi
+      done <<EOF_RECORDS
+$records
+EOF_RECORDS
+    fi
+
+    [ "$count" -ge 100 ] || break
+    page=$((page + 1))
+  done
+
+  [ -n "$keys" ] || return 0
+  printf '%s\n' "$keys" | \
+    LC_ALL=C command -p -- sort -t "$tab" -k1,1n -k2,2 -k3,3n -k4,4 -k5,5n -k6,6 -k7,7 | \
+    LC_ALL=C command -p -- awk -F "$tab" 'NF!=7{exit 1} seen[$7]++{exit 1} {print $7}'
+)
+
+_pkg_repository_geoserver_rss_get()
 {
   [ "$#" -eq 1 ] || return 2
   _pkg_repository_geoserver_validate_version "$1" || return 2
-  http-fetch -- "https://sourceforge.net/projects/geoserver/files/GeoServer/$1/?format=json"
+  http-fetch -- "https://sourceforge.net/projects/geoserver/rss?path=/GeoServer/$1/"
 }
 
-_pkg_repository_geoserver_versions()
+_pkg_repository_geoserver_artifact_metadata()
+(
+  [ "$#" -eq 2 ] || return 2
+  version=$1
+  name=$2
+  _pkg_repository_geoserver_validate_version "$version" || return 2
+  [ -n "$name" ] || return 2
+
+  url="https://sourceforge.net/projects/geoserver/files/GeoServer/$version/$name/download"
+  body="$(_pkg_repository_geoserver_rss_get "$version")" || return 1
+
+  printf '%s\n' "$body" | LC_ALL=C command -p -- awk -v expected_url="$url" '
 {
-  [ "$#" -eq 1 ] || return 2
-  _pkg_repository_geoserver_validate_repository "$1" || return 1
-  body="$(_pkg_repository_geoserver_root_get)" || return 1
-  records="$(printf '%s\n' "$body" | json_object_array_object_fields files name type)" || return 1
-  tab="$(printf '\t')"
-  keys=
-  while IFS="$tab" read -r name_token type_token extra
-  do
-    [ -z "$extra" ] || return 1
-    case "$name_token" in s:*) name=${name_token#s:};; *) return 1;; esac
-    [ "$type_token" = s:d ] || continue
-    _pkg_repository_geoserver_validate_version "$name" || continue
-    key="$(_pkg_repository_geoserver_version_key "$name")" || return 1
-    if [ -n "$keys" ]; then keys="$keys
-$key"; else keys=$key; fi
-  done <<EOF
-$records
-EOF
-  [ -n "$keys" ] || return 0
-  printf '%s\n' "$keys" | LC_ALL=C command -p -- sort -t "$tab" -k1,1n -k2,2 -k3,3n -k4,4 -k5,5n -k6,6 -k7,7 | \
-    LC_ALL=C command -p -- awk -F "$tab" 'NF!=7{exit 1} seen[$7]++{exit 1} {print $7}'
+  source=source $0 "\n"
 }
+END {
+  count=split(source, part, /<media:content/)
+  found=0
+  for (i=2; i<=count; i++) {
+    block=part[i]
+    close=index(block, "</media:content>")
+    if (!close) {
+      if (index(block, "url=\"" expected_url "\"") != 0) exit 1
+      continue
+    }
+    block=substr(block, 1, close-1)
+    if (index(block, "url=\"" expected_url "\"") == 0) continue
+
+    found++
+    if (found != 1) exit 1
+
+    marker="filesize=\""
+    start=index(block, marker)
+    if (!start) exit 1
+    rest=substr(block, start+length(marker))
+    finish=index(rest, "\"")
+    if (!finish) exit 1
+    size=substr(rest, 1, finish-1)
+    if (size !~ /^[1-9][0-9]*$/) exit 1
+    if (index(substr(rest, finish+1), marker) != 0) exit 1
+
+    marker="<media:hash algo=\"md5\">"
+    start=index(block, marker)
+    if (!start) exit 1
+    rest=substr(block, start+length(marker))
+    finish=index(rest, "</media:hash>")
+    if (!finish) exit 1
+    digest=substr(rest, 1, finish-1)
+    if (length(digest) != 32 || digest !~ /^[0-9A-Fa-f]+$/) exit 1
+    if (index(substr(rest, finish+length("</media:hash>")), marker) != 0) exit 1
+  }
+  if (found != 1) exit 1
+  printf "%s\t%s\n", size, tolower(digest)
+}'
+)
 
 pkg_repository_list_versions()
 (
@@ -131,16 +236,17 @@ pkg_repository_resolve_version()
 (
   [ "$#" -ge 1 ] && [ "$#" -le 2 ] || return 2
   _pkg_repository_geoserver_validate_repository "$1" || return 1
-  versions="$(_pkg_repository_geoserver_versions "$1")" || return 1
-  [ -n "$versions" ] || return 1
+
   if [ "$#" -eq 2 ]
   then
-    _pkg_repository_geoserver_validate_version "$2" || return 1
-    printf '%s\n' "$versions" | LC_ALL=C command -p -- awk -v expected="$2" '$0==expected{n++} END{exit(n==1?0:1)}' || return 1
+    _pkg_repository_geoserver_validate_exact_release "$1" "$2" || return 1
     printf -- '%s\n' "$2"
-  else
-    printf '%s\n' "$versions" | LC_ALL=C command -p -- awk 'NF{v=$0} END{if(v=="")exit 1; print v}'
+    return 0
   fi
+
+  versions="$(_pkg_repository_geoserver_versions "$1")" || return 1
+  [ -n "$versions" ] || return 1
+  printf '%s\n' "$versions" | LC_ALL=C command -p -- awk 'NF{v=$0} END{if(v=="")exit 1; print v}'
 )
 
 pkg_repository_resolve_artifact()
@@ -160,30 +266,16 @@ pkg_repository_resolve_artifact()
 
   name="geoserver-$version-bin.zip"
   LC_ALL=C command -p -- awk -v value="$name" -v expression="$archive_regex" 'BEGIN{exit(value~expression?0:1)}' || return 1
-  body="$(_pkg_repository_geoserver_folder_get "$version")" || return 1
-  records="$(printf '%s\n' "$body" | json_object_array_object_fields files name type size md5)" || return 1
+  metadata="$(_pkg_repository_geoserver_artifact_metadata "$version" "$name")" || return 1
   tab="$(printf '\t')"
-  found=0
-  size=
-  md5=
-  while IFS="$tab" read -r name_token type_token size_token md5_token extra
-  do
-    [ -z "$extra" ] || return 1
-    case "$name_token" in s:*) entry=${name_token#s:};; *) return 1;; esac
-    [ "$entry" = "$name" ] || continue
-    [ "$type_token" = s:f ] || return 1
-    case "$size_token" in n:*) size=${size_token#n:};; *) return 1;; esac
-    case "$size" in ""|*[!0-9]*|0[0-9]*) return 1;; esac
-    [ "$size" -gt 0 ] || return 1
-    case "$md5_token" in s:*) md5=${md5_token#s:};; *) return 1;; esac
-    [ "${#md5}" -eq 32 ] || return 1
-    case "$md5" in *[!0-9A-Fa-f]*) return 1;; esac
-    md5="$(printf '%s\n' "$md5" | command -p -- tr 'A-F' 'a-f')" || return 1
-    found=$((found+1))
-  done <<EOF
-$records
-EOF
-  [ "$found" -eq 1 ] || return 1
+  IFS="$tab" read -r size md5 extra <<EOF_METADATA
+$metadata
+EOF_METADATA
+  [ -z "$extra" ] || return 1
+  case "$size" in ''|*[!0-9]*|0[0-9]*) return 1;; esac
+  [ "$size" -gt 0 ] || return 1
+  [ "${#md5}" -eq 32 ] || return 1
+  case "$md5" in *[!0-9a-f]*) return 1;; esac
 
   printf -- 'name=%s\n' "$name"
   printf -- 'url=https://sourceforge.net/projects/geoserver/files/GeoServer/%s/%s/download\n' "$version" "$name"
