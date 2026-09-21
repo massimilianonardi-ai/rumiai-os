@@ -183,12 +183,12 @@ END {
   found=0
   for (i=2; i<=count; i++) {
     block=part[i]
-    close=index(block, "</media:content>")
-    if (!close) {
+    close_pos=index(block, "</media:content>")
+    if (!close_pos) {
       if (index(block, "url=\"" expected_url "\"") != 0) exit 1
       continue
     }
-    block=substr(block, 1, close-1)
+    block=substr(block, 1, close_pos-1)
     if (index(block, "url=\"" expected_url "\"") == 0) continue
 
     found++
