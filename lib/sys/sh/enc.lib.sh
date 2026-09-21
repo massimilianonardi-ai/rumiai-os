@@ -250,41 +250,56 @@ EOF
 #------------------------------------------------------------------------------
 
 # decodes encrypted files, edits plaintext in memory with vsed, and
-# atomically replaces each original only after decode, edit and encode succeed
+# replaces each original only after the complete pipeline succeeds
 #
-# Returns:
+# Usage:
 #
-#   0   all files saved successfully
-#   1   no file operands
-#   2   file resolution failure
-#   3   transaction staging/status failure
-#   4   decode failure
-#   5   editing cancelled
-#   6   vsed failure
-#   7   encode failure
-#   8   target changed during editing
-#   9   final replacement failure
-#   10  cleanup failure
-
+#   encoded_file_edit [--preserve-timestamp] [--] file...
+#
+# cp -p seeds the temporary ciphertext with the original ownership and mode,
+# including executable bits. Preservation therefore fails when the caller
+# lacks the privileges required to reproduce those metadata.
+#
+# By default the rewritten file receives the modification time of the new
+# ciphertext. --preserve-timestamp restores the target's current mtime before
+# replacement. ctime is not preserved.
+#
+# Returns 0 when every file is committed and non-zero on invalid invocation,
+# cancellation or any resolution, pipeline, metadata, concurrency or commit
+# failure.
 encoded_file_edit()
 (
   set +x
+  set -o pipefail || return 1
+
+  _encoded_file_edit_preserve_timestamp=0
+
+  while [ "$#" -gt "0" ]
+  do
+    case "$1" in
+      --preserve-timestamp)
+        _encoded_file_edit_preserve_timestamp=1
+        shift
+        ;;
+      --)
+        shift
+        break
+        ;;
+      -*)
+        return 1
+        ;;
+      *)
+        break
+        ;;
+    esac
+  done
 
   [ "$#" -gt "0" ] || return 1
 
   umask 077
-  _encoded_file_edit_tmp_dir=
+  _encoded_file_edit_tmp=
 
-  _encoded_file_edit_cleanup()
-  {
-    if [ -n "$_encoded_file_edit_tmp_dir" ]
-    then
-      command -p rm -rf "$_encoded_file_edit_tmp_dir" 2>/dev/null || :
-      _encoded_file_edit_tmp_dir=
-    fi
-  }
-
-  trap '_encoded_file_edit_cleanup' 0
+  trap '[ -z "$_encoded_file_edit_tmp" ] || command -p rm -f -- "$_encoded_file_edit_tmp"' 0
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 131' QUIT
@@ -293,113 +308,43 @@ encoded_file_edit()
   for _encoded_file_edit_operand
   do
     pathsearch _encoded_file_edit_file "$_encoded_file_edit_operand" ||
-      return 2
+      return 1
 
-    _encoded_file_edit_dir=${_encoded_file_edit_file%/*}
-    [ -n "$_encoded_file_edit_dir" ] || _encoded_file_edit_dir=/
+    _encoded_file_edit_checksum="$(
+      command -p cksum < "$_encoded_file_edit_file"
+    )" || return 1
 
-    _encoded_file_edit_index=0
-    _encoded_file_edit_tmp_dir=
+    _encoded_file_edit_candidate="$_encoded_file_edit_file.$$"
 
-    while [ "$_encoded_file_edit_index" -lt "1000" ]
-    do
-      _encoded_file_edit_tmp_dir="$_encoded_file_edit_dir/.encoded-file-edit.$$.$_encoded_file_edit_index"
+    set -C
+    : > "$_encoded_file_edit_candidate" || return 1
+    set +C
 
-      if command -p mkdir "$_encoded_file_edit_tmp_dir" 2>/dev/null
-      then
-        break
-      fi
+    _encoded_file_edit_tmp=$_encoded_file_edit_candidate
 
-      _encoded_file_edit_tmp_dir=
-      _encoded_file_edit_index=$((_encoded_file_edit_index + 1))
-    done
+    command -p cp -p --       "$_encoded_file_edit_file"       "$_encoded_file_edit_tmp" ||
+        return 1
 
-    [ -n "$_encoded_file_edit_tmp_dir" ] || return 3
+    decode < "$_encoded_file_edit_file" |
+      command -- vsed |
+      encode > "$_encoded_file_edit_tmp" ||
+        return 1
 
-    _encoded_file_edit_original="$_encoded_file_edit_tmp_dir/original"
-    _encoded_file_edit_cipher="$_encoded_file_edit_tmp_dir/cipher"
-    _encoded_file_edit_decode_status_file="$_encoded_file_edit_tmp_dir/decode.status"
-    _encoded_file_edit_vsed_status_file="$_encoded_file_edit_tmp_dir/vsed.status"
-    _encoded_file_edit_encode_status_file="$_encoded_file_edit_tmp_dir/encode.status"
+    [ "$_encoded_file_edit_checksum" = "$(
+      command -p cksum < "$_encoded_file_edit_file"
+    )" ] ||
+      return 1
 
-    command -p cp -p "$_encoded_file_edit_file" "$_encoded_file_edit_original" ||
-      return 3
-    command -p cp -p "$_encoded_file_edit_original" "$_encoded_file_edit_cipher" ||
-      return 3
-
-    if
-      {
-        if decode < "$_encoded_file_edit_original"
-        then
-          _encoded_file_edit_status=0
-        else
-          _encoded_file_edit_status=$?
-        fi
-
-        printf '%s\n' "$_encoded_file_edit_status" \
-          > "$_encoded_file_edit_decode_status_file"
-        exit "$_encoded_file_edit_status"
-      } |
-      {
-        if command vsed
-        then
-          _encoded_file_edit_status=0
-        else
-          _encoded_file_edit_status=$?
-        fi
-
-        printf '%s\n' "$_encoded_file_edit_status" \
-          > "$_encoded_file_edit_vsed_status_file"
-        exit "$_encoded_file_edit_status"
-      } |
-      {
-        if encode > "$_encoded_file_edit_cipher"
-        then
-          _encoded_file_edit_status=0
-        else
-          _encoded_file_edit_status=$?
-        fi
-
-        printf '%s\n' "$_encoded_file_edit_status" \
-          > "$_encoded_file_edit_encode_status_file"
-        exit "$_encoded_file_edit_status"
-      }
+    if [ "$_encoded_file_edit_preserve_timestamp" -eq "1" ]
     then
-      :
-    else
-      :
+      command -p touch -m -r         "$_encoded_file_edit_file"         "$_encoded_file_edit_tmp" ||
+          return 1
     fi
 
-    IFS= read -r _encoded_file_edit_decode_status \
-      < "$_encoded_file_edit_decode_status_file" ||
-        return 3
-    IFS= read -r _encoded_file_edit_vsed_status \
-      < "$_encoded_file_edit_vsed_status_file" ||
-        return 3
-    IFS= read -r _encoded_file_edit_encode_status \
-      < "$_encoded_file_edit_encode_status_file" ||
-        return 3
+    command -p mv -f --       "$_encoded_file_edit_tmp"       "$_encoded_file_edit_file" ||
+        return 1
 
-    [ "$_encoded_file_edit_decode_status" -eq "0" ] || return 4
-
-    case "$_encoded_file_edit_vsed_status" in
-      0) : ;;
-      1) return 5 ;;
-      *) return 6 ;;
-    esac
-
-    [ "$_encoded_file_edit_encode_status" -eq "0" ] || return 7
-
-    command -p cmp "$_encoded_file_edit_file" "$_encoded_file_edit_original" \
-      >/dev/null 2>&1 ||
-        return 8
-
-    command -p mv -f "$_encoded_file_edit_cipher" "$_encoded_file_edit_file" ||
-      return 9
-
-    command -p rm -rf "$_encoded_file_edit_tmp_dir" ||
-      return 10
-    _encoded_file_edit_tmp_dir=
+    _encoded_file_edit_tmp=
   done
 )
 
