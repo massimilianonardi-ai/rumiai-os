@@ -89,8 +89,10 @@ export_readonly \
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
 
+PAGER="pager"
 EDITOR="editor"
 VISUAL="editor"
+export_readonly PAGER EDITOR VISUAL
 
 m_LANGUAGE_FALLBACK="en_US"
 m_TEXT_ENCODING="UTF-8"
