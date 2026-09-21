@@ -263,45 +263,137 @@ encoded_file_editor()
 
 #------------------------------------------------------------------------------
 
-# decodes file, opens it in editor, re-encodes it streaming into original
-
+# decodes encrypted files, edits plaintext in memory with vsed, and
+# atomically replaces each original only after decode, edit and encode succeed
 encoded_file_edit()
-{
-  if [ ! -f "$1" ]
-  then
-    set -- "$(command -v "$1")"
+(
+  set +x
 
-    if [ "$?" != "0" ] || [ ! -f "$1" ]
+  [ "$#" -gt "0" ] || return 1
+
+  umask 077
+  _encoded_file_edit_tmp_dir=
+
+  _encoded_file_edit_cleanup()
+  {
+    if [ -n "$_encoded_file_edit_tmp_dir" ]
     then
-      return 1
+      command -p rm -rf "$_encoded_file_edit_tmp_dir" 2>/dev/null || :
+      _encoded_file_edit_tmp_dir=
     fi
-  fi
+  }
 
-  (
-    if [ -z "$ENCODED_FILE_EDITOR" ]
+  trap '_encoded_file_edit_cleanup' 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+
+  for _encoded_file_edit_operand
+  do
+    pathsearch _encoded_file_edit_file "$_encoded_file_edit_operand" ||
+      return 2
+
+    _encoded_file_edit_dir=${_encoded_file_edit_file%/*}
+    [ -n "$_encoded_file_edit_dir" ] || _encoded_file_edit_dir=/
+
+    _encoded_file_edit_index=0
+    _encoded_file_edit_tmp_dir=
+
+    while [ "$_encoded_file_edit_index" -lt "1000" ]
+    do
+      _encoded_file_edit_tmp_dir="$_encoded_file_edit_dir/.encoded-file-edit.$$.$_encoded_file_edit_index"
+
+      if command -p mkdir "$_encoded_file_edit_tmp_dir" 2>/dev/null
+      then
+        break
+      fi
+
+      _encoded_file_edit_tmp_dir=
+      _encoded_file_edit_index=$((_encoded_file_edit_index + 1))
+    done
+
+    [ -n "$_encoded_file_edit_tmp_dir" ] || return 3
+
+    _encoded_file_edit_original="$_encoded_file_edit_tmp_dir/original"
+    _encoded_file_edit_cipher="$_encoded_file_edit_tmp_dir/cipher"
+    _encoded_file_edit_decode_status_file="$_encoded_file_edit_tmp_dir/decode.status"
+    _encoded_file_edit_vsed_status_file="$_encoded_file_edit_tmp_dir/vsed.status"
+    _encoded_file_edit_encode_status_file="$_encoded_file_edit_tmp_dir/encode.status"
+
+    command -p cp -p "$_encoded_file_edit_file" "$_encoded_file_edit_original" ||
+      return 3
+    command -p cp -p "$_encoded_file_edit_original" "$_encoded_file_edit_cipher" ||
+      return 3
+
+    if
+      {
+        if decode < "$_encoded_file_edit_original"
+        then
+          _encoded_file_edit_status=0
+        else
+          _encoded_file_edit_status=$?
+        fi
+
+        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_decode_status_file"
+        exit "$_encoded_file_edit_status"
+      } |
+      {
+        if command vsed
+        then
+          _encoded_file_edit_status=0
+        else
+          _encoded_file_edit_status=$?
+        fi
+
+        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_vsed_status_file"
+        exit "$_encoded_file_edit_status"
+      } |
+      {
+        if encode > "$_encoded_file_edit_cipher"
+        then
+          _encoded_file_edit_status=0
+        else
+          _encoded_file_edit_status=$?
+        fi
+
+        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_encode_status_file"
+        exit "$_encoded_file_edit_status"
+      }
     then
-      ENCODED_FILE_EDITOR="nano"
+      :
+    else
+      :
     fi
 
-    # DECODED_FILE="${1}.$(date +"[%Y-%m-%d %H:%M:%S]").dec" && \
-    # decode < "$1" > "$DECODED_FILE" && \
-    # "$ENCODED_FILE_EDITOR" "$DECODED_FILE" && \
-    # encode < "$DECODED_FILE" > "$1"
+    IFS= read -r _encoded_file_edit_decode_status       < "$_encoded_file_edit_decode_status_file" ||
+        return 3
+    IFS= read -r _encoded_file_edit_vsed_status       < "$_encoded_file_edit_vsed_status_file" ||
+        return 3
+    IFS= read -r _encoded_file_edit_encode_status       < "$_encoded_file_edit_encode_status_file" ||
+        return 3
 
-    DECODED_FILE="${1}.$(date +"[%Y-%m-%d %H:%M:%S]").dec" && \
-    decode < "$1" > "$DECODED_FILE" && \
-    "$ENCODED_FILE_EDITOR" "$DECODED_FILE"
+    [ "$_encoded_file_edit_decode_status" -eq "0" ] || return 4
 
-    echo "reencode file: $1? YES, NO (default = YES): " >&2
-    read REENCODE_CHOICE
-    if [ "$REENCODE_CHOICE" = "YES" ] || [ "$REENCODE_CHOICE" = "yes" ] || [ "$REENCODE_CHOICE" = "Y" ] || [ "$REENCODE_CHOICE" = "y" ] || [ "$REENCODE_CHOICE" = "Yes" ]
-    then
-      encode < "$DECODED_FILE" > "$1"
-    fi
+    case "$_encoded_file_edit_vsed_status" in
+      0) : ;;
+      1) return 5 ;;
+      *) return 6 ;;
+    esac
 
-    rm -f "$DECODED_FILE"
-  )
-}
+    [ "$_encoded_file_edit_encode_status" -eq "0" ] || return 7
+
+    command -p cmp "$_encoded_file_edit_file" "$_encoded_file_edit_original"       >/dev/null 2>&1 ||
+        return 8
+
+    command -p mv -f "$_encoded_file_edit_cipher" "$_encoded_file_edit_file" ||
+      return 9
+
+    command -p rm -rf "$_encoded_file_edit_tmp_dir" ||
+      return 10
+    _encoded_file_edit_tmp_dir=
+  done
+)
 
 #------------------------------------------------------------------------------
 
