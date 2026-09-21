@@ -218,36 +218,12 @@ srv_start()
     srv_runtime_remove || fatal 1 execution execution-failed operation srv reason stale-state-cleanup-failed service "$srv_name"
   fi
 
-  srv_provider=
-  srv_provider_backed=0
-  srv_provider="$(pkg_provider_default_resolve "$srv_name" 2>/dev/null)"
-  srv_provider_status=$?
+  srv_provider="$(pkg_provider_default_resolve "$srv_name" 2>/dev/null)" || \
+    fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
+  srv_command="$(pkg_facility_service_start_resolve "$srv_name" "$srv_provider")" || \
+    fatal 1 execution execution-failed operation srv reason service-realization-invalid service "$srv_name" provider "$srv_provider"
 
-  case "$srv_provider_status" in
-    0)
-      srv_command="$(pkg_facility_service_start_resolve "$srv_name" "$srv_provider")" || \
-        fatal 1 execution execution-failed operation srv reason service-realization-invalid service "$srv_name" provider "$srv_provider"
-      srv_provider_backed=1
-      ;;
-    1 | 2)
-      srv_provider=
-      srv_command_name="$srv_name-start"
-      readpathce srv_command "$srv_command_name" || \
-        fatal 127 execution command-not-found operation srv command "$srv_command_name"
-      [ -f "$srv_command" ] && [ -x "$srv_command" ] || \
-        fatal 126 execution execution-failed operation srv reason command-not-executable command "$srv_command"
-      ;;
-    *)
-      fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
-      ;;
-  esac
-
-  if [ "$srv_provider_backed" -eq 1 ]
-  then
-    command -p -- nohup "$m_BOOTSTRAP_BIN" "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
-  else
-    command -p -- nohup "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
-  fi
+  command -p -- nohup "$m_BOOTSTRAP_BIN" "$srv_command" >> "$srv_log_file" 2>&1 </dev/null &
   srv_pid=$!
   srv_unpublished_pid=$srv_pid
 

@@ -24,11 +24,9 @@ DESCRIPTION
     not consulted. The normal package launcher remains responsible for package HOME,
     environment, and dependency preparation.
 
-    During migration, when no system facility default applies (or a legacy service
-    name is outside facility-name grammar), srv retains the historical
-    <service>-start PATH lookup as a compatibility path. A configured facility
-    default that cannot resolve, or whose selected concrete has no valid service
-    realization, fails instead of falling back to PATH.
+    Starting a service requires a configured system facility default and a valid
+    installed service realization for the selected concrete provider. Command-name
+    conventions and PATH are not consulted as an alternate service-discovery path.
 
 COMMANDS
     start <service>
@@ -82,8 +80,9 @@ STATE
     retarget the running instance; stop operates on recorded runtime state and does
     not resolve another provider.
 
-    Legacy runtime records without provider metadata remain readable during the
-    migration compatibility period.
+    Runtime records created by older revisions without provider metadata remain
+    readable for stop and stale-state cleanup. Current starts always persist the
+    selected concrete provider identity.
 
 HOST USER SUPERVISION
     On Linux, srv resolves the calling account's UID and home from host account
@@ -117,11 +116,9 @@ READINESS
 EXIT STATUS
     0     The requested lifecycle operation completed successfully. This includes
           idempotent stop cases where the service is not running.
-    1     A lifecycle operation failed.
+    1     A lifecycle operation failed, including unavailable or invalid provider
+          selection/service realization.
     2     The invocation, host scope/action, or service name is invalid.
-    126   The legacy compatibility <service>-start target is not executable.
-    127   No provider-backed default applies and the legacy compatibility
-          <service>-start target cannot be resolved.
 
 EXAMPLES
     Start a service named web:
