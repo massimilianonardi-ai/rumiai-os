@@ -204,6 +204,7 @@ DEPENDENCIES
 
         stty
         tput
+        dd
         od
         tr
 
