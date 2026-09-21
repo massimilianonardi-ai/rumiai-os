@@ -12,6 +12,7 @@ export LC_ALL
 vsed_error=
 vsed_screen=0
 vsed_keypad=0
+vsed_cursor_hidden=0
 vsed_modified=0
 vsed_mode=
 vsed_path=
@@ -33,6 +34,16 @@ vsed_terminal_close()
   then
     term_keypad_disable >/dev/null 2>&1 || vsed_close_status=1
     vsed_keypad=0
+  fi
+
+  if [ "$vsed_cursor_hidden" -eq 1 ]
+  then
+    if term_cursor_show >/dev/null 2>&1
+    then
+      vsed_cursor_hidden=0
+    else
+      vsed_close_status=1
+    fi
   fi
 
   if [ "${term_tty_saved-}" = true ]
@@ -390,10 +401,32 @@ vsed_render_status()
   vsed_render_at "$vsed_view_rows" 'vsed  ^X save  Esc cancel' 1
 }
 
+vsed_cursor_hide()
+{
+  if [ "$vsed_cursor_hidden" -eq 0 ] && term_cursor_hide
+  then
+    vsed_cursor_hidden=1
+  fi
+
+  return 0
+}
+
+vsed_cursor_show()
+{
+  if [ "$vsed_cursor_hidden" -eq 1 ]
+  then
+    term_cursor_show || return 1
+    vsed_cursor_hidden=0
+  fi
+
+  return 0
+}
+
 vsed_render_full()
 {
   [ "$#" -eq 1 ] || return 1
 
+  vsed_cursor_hide || return 1
   term_size_update || return 1
   [ "$term_rows" -ge 3 ] || return 1
   [ "$term_cols" -ge 20 ] || return 1
@@ -432,6 +465,7 @@ vsed_render_full()
 
   vsed_render_status || return 1
   vsed_cursor_place || return 1
+  vsed_cursor_show || return 1
 }
 
 vsed_render_current()
