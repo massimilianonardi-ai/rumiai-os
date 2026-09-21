@@ -2,6 +2,7 @@
 
 . "$m_LIB_DIR/sys/sh/pkg/pkg-provider.lib.sh"
 . "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-dependency.lib.sh"
 
 srv_name_valid()
 {
@@ -754,6 +755,8 @@ srv_host_system_provider_prepare()
 
   pkg_provider_default_runtime_access_prepare "$srv_name" ||
     fatal 1 execution execution-failed operation srv reason provider-runtime-access-failed service "$srv_name"
+  pkg_dependency_runtime_access_prepare "$srv_provider" ||
+    fatal 1 execution execution-failed operation srv reason dependency-runtime-access-failed service "$srv_name" provider "$srv_provider"
 }
 
 srv_host_system_state_prepare()

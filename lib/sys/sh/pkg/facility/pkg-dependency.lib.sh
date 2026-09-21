@@ -316,6 +316,57 @@ pkg_dependency_resolve()
   [ -z "$pkg_dependency_resolved" ] || printf -- '%s\n' "$pkg_dependency_resolved"
 )
 
+_pkg_dependency_runtime_access_prepare_concrete()
+(
+  [ "$#" -eq 2 ] || return 2
+  pkg_dependency_access_concrete=$1
+  pkg_dependency_access_seen=$2
+
+  case "$pkg_dependency_access_seen" in
+    *"|$pkg_dependency_access_concrete|"*) return 0 ;;
+  esac
+  pkg_dependency_access_seen="$pkg_dependency_access_seen|$pkg_dependency_access_concrete|"
+
+  _pkg_provider_concrete_parse "$pkg_dependency_access_concrete" || return 1
+  pkg_dependency_access_consumer=$pkg_provider_concrete_pkg
+  pkg_dependency_access_osarch=$pkg_provider_concrete_osarch
+  pkg_dependency_access_file="$m_PKG_DIR/$pkg_dependency_access_concrete/dependency"
+
+  if [ ! -e "$pkg_dependency_access_file" ] && [ ! -L "$pkg_dependency_access_file" ]
+  then
+    return 0
+  fi
+  _pkg_dependency_file_validate "$pkg_dependency_access_file" || return 1
+
+  while IFS= read -r pkg_dependency_access_line
+  do
+    _pkg_dependency_line_parse "$pkg_dependency_access_line" || return 1
+    pkg_dependency_access_facility=$pkg_dependency_facility
+    pkg_dependency_access_constraints=$pkg_dependency_constraints
+
+    pkg_provider_effective_selector_runtime_access_prepare \
+      "$pkg_dependency_access_consumer" \
+      "$pkg_dependency_access_facility" || return 1
+
+    _pkg_dependency_resolve_one \
+      "$pkg_dependency_access_facility" \
+      "$pkg_dependency_access_constraints" \
+      "$pkg_dependency_access_consumer" \
+      "$pkg_dependency_access_osarch" || return 1
+    pkg_dependency_access_provider=$pkg_dependency_resolved_provider
+
+    _pkg_dependency_runtime_access_prepare_concrete \
+      "$pkg_dependency_access_provider" \
+      "$pkg_dependency_access_seen" || return 1
+  done < "$pkg_dependency_access_file"
+)
+
+pkg_dependency_runtime_access_prepare()
+{
+  [ "$#" -eq 1 ] || return 2
+  _pkg_dependency_runtime_access_prepare_concrete "$1" ""
+}
+
 _pkg_dependency_materialize()
 {
   [ "$#" -eq 2 ] || return 2

@@ -14,6 +14,9 @@ DESCRIPTION
     normal filesystem ownership. Consumer bindings are system-scoped package
     configuration stored as binding/<facility> beneath the consumer package conf
     area. A binding file contains exactly one provider selector followed by newline.
+    Provider selectors are non-secret runtime-selection metadata; both defaults and
+    bindings may be made read-only/traversable for a service account while their
+    enclosing state remains non-writable to that account.
 
     Global environment is recomputed from authoritative selector intent rather than
     stored as generated configuration. A valid ext-osarch selector chooses the
@@ -38,6 +41,12 @@ FUNCTIONS
         by a non-owner runtime account. The function changes only traversal/read
         permissions on the facility-default configuration path; it does not change
         selector intent, provider installation or consumer bindings.
+
+    pkg_provider_effective_selector_runtime_access_prepare <consumer> <facility>
+        Prepare the effective provider selector used by one consumer/facility pair
+        for read-only resolution by a non-owner runtime account. An explicit binding
+        is prepared when present; otherwise the system facility default is prepared.
+        Selector intent is not changed.
 
     pkg_provider_effective_selector <consumer> <facility>
         Print the effective configured selector for the consumer/facility pair:
