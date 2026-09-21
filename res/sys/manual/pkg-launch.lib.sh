@@ -6,6 +6,11 @@ DESCRIPTION
     and configuration, applies runtime environment layers and executes the real
     upstream target.
 
+    Normal package commands use user-scoped package HOME/configuration. The trusted
+    srv system-host execution path reuses the same launcher with system-scoped
+    package state and State Instance equal to the service identity; this does not
+    create a second package launcher or infer state scope from POSIX account identity.
+
     Facility dependencies are re-resolved at every launch. The launcher applies the
     consumer's configured binding when present, otherwise the system facility
     default. Selected provider projections are interpreted generically from
@@ -16,7 +21,9 @@ FUNCTIONS
     launcher <package> [<argument>...]
         Launch the integrated command identified by m_COMMAND_BIN for the named
         package. The function validates the managed concrete/root/link target,
-        creates the user package HOME when needed and preserves caller arguments.
+        creates the selected package HOME when needed and preserves caller arguments.
+        Normal invocation selects user state. An internal srv system-host context
+        selects system package state with the service identity as State Instance.
 
         Runtime precedence is:
 
