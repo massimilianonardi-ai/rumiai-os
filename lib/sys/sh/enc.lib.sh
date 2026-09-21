@@ -265,6 +265,20 @@ encoded_file_editor()
 
 # decodes encrypted files, edits plaintext in memory with vsed, and
 # atomically replaces each original only after decode, edit and encode succeed
+#
+# Returns:
+#
+#   0   all files saved successfully
+#   1   no file operands
+#   2   file resolution failure
+#   3   transaction staging/status failure
+#   4   decode failure
+#   5   editing cancelled
+#   6   vsed failure
+#   7   encode failure
+#   8   target changed during editing
+#   9   final replacement failure
+#   10  cleanup failure
 encoded_file_edit()
 (
   set +x
@@ -335,7 +349,8 @@ encoded_file_edit()
           _encoded_file_edit_status=$?
         fi
 
-        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_decode_status_file"
+        printf '%s\n' "$_encoded_file_edit_status" \
+          > "$_encoded_file_edit_decode_status_file"
         exit "$_encoded_file_edit_status"
       } |
       {
@@ -346,7 +361,8 @@ encoded_file_edit()
           _encoded_file_edit_status=$?
         fi
 
-        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_vsed_status_file"
+        printf '%s\n' "$_encoded_file_edit_status" \
+          > "$_encoded_file_edit_vsed_status_file"
         exit "$_encoded_file_edit_status"
       } |
       {
@@ -357,7 +373,8 @@ encoded_file_edit()
           _encoded_file_edit_status=$?
         fi
 
-        printf '%s\n' "$_encoded_file_edit_status"           > "$_encoded_file_edit_encode_status_file"
+        printf '%s\n' "$_encoded_file_edit_status" \
+          > "$_encoded_file_edit_encode_status_file"
         exit "$_encoded_file_edit_status"
       }
     then
@@ -366,11 +383,14 @@ encoded_file_edit()
       :
     fi
 
-    IFS= read -r _encoded_file_edit_decode_status       < "$_encoded_file_edit_decode_status_file" ||
+    IFS= read -r _encoded_file_edit_decode_status \
+      < "$_encoded_file_edit_decode_status_file" ||
         return 3
-    IFS= read -r _encoded_file_edit_vsed_status       < "$_encoded_file_edit_vsed_status_file" ||
+    IFS= read -r _encoded_file_edit_vsed_status \
+      < "$_encoded_file_edit_vsed_status_file" ||
         return 3
-    IFS= read -r _encoded_file_edit_encode_status       < "$_encoded_file_edit_encode_status_file" ||
+    IFS= read -r _encoded_file_edit_encode_status \
+      < "$_encoded_file_edit_encode_status_file" ||
         return 3
 
     [ "$_encoded_file_edit_decode_status" -eq "0" ] || return 4
@@ -383,7 +403,8 @@ encoded_file_edit()
 
     [ "$_encoded_file_edit_encode_status" -eq "0" ] || return 7
 
-    command -p cmp "$_encoded_file_edit_file" "$_encoded_file_edit_original"       >/dev/null 2>&1 ||
+    command -p cmp "$_encoded_file_edit_file" "$_encoded_file_edit_original" \
+      >/dev/null 2>&1 ||
         return 8
 
     command -p mv -f "$_encoded_file_edit_cipher" "$_encoded_file_edit_file" ||
