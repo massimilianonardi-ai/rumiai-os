@@ -89,6 +89,9 @@ export_readonly \
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
 
+EDITOR="editor"
+VISUAL="editor"
+
 m_LANGUAGE_FALLBACK="en_US"
 m_TEXT_ENCODING="UTF-8"
 m_LANG_CURRENT_DIR="$m_LANG_DIR/current"
@@ -100,6 +103,12 @@ export_readonly \
   m_LANG_CURRENT_DIR \
   m_LANG_FALLBACK_DIR
 
+m_STATE_DIR="$m_ROOT/state"
+m_STATE_SYS_DIR="$m_STATE_DIR/system/current"
+m_STATE_USER_DIR="$m_STATE_DIR/user/current"
+
+export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
+
 export -- m_LOG_LEVEL
 
 #-------------------------------------------------------------------------------
@@ -107,16 +116,6 @@ export -- m_LOG_LEVEL
 #-------------------------------------------------------------------------------
 
 . "$m_LIB_DIR/sys/sh/core.lib.sh"
-
-#-------------------------------------------------------------------------------
-# STATE ROOTS
-#-------------------------------------------------------------------------------
-
-m_STATE_DIR="$m_ROOT/state"
-m_STATE_SYS_DIR="$m_STATE_DIR/system/current"
-m_STATE_USER_DIR="$m_STATE_DIR/user/current"
-
-export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
 
 #-------------------------------------------------------------------------------
 # FACILITY DEFAULT ENVIRONMENT

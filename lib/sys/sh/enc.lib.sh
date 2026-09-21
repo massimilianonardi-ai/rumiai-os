@@ -223,21 +223,28 @@ EOF_PASS
 
 #------------------------------------------------------------------------------
 
-# decodes file sourcing (executing) it into current shell script
-
-encoded_file_import()
+encoded_file_eval()
 {
-  if [ ! -f "$1" ]
-  then
-    set -- "$(command -v "$1")"
+  [ "$#" -gt "0" ] && [ -n "$1" ] || return 1
 
-    if [ "$?" != "0" ] || [ ! -f "$1" ]
+  case "$-" in
+    *x*) set +x; set -- "set -x" "$@";;
+    *) set -- ":" "$@";;
+  esac
+
+  eval "$(
+    if pathsearch _encoded_file_eval_file "$2"
     then
-      return 1
+      _encoded_file_eval_source="$(decode < "$_encoded_file_eval_file")" || _encoded_file_eval_source="return 3"
+    else
+      _encoded_file_eval_source="return 2"
     fi
-  fi
-
-  eval "$(decode < "$1")"
+    command -p -- cat << EOF
+shift 2
+$1
+$_encoded_file_eval_source
+EOF
+  )"
 }
 
 #------------------------------------------------------------------------------
@@ -318,7 +325,7 @@ o2a()
 {
   (
     set -f
-    IFS=' 	
+    IFS='
 '
 
     if [ "$#" -eq "0" ]
