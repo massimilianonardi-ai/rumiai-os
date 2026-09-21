@@ -198,6 +198,25 @@ pkg_provider_default_runtime_access_prepare()
   command -p -- chmod 644 "$pkg_provider_default_runtime_file"
 }
 
+pkg_provider_global_runtime_access_prepare()
+{
+  [ "$#" -eq 0 ] || return 2
+  _pkg_provider_default_parent_access_prepare || return 1
+
+  command -p -- chmod 755 "$pkg_provider_default_access_root" || return 1
+
+  for pkg_provider_global_runtime_file in \
+    "$pkg_provider_default_access_root"/* \
+    "$pkg_provider_default_access_root"/.[!.]* \
+    "$pkg_provider_default_access_root"/..?*
+  do
+    [ -e "$pkg_provider_global_runtime_file" ] || [ -L "$pkg_provider_global_runtime_file" ] || continue
+    [ -f "$pkg_provider_global_runtime_file" ] && [ ! -L "$pkg_provider_global_runtime_file" ] || return 1
+    _pkg_provider_config_query "$pkg_provider_global_runtime_file" >/dev/null || return 1
+    command -p -- chmod 644 "$pkg_provider_global_runtime_file" || return 1
+  done
+}
+
 _pkg_provider_binding_parent_access_prepare()
 {
   [ "$#" -eq 1 ] || return 2

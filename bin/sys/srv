@@ -753,7 +753,7 @@ srv_host_system_provider_prepare()
     fatal 1 execution execution-failed operation srv reason provider-resolution-failed service "$srv_name"
   srv_host_provider_package=$pkg_provider_concrete_pkg
 
-  pkg_provider_default_runtime_access_prepare "$srv_name" ||
+  pkg_provider_global_runtime_access_prepare ||
     fatal 1 execution execution-failed operation srv reason provider-runtime-access-failed service "$srv_name"
   pkg_dependency_runtime_access_prepare "$srv_provider" ||
     fatal 1 execution execution-failed operation srv reason dependency-runtime-access-failed service "$srv_name" provider "$srv_provider"

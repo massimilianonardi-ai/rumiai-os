@@ -42,6 +42,12 @@ FUNCTIONS
         permissions on the facility-default configuration path; it does not change
         selector intent, provider installation or consumer bindings.
 
+    pkg_provider_global_runtime_access_prepare
+        Prepare every configured system facility-default selector for read-only
+        enumeration/resolution by a non-owner runtime account. This preserves
+        bootstrap global facility-environment semantics after a host supervisor
+        drops privilege. Selector intent is not changed.
+
     pkg_provider_effective_selector_runtime_access_prepare <consumer> <facility>
         Prepare the effective provider selector used by one consumer/facility pair
         for read-only resolution by a non-owner runtime account. An explicit binding
