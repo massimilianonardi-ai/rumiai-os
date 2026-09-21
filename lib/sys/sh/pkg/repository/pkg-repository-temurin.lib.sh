@@ -37,9 +37,61 @@ _pkg_repository_temurin_validate_version()
 {
   [ "$#" -eq 1 ] || return 2
   LC_ALL=C command -p -- awk -v value="$1" 'BEGIN {
-    if (value ~ /^25([.][0-9]+)*[+][0-9]+([.][0-9]+)*$/) exit 0
+    if (value ~ /^[1-9][0-9]*([.][0-9]+)*[+][0-9]+([.][0-9]+)*$/) exit 0
     exit 1
   }'
+}
+
+_pkg_repository_temurin_version_feature()
+{
+  [ "$#" -eq 1 ] || return 2
+  _pkg_repository_temurin_validate_version "$1" || return 1
+  printf -- '%s\n' "$1" | LC_ALL=C command -p -- awk -F '[.+]' '{ print $1 }'
+}
+
+_pkg_repository_temurin_features_read()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_repository_temurin_features_file="$1/feature_versions"
+  [ -f "$pkg_repository_temurin_features_file" ] && \
+  [ ! -L "$pkg_repository_temurin_features_file" ] && \
+  [ -r "$pkg_repository_temurin_features_file" ] && \
+  [ ! -x "$pkg_repository_temurin_features_file" ] || return 1
+
+  pkg_repository_temurin_previous=
+  pkg_repository_temurin_count=0
+  while IFS= read -r pkg_repository_temurin_feature
+  do
+    case "$pkg_repository_temurin_feature" in
+      ''|0|0*|*[!0-9]*) return 1;;
+    esac
+    if [ -n "$pkg_repository_temurin_previous" ]
+    then
+      [ "$pkg_repository_temurin_previous" -lt "$pkg_repository_temurin_feature" ] || return 1
+    fi
+    pkg_repository_temurin_previous=$pkg_repository_temurin_feature
+    pkg_repository_temurin_count=$((pkg_repository_temurin_count + 1))
+    printf -- '%s\n' "$pkg_repository_temurin_feature"
+  done < "$pkg_repository_temurin_features_file"
+
+  [ "$pkg_repository_temurin_count" -gt 0 ]
+}
+
+_pkg_repository_temurin_feature_supported()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_repository_temurin_wanted_feature=$2
+  case "$pkg_repository_temurin_wanted_feature" in
+    ''|0|0*|*[!0-9]*) return 1;;
+  esac
+  pkg_repository_temurin_features="$(_pkg_repository_temurin_features_read "$1")" || return 1
+  while IFS= read -r pkg_repository_temurin_feature
+  do
+    [ "$pkg_repository_temurin_feature" = "$pkg_repository_temurin_wanted_feature" ] && return 0
+  done <<EOF_FEATURES
+$pkg_repository_temurin_features
+EOF_FEATURES
+  return 1
 }
 
 _pkg_repository_temurin_validate_repository()
@@ -55,9 +107,9 @@ _pkg_repository_temurin_validate_repository()
     "$pkg_repository_temurin_repository_dir"/..?*
   do
     [ -e "$pkg_repository_temurin_repository_item" ] || [ -L "$pkg_repository_temurin_repository_item" ] || continue
-    pkg_repository_temurin_repository_name="${pkg_repository_temurin_repository_item##*/}"
+    pkg_repository_temurin_repository_name=${pkg_repository_temurin_repository_item##*/}
     case "$pkg_repository_temurin_repository_name" in
-      type|os|architecture|feature_version) :;;
+      type|os|architecture|feature_versions) :;;
       *) return 1;;
     esac
   done
@@ -65,10 +117,9 @@ _pkg_repository_temurin_validate_repository()
   pkg_repository_temurin_type="$(_pkg_repository_temurin_scalar "$pkg_repository_temurin_repository_dir/type")" || return 1
   pkg_repository_temurin_os="$(_pkg_repository_temurin_scalar "$pkg_repository_temurin_repository_dir/os")" || return 1
   pkg_repository_temurin_architecture="$(_pkg_repository_temurin_scalar "$pkg_repository_temurin_repository_dir/architecture")" || return 1
-  pkg_repository_temurin_feature_version="$(_pkg_repository_temurin_scalar "$pkg_repository_temurin_repository_dir/feature_version")" || return 1
+  pkg_repository_temurin_features="$(_pkg_repository_temurin_features_read "$pkg_repository_temurin_repository_dir")" || return 1
 
   [ "$pkg_repository_temurin_type" = temurin ] || return 1
-  [ "$pkg_repository_temurin_feature_version" = 25 ] || return 1
 
   case "$pkg_repository_temurin_os/$pkg_repository_temurin_architecture" in
     linux/x64|linux/aarch64|mac/x64|mac/aarch64|windows/x64) :;;
@@ -96,14 +147,15 @@ _pkg_repository_temurin_release_name_to_version()
 
 _pkg_repository_temurin_list_url()
 {
-  [ "$#" -eq 2 ] || return 2
+  [ "$#" -eq 3 ] || return 2
   _pkg_repository_temurin_validate_repository "$1" || return 1
-  case "$2" in ''|*[!0-9]*) return 2;; esac
+  _pkg_repository_temurin_feature_supported "$1" "$2" || return 1
+  case "$3" in ''|*[!0-9]*) return 2;; esac
   printf -- 'https://api.adoptium.net/v3/assets/feature_releases/%s/ga?architecture=%s&heap_size=normal&image_type=jdk&jvm_impl=hotspot&os=%s&page=%s&page_size=20&project=jdk&sort_method=DATE&sort_order=ASC&vendor=eclipse\n' \
-    "$pkg_repository_temurin_feature_version" \
+    "$2" \
     "$pkg_repository_temurin_architecture" \
     "$pkg_repository_temurin_os" \
-    "$2"
+    "$3"
 }
 
 pkg_repository_list_versions()
@@ -111,45 +163,53 @@ pkg_repository_list_versions()
   [ "$#" -eq 1 ] || return 2
   _pkg_repository_temurin_validate_repository "$1" || return 1
 
-  pkg_repository_temurin_page=0
   pkg_repository_temurin_versions=
   pkg_repository_temurin_lf='
 '
 
-  while :
+  while IFS= read -r pkg_repository_temurin_feature
   do
-    pkg_repository_temurin_url="$(_pkg_repository_temurin_list_url "$1" "$pkg_repository_temurin_page")" || return 1
-    pkg_repository_temurin_body="$(http-fetch -- "$pkg_repository_temurin_url")" || return 1
-    pkg_repository_temurin_records="$(printf '%s\n' "$pkg_repository_temurin_body" | json_array_object_fields release_name)" || return 1
+    pkg_repository_temurin_page=0
+    while :
+    do
+      pkg_repository_temurin_url="$(_pkg_repository_temurin_list_url "$1" "$pkg_repository_temurin_feature" "$pkg_repository_temurin_page")" || return 1
+      pkg_repository_temurin_body="$(http-fetch -- "$pkg_repository_temurin_url")" || return 1
+      pkg_repository_temurin_records="$(printf '%s\n' "$pkg_repository_temurin_body" | json_array_object_fields release_name)" || return 1
 
-    pkg_repository_temurin_count=0
-    if [ -n "$pkg_repository_temurin_records" ]
-    then
-      while IFS= read -r pkg_repository_temurin_release_token
-      do
-        pkg_repository_temurin_count=$((pkg_repository_temurin_count + 1))
-        case "$pkg_repository_temurin_release_token" in
-          s:*) pkg_repository_temurin_release_name=${pkg_repository_temurin_release_token#s:};;
-          *) return 1;;
-        esac
-        pkg_repository_temurin_version="$(_pkg_repository_temurin_release_name_to_version "$pkg_repository_temurin_release_name")" || return 1
-        case "$pkg_repository_temurin_lf$pkg_repository_temurin_versions$pkg_repository_temurin_lf" in
-          *"$pkg_repository_temurin_lf$pkg_repository_temurin_version$pkg_repository_temurin_lf"*) return 1;;
-        esac
-        if [ -n "$pkg_repository_temurin_versions" ]
-        then
-          pkg_repository_temurin_versions="$pkg_repository_temurin_versions$pkg_repository_temurin_lf$pkg_repository_temurin_version"
-        else
-          pkg_repository_temurin_versions=$pkg_repository_temurin_version
-        fi
-      done <<EOF_RECORDS
+      pkg_repository_temurin_count=0
+      if [ -n "$pkg_repository_temurin_records" ]
+      then
+        while IFS= read -r pkg_repository_temurin_release_token
+        do
+          pkg_repository_temurin_count=$((pkg_repository_temurin_count + 1))
+          case "$pkg_repository_temurin_release_token" in
+            s:*) pkg_repository_temurin_release_name=${pkg_repository_temurin_release_token#s:};;
+            *) return 1;;
+          esac
+          pkg_repository_temurin_version="$(_pkg_repository_temurin_release_name_to_version "$pkg_repository_temurin_release_name")" || return 1
+          pkg_repository_temurin_version_feature="$(_pkg_repository_temurin_version_feature "$pkg_repository_temurin_version")" || return 1
+          [ "$pkg_repository_temurin_version_feature" = "$pkg_repository_temurin_feature" ] || return 1
+
+          case "$pkg_repository_temurin_lf$pkg_repository_temurin_versions$pkg_repository_temurin_lf" in
+            *"$pkg_repository_temurin_lf$pkg_repository_temurin_version$pkg_repository_temurin_lf"*) return 1;;
+          esac
+          if [ -n "$pkg_repository_temurin_versions" ]
+          then
+            pkg_repository_temurin_versions="$pkg_repository_temurin_versions$pkg_repository_temurin_lf$pkg_repository_temurin_version"
+          else
+            pkg_repository_temurin_versions=$pkg_repository_temurin_version
+          fi
+        done <<EOF_RECORDS
 $pkg_repository_temurin_records
 EOF_RECORDS
-    fi
+      fi
 
-    [ "$pkg_repository_temurin_count" -ge 20 ] || break
-    pkg_repository_temurin_page=$((pkg_repository_temurin_page + 1))
-  done
+      [ "$pkg_repository_temurin_count" -ge 20 ] || break
+      pkg_repository_temurin_page=$((pkg_repository_temurin_page + 1))
+    done
+  done <<EOF_FEATURES
+$pkg_repository_temurin_features
+EOF_FEATURES
 
   [ -z "$pkg_repository_temurin_versions" ] || printf -- '%s\n' "$pkg_repository_temurin_versions"
 )
@@ -238,6 +298,8 @@ pkg_repository_resolve_artifact()
   pkg_repository_temurin_digest_type="$(_pkg_repository_temurin_scalar "$pkg_repository_temurin_range_dir/digest_type")" || return 1
   [ "$pkg_repository_temurin_digest_type" = sha256 ] || return 1
 
+  pkg_repository_temurin_feature="$(_pkg_repository_temurin_version_feature "$pkg_repository_temurin_requested")" || return 1
+  _pkg_repository_temurin_feature_supported "$1" "$pkg_repository_temurin_feature" || return 1
   pkg_repository_temurin_encoded="$(_pkg_repository_temurin_encode_version "$pkg_repository_temurin_requested")" || return 1
   pkg_repository_temurin_upstream="jdk-$pkg_repository_temurin_encoded"
   pkg_repository_temurin_base="https://api.adoptium.net/v3"
