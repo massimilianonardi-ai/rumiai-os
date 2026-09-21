@@ -198,6 +198,48 @@ pkg_provider_default_runtime_access_prepare()
   command -p -- chmod 644 "$pkg_provider_default_runtime_file"
 }
 
+_pkg_provider_binding_parent_access_prepare()
+{
+  [ "$#" -eq 1 ] || return 2
+  _pkg_provider_name_valid "$1" || return 2
+
+  pkg_provider_binding_access_conf="$(command -- state-path system pkg "$1" conf)" || return 1
+  pkg_provider_binding_access_identity=${pkg_provider_binding_access_conf%/conf}
+  pkg_provider_binding_access_pkg_root=${pkg_provider_binding_access_identity%/*}
+  pkg_provider_binding_access_root="$pkg_provider_binding_access_conf/binding"
+
+  umask 077
+  command -p -- mkdir -p -- "$pkg_provider_binding_access_root" || return 1
+
+  for pkg_provider_binding_access_dir in \
+    "$pkg_provider_binding_access_pkg_root" \
+    "$pkg_provider_binding_access_identity" \
+    "$pkg_provider_binding_access_conf" \
+    "$pkg_provider_binding_access_root"
+  do
+    [ -d "$pkg_provider_binding_access_dir" ] && [ ! -L "$pkg_provider_binding_access_dir" ] || return 1
+    command -p -- chmod 711 "$pkg_provider_binding_access_dir" || return 1
+  done
+}
+
+pkg_provider_effective_selector_runtime_access_prepare()
+{
+  [ "$#" -eq 2 ] || return 2
+  _pkg_provider_binding_file "$1" "$2" || return $?
+  pkg_provider_runtime_binding=$pkg_provider_config_file
+
+  if [ -e "$pkg_provider_runtime_binding" ] || [ -L "$pkg_provider_runtime_binding" ]
+  then
+    [ -f "$pkg_provider_runtime_binding" ] && [ ! -L "$pkg_provider_runtime_binding" ] || return 1
+    _pkg_provider_config_query "$pkg_provider_runtime_binding" >/dev/null || return 1
+    _pkg_provider_binding_parent_access_prepare "$1" || return 1
+    command -p -- chmod 644 "$pkg_provider_runtime_binding"
+    return $?
+  fi
+
+  pkg_provider_default_runtime_access_prepare "$2"
+}
+
 _pkg_provider_config_unset()
 {
   [ "$#" -eq 1 ] || return 2
@@ -321,7 +363,9 @@ _pkg_provider_bind()
   then
     _pkg_provider_config_query "$pkg_provider_config_file"
   else
-    _pkg_provider_config_set "$pkg_provider_config_file" "$3"
+    _pkg_provider_selector_validate "$3" || return 2
+    _pkg_provider_binding_parent_access_prepare "$1" || return 1
+    _pkg_provider_config_set "$pkg_provider_config_file" "$3" 644
   fi
 }
 
