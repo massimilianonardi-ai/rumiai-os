@@ -24,7 +24,10 @@ INITIAL TEXT DOMAIN
         TAB
         LF line separators
 
-    Other input is outside the first-delivery contract. TAB is preserved but is
+    Other input is outside the first-delivery contract. NUL-free input is a
+    caller precondition: portable POSIX shell variables cannot represent NUL,
+    so this implementation does not claim deterministic NUL rejection.
+    Detectable non-ASCII/control input is rejected. TAB is preserved but is
     rendered with a one-column '>' placeholder.
 
 KEYS
