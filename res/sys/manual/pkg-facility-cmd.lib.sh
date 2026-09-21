@@ -3,9 +3,10 @@ NAME
 
 DESCRIPTION
     pkg-facility-cmd.lib.sh implements the trusted internal validation semantics for
-    the cmd typed facility part. It validates required command marker names and the
-    provider's facility-cmd mapping to executable targets contained by the provider
-    useful root.
+    the cmd typed facility part. It validates realization structure and executable
+    targets contained by the provider useful root, and composes that validation with
+    exact contract membership for provider conformance. Package integration reuses
+    the same internal realization validation without acquiring catalog context.
 
     The library performs no command publication or provider selection.
 

@@ -1,0 +1,49 @@
+NAME
+    editor - select nano, vim or vi as the available terminal editor
+
+SYNOPSIS
+    editor [argument ...]
+
+DESCRIPTION
+    editor is a thin terminal-editor wrapper.
+
+    It selects the first available backend in this order:
+
+        nano
+        vim
+        vi
+
+    All arguments are passed unchanged and in their original order to the
+    selected backend.
+
+    editor does not define or reinterpret editor options, resolve file paths,
+    inspect terminal state, rewrite backend diagnostics, or normalize backend
+    exit statuses.
+
+BACKEND POLICY
+    nano
+        Preferred whenever available.
+
+    vim
+        Used when nano is unavailable.
+
+    vi
+        Final fallback when neither nano nor vim is available.
+
+    Selection is based on command availability, not operating-system identity.
+
+ARGUMENTS
+    argument
+        Argument passed unchanged to the selected backend. Zero or more
+        arguments are accepted.
+
+EXIT STATUS
+    The exit status is the status of the selected backend, or the shell
+    execution-failure status if the selected backend cannot be executed.
+    editor does not define a normalized backend-independent status mapping.
+
+SEE ALSO
+    manual
+    nano
+    vim
+    vi

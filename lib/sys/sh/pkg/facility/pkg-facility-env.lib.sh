@@ -71,14 +71,12 @@ _pkg_facility_env_descriptor_validate()
   esac
 }
 
-_pkg_facility_env_provider_validate()
+_pkg_facility_env_realization_validate()
 {
-  [ "$#" -eq 3 ] || return 2
-  pkg_facility_env_contract=$1
-  pkg_facility_env_realization=$2
-  pkg_facility_env_root=$3
+  [ "$#" -eq 2 ] || return 2
+  pkg_facility_env_realization=$1
+  pkg_facility_env_root=$2
 
-  _pkg_facility_env_contract_validate "$pkg_facility_env_contract" || return 1
   [ -f "$pkg_facility_env_realization" ] && [ ! -L "$pkg_facility_env_realization" ] && [ -r "$pkg_facility_env_realization" ] && [ ! -x "$pkg_facility_env_realization" ] || return 1
   [ -d "$pkg_facility_env_root" ] && [ ! -L "$pkg_facility_env_root" ] || return 1
   readpathce pkg_facility_env_root_resolved "$pkg_facility_env_root" || return 1
@@ -109,11 +107,31 @@ _pkg_facility_env_provider_validate()
     _pkg_facility_env_name_valid "$pkg_facility_env_name" || return 1
     [ "$pkg_facility_env_name" != "$pkg_facility_env_previous" ] || return 1
     pkg_facility_env_previous=$pkg_facility_env_name
-    [ -f "$pkg_facility_env_contract/$pkg_facility_env_name" ] && [ ! -L "$pkg_facility_env_contract/$pkg_facility_env_name" ] || return 1
     _pkg_facility_env_descriptor_validate "$pkg_facility_env_descriptor" "$pkg_facility_env_root" || return 1
     pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
   done < "$pkg_facility_env_realization"
-  [ "$pkg_facility_env_realization_count" -gt 0 ] || return 1
+
+  [ "$pkg_facility_env_realization_count" -gt 0 ]
+}
+
+_pkg_facility_env_provider_validate()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_facility_env_contract=$1
+  pkg_facility_env_realization=$2
+  pkg_facility_env_root=$3
+
+  _pkg_facility_env_contract_validate "$pkg_facility_env_contract" || return 1
+  _pkg_facility_env_realization_validate "$pkg_facility_env_realization" "$pkg_facility_env_root" || return 1
+
+  pkg_facility_env_tab="$(printf '\t')"
+  pkg_facility_env_realization_count=0
+  while IFS= read -r pkg_facility_env_line
+  do
+    pkg_facility_env_name=${pkg_facility_env_line%%"$pkg_facility_env_tab"*}
+    [ -f "$pkg_facility_env_contract/$pkg_facility_env_name" ] && [ ! -L "$pkg_facility_env_contract/$pkg_facility_env_name" ] || return 1
+    pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
+  done < "$pkg_facility_env_realization"
 
   pkg_facility_env_contract_count=0
   for pkg_facility_env_marker in "$pkg_facility_env_contract"/*

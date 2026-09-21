@@ -1,0 +1,11 @@
+#!/bin/sh
+
+if command -v nano >/dev/null 2>&1
+then
+  exec nano "$@"
+elif command -v vim >/dev/null 2>&1
+then
+  exec vim "$@"
+else
+  exec vi "$@"
+fi
