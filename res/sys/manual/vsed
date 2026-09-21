@@ -1,0 +1,121 @@
+NAME
+    vsed - edit sensitive text in memory using a terminal UI
+
+SYNOPSIS
+    vsed
+    vsed <file>
+
+DESCRIPTION
+    vsed is a minimal visual stream editor for sensitive text.
+
+    With no operand, vsed reads the complete initial document from standard
+    input, edits it in memory, and writes the saved result to standard output.
+
+    With one file operand, vsed loads that existing readable/writable regular
+    file, edits it in memory, and writes the saved result directly back to the
+    same file.
+
+    The interactive interface uses /dev/tty. UI text is never written to stdout.
+
+INITIAL TEXT DOMAIN
+    The first implementation accepts NUL-free text containing only:
+
+        printable 7-bit ASCII
+        TAB
+        LF line separators
+
+    Other input is outside the first-delivery contract. TAB is preserved but is
+    rendered with a one-column '>' placeholder.
+
+KEYS
+    Printable ASCII
+        Insert at the cursor.
+
+    Tab
+        Insert a TAB.
+
+    Enter
+        Split the current line.
+
+    Backspace
+        Delete the previous character, joining lines at line start.
+
+    Delete
+        Delete the current character, joining the next line at line end.
+
+    Left / Right
+        Move one character, crossing line boundaries.
+
+    Up / Down
+        Move between logical lines.
+
+    Home / End
+        Move to the start/end of the current line.
+
+    PageUp / PageDown
+        Move approximately one visible page.
+
+    Ctrl-X
+        Save and exit successfully.
+
+    Escape
+        Cancel and exit without saving.
+
+MEMORY-ONLY SECURITY
+    vsed does not create plaintext temporary, swap, backup, undo, journal or
+    recovery files and does not invoke an external editor.
+
+    The editable document is held in non-exported process-local shell state.
+    Shell xtrace and verbose tracing are disabled before document content is
+    loaded.
+
+    In stream mode, saved plaintext is written only to stdout. In file mode,
+    saved plaintext is written only to the selected file.
+
+    File-mode save is deliberately direct rather than atomic: avoiding a
+    plaintext staging file means an I/O failure during save can leave a
+    partially written target.
+
+    vsed clears/leaves its alternate screen and unsets document variables on
+    normal/trapped cleanup where possible. Portable POSIX shell cannot provide
+    guaranteed memory zeroization.
+
+SECURITY BOUNDARY
+    The command cannot guarantee against operating-system paging/swap,
+    hibernation, external core-dump policy, process-memory inspection, terminal
+    emulator capture/history, kernel/device buffers, host-shell implementation
+    internals, or physical memory remanence.
+
+    Input control bytes are not emitted as terminal control sequences because
+    they are outside the supported first-delivery text domain.
+
+SAVE FIDELITY
+    Within the supported text domain, an unchanged save preserves empty input,
+    empty lines, TAB bytes, and the presence or absence of the final LF.
+
+OPERANDS
+    file
+        Existing readable and writable regular file to load and save in place.
+
+EXIT STATUS
+    0
+        Saved successfully.
+
+    1
+        Editing cancelled by the user.
+
+    2
+        Invalid invocation, unsupported input, terminal/runtime failure, or
+        save failure.
+
+FILES
+    /dev/tty
+        Interactive terminal input and visual output.
+
+    vsed does not create a temporary, swap, backup, undo, journal or recovery
+    file.
+
+SEE ALSO
+    editor
+    term.lib.sh
+    array.lib.sh

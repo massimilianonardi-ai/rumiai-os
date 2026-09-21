@@ -1,0 +1,557 @@
+#!/usr/bin/env m
+
+case $- in *x*) set +x;; esac
+case $- in *v*) set +v;; esac
+
+LC_ALL=C
+export LC_ALL
+
+. "$m_LIB_DIR/sys/sh/array.lib.sh"
+. "$m_LIB_DIR/sys/sh/term.lib.sh"
+
+vsed_error=
+vsed_screen=0
+vsed_keypad=0
+vsed_modified=0
+vsed_mode=
+vsed_path=
+vsed_current_line=0
+vsed_left=
+vsed_right=
+vsed_view_top=0
+vsed_hscroll=0
+vsed_tab=$(printf '\tX')
+vsed_tab=${vsed_tab%X}
+
+vsed_terminal_close()
+{
+  vsed_close_status=0
+
+  if [ "$vsed_keypad" -eq 1 ]
+  then
+    term_keypad_disable >/dev/null 2>&1 || vsed_close_status=1
+    vsed_keypad=0
+  fi
+
+  if [ "$vsed_screen" -eq 1 ]
+  then
+    term_clear >/dev/null 2>&1 || :
+    term_screen_leave >/dev/null 2>&1 || vsed_close_status=1
+    vsed_screen=0
+  fi
+
+  if [ "${term_tty_saved-}" = true ]
+  then
+    term_tty_restore >/dev/null 2>&1 || vsed_close_status=1
+  fi
+
+  return "$vsed_close_status"
+}
+
+vsed_cleanup()
+{
+  vsed_status=$?
+
+  trap - 0 HUP INT QUIT TERM PIPE TSTP
+
+  vsed_terminal_close >/dev/null 2>&1 || :
+
+  array vsed_lines unset >/dev/null 2>&1 || :
+  unset \
+    vsed_left vsed_right vsed_output_line vsed_render_text vsed_rendered \
+    vsed_input_line vsed_current_text vsed_previous_text vsed_next_text \
+    vsed_display_line vsed_check vsed_char vsed_rest vsed_prefix
+
+  if [ -n "$vsed_error" ]
+  then
+    printf '%s\n' "vsed: $vsed_error" >&2
+  fi
+
+  exit "$vsed_status"
+}
+
+vsed_fail()
+{
+  vsed_error=$2
+  exit "$1"
+}
+
+vsed_line_valid()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  vsed_check=$1
+  while [ -n "$vsed_check" ]
+  do
+    vsed_rest=${vsed_check#?}
+    vsed_char=${vsed_check%"$vsed_rest"}
+    vsed_check=$vsed_rest
+
+    case "$vsed_char" in
+      "$vsed_tab"|[[:print:]]) : ;;
+      *) return 1 ;;
+    esac
+  done
+
+  return 0
+}
+
+vsed_load()
+{
+  array vsed_lines || return 1
+
+  vsed_any=0
+  vsed_last_delimited=0
+
+  while :
+  do
+    vsed_input_line=
+    IFS= read -r vsed_input_line
+    vsed_read_status=$?
+
+    if [ "$vsed_read_status" -eq 0 ]
+    then
+      vsed_line_valid "$vsed_input_line" || return 2
+      array vsed_lines add "$vsed_input_line" || return 1
+      vsed_any=1
+      vsed_last_delimited=1
+      continue
+    fi
+
+    if [ -n "$vsed_input_line" ]
+    then
+      vsed_line_valid "$vsed_input_line" || return 2
+      array vsed_lines add "$vsed_input_line" || return 1
+      vsed_any=1
+      vsed_last_delimited=0
+    fi
+
+    break
+  done
+
+  if [ "$vsed_any" -eq 0 ]
+  then
+    array vsed_lines add '' || return 1
+  elif [ "$vsed_last_delimited" -eq 1 ]
+  then
+    array vsed_lines add '' || return 1
+  fi
+
+  return 0
+}
+
+vsed_line_commit()
+{
+  array vsed_lines put "$vsed_current_line" "$vsed_left$vsed_right"
+}
+
+vsed_line_open()
+{
+  [ "$#" -eq 2 ] || return 1
+
+  vsed_target_line=$1
+  vsed_target_col=$2
+
+  vsed_line_commit || return 1
+  array vsed_lines get "$vsed_target_line" vsed_right || return 1
+  vsed_left=
+  vsed_current_line=$vsed_target_line
+
+  vsed_step=0
+  while [ "$vsed_step" -lt "$vsed_target_col" ] && [ -n "$vsed_right" ]
+  do
+    vsed_rest=${vsed_right#?}
+    vsed_char=${vsed_right%"$vsed_rest"}
+    vsed_left=$vsed_left$vsed_char
+    vsed_right=$vsed_rest
+    vsed_step=$((vsed_step + 1))
+  done
+
+  return 0
+}
+
+vsed_move_left()
+{
+  if [ -n "$vsed_left" ]
+  then
+    vsed_prefix=${vsed_left%?}
+    vsed_char=${vsed_left#"$vsed_prefix"}
+    vsed_right=$vsed_char$vsed_right
+    vsed_left=$vsed_prefix
+    return 0
+  fi
+
+  [ "$vsed_current_line" -gt 0 ] || return 0
+
+  vsed_target_line=$((vsed_current_line - 1))
+  vsed_line_commit || return 1
+  array vsed_lines get "$vsed_target_line" vsed_left || return 1
+  vsed_right=
+  vsed_current_line=$vsed_target_line
+}
+
+vsed_move_right()
+{
+  if [ -n "$vsed_right" ]
+  then
+    vsed_rest=${vsed_right#?}
+    vsed_char=${vsed_right%"$vsed_rest"}
+    vsed_left=$vsed_left$vsed_char
+    vsed_right=$vsed_rest
+    return 0
+  fi
+
+  array vsed_lines size vsed_line_count || return 1
+  vsed_target_line=$((vsed_current_line + 1))
+  [ "$vsed_target_line" -lt "$vsed_line_count" ] || return 0
+
+  vsed_line_commit || return 1
+  array vsed_lines get "$vsed_target_line" vsed_right || return 1
+  vsed_left=
+  vsed_current_line=$vsed_target_line
+}
+
+vsed_move_vertical()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  array vsed_lines size vsed_line_count || return 1
+  vsed_col=${#vsed_left}
+  vsed_target_line=$((vsed_current_line + $1))
+
+  [ "$vsed_target_line" -ge 0 ] || vsed_target_line=0
+  [ "$vsed_target_line" -lt "$vsed_line_count" ] || vsed_target_line=$((vsed_line_count - 1))
+
+  [ "$vsed_target_line" -ne "$vsed_current_line" ] || return 0
+  vsed_line_open "$vsed_target_line" "$vsed_col"
+}
+
+vsed_home()
+{
+  vsed_right=$vsed_left$vsed_right
+  vsed_left=
+}
+
+vsed_end()
+{
+  vsed_left=$vsed_left$vsed_right
+  vsed_right=
+}
+
+vsed_backspace()
+{
+  if [ -n "$vsed_left" ]
+  then
+    vsed_left=${vsed_left%?}
+    vsed_modified=1
+    return 0
+  fi
+
+  [ "$vsed_current_line" -gt 0 ] || return 0
+
+  vsed_current_text=$vsed_right
+  vsed_previous_line=$((vsed_current_line - 1))
+  array vsed_lines get "$vsed_previous_line" vsed_previous_text || return 1
+  array vsed_lines put "$vsed_previous_line" "$vsed_previous_text$vsed_current_text" || return 1
+  array vsed_lines rem "$vsed_current_line" || return 1
+
+  vsed_current_line=$vsed_previous_line
+  vsed_left=$vsed_previous_text
+  vsed_right=$vsed_current_text
+  vsed_modified=1
+}
+
+vsed_delete()
+{
+  if [ -n "$vsed_right" ]
+  then
+    vsed_right=${vsed_right#?}
+    vsed_modified=1
+    return 0
+  fi
+
+  array vsed_lines size vsed_line_count || return 1
+  vsed_next_line=$((vsed_current_line + 1))
+  [ "$vsed_next_line" -lt "$vsed_line_count" ] || return 0
+
+  array vsed_lines get "$vsed_next_line" vsed_next_text || return 1
+  vsed_right=$vsed_next_text
+  array vsed_lines put "$vsed_current_line" "$vsed_left$vsed_right" || return 1
+  array vsed_lines rem "$vsed_next_line" || return 1
+  vsed_modified=1
+}
+
+vsed_enter()
+{
+  array vsed_lines put "$vsed_current_line" "$vsed_left" || return 1
+  vsed_current_line=$((vsed_current_line + 1))
+  array vsed_lines ins "$vsed_current_line" "$vsed_right" || return 1
+  vsed_left=
+  vsed_modified=1
+}
+
+vsed_insert_text()
+{
+  [ "$#" -eq 1 ] || return 1
+  vsed_left=$vsed_left$1
+  vsed_modified=1
+}
+
+vsed_render_line()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  vsed_render_text=$1
+  vsed_rendered=
+  vsed_render_col=0
+  vsed_render_end=$((vsed_hscroll + term_cols))
+
+  while [ -n "$vsed_render_text" ] && [ "$vsed_render_col" -lt "$vsed_render_end" ]
+  do
+    vsed_rest=${vsed_render_text#?}
+    vsed_char=${vsed_render_text%"$vsed_rest"}
+    vsed_render_text=$vsed_rest
+
+    if [ "$vsed_render_col" -ge "$vsed_hscroll" ]
+    then
+      if [ "$vsed_char" = "$vsed_tab" ]
+      then
+        vsed_rendered=$vsed_rendered'>'
+      else
+        vsed_rendered=$vsed_rendered$vsed_char
+      fi
+    fi
+
+    vsed_render_col=$((vsed_render_col + 1))
+  done
+
+  printf '%s' "$vsed_rendered" > "$term_tty_device" || return 1
+  term_line_clear || return 1
+}
+
+vsed_render()
+{
+  term_size_update || return 1
+  [ "$term_rows" -ge 3 ] || return 1
+  [ "$term_cols" -ge 20 ] || return 1
+
+  vsed_view_rows=$((term_rows - 1))
+  array vsed_lines size vsed_line_count || return 1
+  vsed_cursor_col=${#vsed_left}
+
+  if [ "$vsed_current_line" -lt "$vsed_view_top" ]
+  then
+    vsed_view_top=$vsed_current_line
+  elif [ "$vsed_current_line" -ge $((vsed_view_top + vsed_view_rows)) ]
+  then
+    vsed_view_top=$((vsed_current_line - vsed_view_rows + 1))
+  fi
+
+  if [ "$vsed_cursor_col" -lt "$vsed_hscroll" ]
+  then
+    vsed_hscroll=$vsed_cursor_col
+  elif [ "$vsed_cursor_col" -ge $((vsed_hscroll + term_cols)) ]
+  then
+    vsed_hscroll=$((vsed_cursor_col - term_cols + 1))
+  fi
+
+  term_clear || return 1
+
+  vsed_row=0
+  while [ "$vsed_row" -lt "$vsed_view_rows" ]
+  do
+    term_cursor_move "$vsed_row" 0 || return 1
+    vsed_line_index=$((vsed_view_top + vsed_row))
+
+    if [ "$vsed_line_index" -lt "$vsed_line_count" ]
+    then
+      if [ "$vsed_line_index" -eq "$vsed_current_line" ]
+      then
+        vsed_display_line=$vsed_left$vsed_right
+      else
+        array vsed_lines get "$vsed_line_index" vsed_display_line || return 1
+      fi
+      vsed_render_line "$vsed_display_line" || return 1
+    else
+      term_line_clear || return 1
+    fi
+
+    vsed_row=$((vsed_row + 1))
+  done
+
+  term_cursor_move "$vsed_view_rows" 0 || return 1
+  if [ "$vsed_modified" -eq 1 ]
+  then
+    vsed_mark='*'
+  else
+    vsed_mark=' '
+  fi
+  printf 'vsed%s %s/%s:%s  ^X save  Esc cancel' \
+    "$vsed_mark" \
+    "$((vsed_current_line + 1))" \
+    "$vsed_line_count" \
+    "$((vsed_cursor_col + 1))" > "$term_tty_device" || return 1
+  term_line_clear || return 1
+
+  vsed_cursor_row=$((vsed_current_line - vsed_view_top))
+  vsed_screen_col=$((vsed_cursor_col - vsed_hscroll))
+  term_cursor_move "$vsed_cursor_row" "$vsed_screen_col" || return 1
+}
+
+vsed_output_buffer()
+{
+  vsed_line_commit || return 1
+  array vsed_lines size vsed_line_count || return 1
+
+  vsed_output_index=0
+  while [ "$vsed_output_index" -lt "$vsed_line_count" ]
+  do
+    if [ "$vsed_output_index" -gt 0 ]
+    then
+      printf '\n' || return 1
+    fi
+
+    array vsed_lines get "$vsed_output_index" vsed_output_line || return 1
+    printf '%s' "$vsed_output_line" || return 1
+    vsed_output_index=$((vsed_output_index + 1))
+  done
+}
+
+vsed_save()
+{
+  if [ "$vsed_mode" = stdout ]
+  then
+    vsed_output_buffer
+  else
+    if [ "$vsed_modified" -eq 0 ]
+    then
+      return 0
+    fi
+    vsed_output_buffer > "$vsed_path"
+  fi
+}
+
+vsed_run()
+{
+  term_tty_save || return 1
+  term_screen_enter || return 1
+  vsed_screen=1
+
+  if term_keypad_enable
+  then
+    vsed_keypad=1
+  fi
+
+  term_tty_blocking || return 1
+  term_keymap_init || return 1
+
+  array vsed_lines get 0 vsed_right || return 1
+  vsed_left=
+  vsed_current_line=0
+
+  while :
+  do
+    vsed_render || return 1
+    term_read_key || return 1
+
+    case "$term_key" in
+      text)
+        case "$term_key_hex" in
+          2[0-9a-f]|[3-6][0-9a-f]|7[0-e])
+            vsed_insert_text "$term_key_text" || return 1
+            ;;
+        esac
+        ;;
+      tab)
+        vsed_insert_text "$vsed_tab" || return 1
+        ;;
+      enter)
+        vsed_enter || return 1
+        ;;
+      backspace)
+        vsed_backspace || return 1
+        ;;
+      delete)
+        vsed_delete || return 1
+        ;;
+      left)
+        vsed_move_left || return 1
+        ;;
+      right)
+        vsed_move_right || return 1
+        ;;
+      up)
+        vsed_move_vertical -1 || return 1
+        ;;
+      down)
+        vsed_move_vertical 1 || return 1
+        ;;
+      home)
+        vsed_home
+        ;;
+      end)
+        vsed_end
+        ;;
+      pageup)
+        vsed_move_vertical "-$((term_rows - 2))" || return 1
+        ;;
+      pagedown)
+        vsed_move_vertical "$((term_rows - 2))" || return 1
+        ;;
+      escape)
+        return 3
+        ;;
+      control)
+        if [ "$term_key_hex" = 18 ]
+        then
+          return 0
+        fi
+        ;;
+    esac
+  done
+}
+
+[ "$#" -le 1 ] || vsed_fail 2 'expected zero or one file operand'
+
+trap vsed_cleanup 0
+trap 'exit 129' HUP
+trap 'exit 130' INT
+trap 'exit 131' QUIT
+trap 'exit 143' TERM
+trap 'exit 141' PIPE
+trap 'exit 148' TSTP
+
+if [ "$#" -eq 1 ]
+then
+  vsed_mode=file
+  vsed_path=$1
+  [ -f "$vsed_path" ] && [ -r "$vsed_path" ] && [ -w "$vsed_path" ] || vsed_fail 2 'file is not a readable and writable regular file'
+  vsed_load < "$vsed_path"
+else
+  vsed_mode=stdout
+  vsed_load
+fi
+
+vsed_load_status=$?
+case "$vsed_load_status" in
+  0) : ;;
+  2) vsed_fail 2 'input is outside the initial ASCII text contract' ;;
+  *) vsed_fail 2 'cannot load input' ;;
+esac
+
+vsed_run
+vsed_run_status=$?
+case "$vsed_run_status" in
+  0)
+    vsed_terminal_close || vsed_fail 2 'terminal cleanup failed'
+    vsed_save || vsed_fail 2 'save failed'
+    exit 0
+    ;;
+  3)
+    vsed_terminal_close || vsed_fail 2 'terminal cleanup failed'
+    exit 1
+    ;;
+  *)
+    vsed_fail 2 'terminal editing failed'
+    ;;
+esac
