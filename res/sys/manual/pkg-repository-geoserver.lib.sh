@@ -8,14 +8,17 @@ DESCRIPTION
     Repository metadata contains exactly:
         type = geoserver
 
-    Stable release discovery uses the official geoserver/geoserver GitHub
-    releases API. Only non-draft, non-prerelease versions with strict numeric
-    X.Y.Z syntax are exposed, and those versions are ordered locally.
+    Stable release inventory/latest discovery uses the official
+    geoserver/geoserver GitHub releases API. Only non-draft, non-prerelease
+    versions with strict numeric X.Y.Z syntax are exposed, and those versions
+    are ordered locally.
 
-    Artifact resolution selects exactly geoserver-<version>-bin.zip from the
-    official SourceForge GeoServer release tree. The SourceForge release RSS
-    entry for that exact download supplies the artifact size and MD5 digest,
-    which are returned for enforcement by pkg-download.
+    Exact-version validation and artifact resolution use the official SourceForge
+    GeoServer release RSS for that version. The exact
+    geoserver-<version>-bin.zip entry proves the released binary exists and
+    supplies the artifact size and MD5 digest, which are returned for enforcement
+    by pkg-download. Exact installs therefore do not depend on anonymous GitHub
+    API quota.
 
 FUNCTIONS
     pkg_repository_list_versions <repository-dir>
@@ -25,8 +28,9 @@ FUNCTIONS
         Print -1, 0 or 1 using local numeric X.Y.Z ordering.
 
     pkg_repository_resolve_version <repository-dir> [version]
-        Validate/print an exact stable release, or print the latest available
-        valid stable release when no version is supplied.
+        Validate/print an exact released GeoServer binary through SourceForge RSS,
+        or print the latest available valid stable release from GitHub release
+        inventory when no version is supplied.
 
     pkg_repository_resolve_artifact <repository-dir> <range-dir> <version>
         Print the generic artifact descriptor for the exact platform-independent
