@@ -111,6 +111,10 @@ EXIT STATUS
         Invalid invocation, unsupported input, terminal/runtime failure, or
         save failure.
 
+    129 / 130 / 131 / 141 / 143 / 148
+        Handled HUP, INT, QUIT, PIPE, TERM and TSTP respectively. Terminal
+        cleanup is attempted before the signal-derived status is returned.
+
 FILES
     /dev/tty
         Interactive terminal input and visual output.
