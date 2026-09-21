@@ -142,7 +142,7 @@ _pkg_provider_config_set()
     [ -f "$pkg_provider_config_path" ] && [ ! -L "$pkg_provider_config_path" ] || return 1
   fi
 
-  pkg_provider_config_tmp="$pkg_provider_config_dir/.selector-$"
+  pkg_provider_config_tmp="$pkg_provider_config_dir/.selector-$$"
   [ ! -e "$pkg_provider_config_tmp" ] && [ ! -L "$pkg_provider_config_tmp" ] || return 1
   if ! printf -- '%s\n' "$pkg_provider_config_selector" > "$pkg_provider_config_tmp"
   then
