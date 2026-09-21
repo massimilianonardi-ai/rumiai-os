@@ -249,20 +249,6 @@ EOF
 
 #------------------------------------------------------------------------------
 
-# sets the editor command
-
-encoded_file_editor()
-{
-  if ! command -v "$1"
-  then
-    return 1
-  fi
-
-  export ENCODED_FILE_EDITOR="$1"
-}
-
-#------------------------------------------------------------------------------
-
 # decodes encrypted files, edits plaintext in memory with vsed, and
 # atomically replaces each original only after decode, edit and encode succeed
 #
@@ -279,6 +265,7 @@ encoded_file_editor()
 #   8   target changed during editing
 #   9   final replacement failure
 #   10  cleanup failure
+
 encoded_file_edit()
 (
   set +x
