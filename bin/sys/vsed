@@ -21,6 +21,7 @@ vsed_left=
 vsed_right=
 vsed_view_top=0
 vsed_hscroll=0
+vsed_view_rows=0
 vsed_tab=$(printf '\tX')
 vsed_tab=${vsed_tab%X}
 
@@ -302,7 +303,7 @@ vsed_insert_text()
   vsed_modified=1
 }
 
-vsed_render_line()
+vsed_render_text()
 {
   [ "$#" -eq 1 ] || return 1
 
@@ -329,19 +330,26 @@ vsed_render_line()
 
     vsed_render_col=$((vsed_render_col + 1))
   done
-
-  printf '%s' "$vsed_rendered" > "$term_tty_device" || return 1
-  term_line_clear || return 1
 }
 
-vsed_render()
+vsed_render_at()
 {
-  term_size_update || return 1
-  [ "$term_rows" -ge 3 ] || return 1
-  [ "$term_cols" -ge 20 ] || return 1
+  [ "$#" -eq 3 ] || return 1
 
-  vsed_view_rows=$((term_rows - 1))
-  array vsed_lines size vsed_line_count || return 1
+  term_cursor_move "$1" 0 || return 1
+  vsed_render_text "$2" || return 1
+  printf '%s' "$vsed_rendered" > "$term_tty_device" || return 1
+
+  if [ "$3" -eq 1 ]
+  then
+    term_line_clear || return 1
+  fi
+}
+
+vsed_view_adjust()
+{
+  vsed_old_view_top=$vsed_view_top
+  vsed_old_hscroll=$vsed_hscroll
   vsed_cursor_col=${#vsed_left}
 
   if [ "$vsed_current_line" -lt "$vsed_view_top" ]
@@ -360,12 +368,49 @@ vsed_render()
     vsed_hscroll=$((vsed_cursor_col - term_cols + 1))
   fi
 
-  term_clear || return 1
+  if [ "$vsed_old_view_top" -ne "$vsed_view_top" ] ||
+     [ "$vsed_old_hscroll" -ne "$vsed_hscroll" ]
+  then
+    vsed_view_changed=1
+  else
+    vsed_view_changed=0
+  fi
+}
+
+vsed_cursor_place()
+{
+  vsed_cursor_row=$((vsed_current_line - vsed_view_top))
+  vsed_cursor_col=${#vsed_left}
+  vsed_screen_col=$((vsed_cursor_col - vsed_hscroll))
+  term_cursor_move "$vsed_cursor_row" "$vsed_screen_col"
+}
+
+vsed_render_status()
+{
+  vsed_render_at "$vsed_view_rows" 'vsed  ^X save  Esc cancel' 1
+}
+
+vsed_render_full()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  term_size_update || return 1
+  [ "$term_rows" -ge 3 ] || return 1
+  [ "$term_cols" -ge 20 ] || return 1
+
+  vsed_view_rows=$((term_rows - 1))
+  vsed_view_adjust || return 1
+
+  if [ "$1" -eq 1 ]
+  then
+    term_clear || return 1
+  fi
+
+  array vsed_lines size vsed_line_count || return 1
 
   vsed_row=0
   while [ "$vsed_row" -lt "$vsed_view_rows" ]
   do
-    term_cursor_move "$vsed_row" 0 || return 1
     vsed_line_index=$((vsed_view_top + vsed_row))
 
     if [ "$vsed_line_index" -lt "$vsed_line_count" ]
@@ -376,30 +421,63 @@ vsed_render()
       else
         array vsed_lines get "$vsed_line_index" vsed_display_line || return 1
       fi
-      vsed_render_line "$vsed_display_line" || return 1
+      vsed_render_at "$vsed_row" "$vsed_display_line" 1 || return 1
     else
+      term_cursor_move "$vsed_row" 0 || return 1
       term_line_clear || return 1
     fi
 
     vsed_row=$((vsed_row + 1))
   done
 
-  term_cursor_move "$vsed_view_rows" 0 || return 1
-  if [ "$vsed_modified" -eq 1 ]
+  vsed_render_status || return 1
+  vsed_cursor_place || return 1
+}
+
+vsed_render_current()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  vsed_view_adjust || return 1
+  if [ "$vsed_view_changed" -eq 1 ]
   then
-    vsed_mark='*'
-  else
-    vsed_mark=' '
+    vsed_render_full 0
+    return $?
   fi
-  vsed_status_text="vsed$vsed_mark $((vsed_current_line + 1))/$vsed_line_count:$((vsed_cursor_col + 1))  ^X save  Esc cancel"
-  vsed_saved_hscroll=$vsed_hscroll
-  vsed_hscroll=0
-  vsed_render_line "$vsed_status_text" || return 1
-  vsed_hscroll=$vsed_saved_hscroll
 
   vsed_cursor_row=$((vsed_current_line - vsed_view_top))
-  vsed_screen_col=$((vsed_cursor_col - vsed_hscroll))
-  term_cursor_move "$vsed_cursor_row" "$vsed_screen_col" || return 1
+  vsed_display_line=$vsed_left$vsed_right
+  vsed_render_at "$vsed_cursor_row" "$vsed_display_line" "$1" || return 1
+  vsed_cursor_place
+}
+
+vsed_render_cursor()
+{
+  vsed_view_adjust || return 1
+  if [ "$vsed_view_changed" -eq 1 ]
+  then
+    vsed_render_full 0
+    return $?
+  fi
+
+  vsed_cursor_place
+}
+
+vsed_render_insert()
+{
+  [ "$#" -eq 2 ] || return 1
+
+  if [ "$2" -eq 1 ]
+  then
+    vsed_cursor_col=${#vsed_left}
+    if [ "$vsed_cursor_col" -lt $((vsed_hscroll + term_cols)) ]
+    then
+      printf '%s' "$1" > "$term_tty_device"
+      return $?
+    fi
+  fi
+
+  vsed_render_current 0
 }
 
 vsed_output_buffer()
@@ -466,54 +544,97 @@ vsed_run()
   vsed_left=
   vsed_current_line=0
 
+  vsed_render_full 1 || return 1
+
   while :
   do
-    vsed_render || return 1
     term_read_key || return 1
 
     case "$term_key" in
       text)
         case "$term_key_hex" in
           2[0-9a-f]|[3-6][0-9a-f]|7[0-e])
+            if [ -z "$vsed_right" ]
+            then
+              vsed_fast_append=1
+            else
+              vsed_fast_append=0
+            fi
             vsed_insert_text "$term_key_text" || return 1
+            vsed_render_insert "$term_key_text" "$vsed_fast_append" || return 1
             ;;
         esac
         ;;
       tab)
+        if [ -z "$vsed_right" ]
+        then
+          vsed_fast_append=1
+        else
+          vsed_fast_append=0
+        fi
         vsed_insert_text "$vsed_tab" || return 1
+        vsed_render_insert '>' "$vsed_fast_append" || return 1
         ;;
       enter)
         vsed_enter || return 1
+        vsed_render_full 0 || return 1
         ;;
       backspace)
-        vsed_backspace || return 1
+        if [ -n "$vsed_left" ]
+        then
+          vsed_backspace || return 1
+          vsed_render_current 1 || return 1
+        elif [ "$vsed_current_line" -gt 0 ]
+        then
+          vsed_backspace || return 1
+          vsed_render_full 0 || return 1
+        fi
         ;;
       delete)
-        vsed_delete || return 1
+        if [ -n "$vsed_right" ]
+        then
+          vsed_delete || return 1
+          vsed_render_current 1 || return 1
+        else
+          array vsed_lines size vsed_line_count || return 1
+          if [ "$((vsed_current_line + 1))" -lt "$vsed_line_count" ]
+          then
+            vsed_delete || return 1
+            vsed_render_full 0 || return 1
+          fi
+        fi
         ;;
       left)
         vsed_move_left || return 1
+        vsed_render_cursor || return 1
         ;;
       right)
         vsed_move_right || return 1
+        vsed_render_cursor || return 1
         ;;
       up)
         vsed_move_vertical -1 || return 1
+        vsed_render_cursor || return 1
         ;;
       down)
         vsed_move_vertical 1 || return 1
+        vsed_render_cursor || return 1
         ;;
       home)
         vsed_home
+        vsed_render_cursor || return 1
         ;;
       end)
         vsed_end
+        vsed_render_cursor || return 1
         ;;
       pageup)
-        vsed_move_vertical "-$((term_rows - 2))" || return 1
+        vsed_move_vertical "-$((vsed_view_rows - 1))" || return 1
+        vsed_render_cursor || return 1
         ;;
       pagedown)
-        vsed_move_vertical "$((term_rows - 2))" || return 1
+        vsed_move_vertical "$((vsed_view_rows - 1))" || return 1
+        vsed_render_cursor || return 1
         ;;
       escape)
         return 3

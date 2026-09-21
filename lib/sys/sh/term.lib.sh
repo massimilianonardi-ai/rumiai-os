@@ -82,7 +82,7 @@
 #   - stty state is restored exactly rather than reconstructed from assumptions.
 #   - tput capabilities are queried at runtime; unsupported capabilities fail
 #     cleanly instead of embedding terminal-specific escape sequences.
-#   - External utilities used: stty, tput, dd, od and tr.
+#   - External utilities used: stty, tput, od and tr.
 
 : "${term_tty_device:=/dev/tty}"
 : "${term_escape_time:=1}"
@@ -473,16 +473,32 @@ term_key_is_text()
 term_read_byte()
 {
   [ "$#" -eq 0 ] || return 2
-  term_tty_available || return 1
-  command -v dd >/dev/null 2>&1 || return 1
-  command -v od >/dev/null 2>&1 || return 1
-  command -v tr >/dev/null 2>&1 || return 1
 
-  term_byte_dec=$(dd if="$term_tty_device" bs=1 count=1 2>/dev/null | od -An -tu1 | tr -d '[:space:]')
-  [ -n "$term_byte_dec" ] || {
+  if [ "$term_tty_saved" != "true" ]
+  then
+    term_tty_available || return 1
+  fi
+
+  command -v od >/dev/null 2>&1 || return 1
+
+  term_byte_dec=$(od -An -N 1 -tu1 "$term_tty_device" 2>/dev/null) || return 1
+
+  _term_old_ifs=$IFS
+  IFS=' 	
+'
+  set -- $term_byte_dec
+  IFS=$_term_old_ifs
+  unset _term_old_ifs
+
+  if [ "$#" -eq 0 ]
+  then
+    term_byte_dec=
     term_byte_hex=
     return 3
-  }
+  fi
+
+  [ "$#" -eq 1 ] || return 1
+  term_byte_dec=$1
 
   _term_is_uint "$term_byte_dec" || return 1
   [ "$term_byte_dec" -le 255 ] 2>/dev/null || return 1
