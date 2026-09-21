@@ -326,7 +326,6 @@ _pkg_provider_default()
   fi
 
   _pkg_provider_selector_validate "$2" || return 2
-  _pkg_provider_default_parent_access_prepare || return 1
   pkg_provider_new_selector=$2
   pkg_provider_old_selector=
   if [ -e "$pkg_provider_config_file" ] || [ -L "$pkg_provider_config_file" ]
@@ -337,7 +336,7 @@ _pkg_provider_default()
   fi
 
   _pkg_provider_global_reconcile "$1" "$pkg_provider_old_selector" "$pkg_provider_new_selector" || return 1
-  if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector" 644
+  if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector"
   then
     _pkg_provider_global_reconcile "$1" "$pkg_provider_new_selector" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
     return 1
@@ -383,8 +382,7 @@ _pkg_provider_bind()
     _pkg_provider_config_query "$pkg_provider_config_file"
   else
     _pkg_provider_selector_validate "$3" || return 2
-    _pkg_provider_binding_parent_access_prepare "$1" || return 1
-    _pkg_provider_config_set "$pkg_provider_config_file" "$3" 644
+    _pkg_provider_config_set "$pkg_provider_config_file" "$3"
   fi
 }
 
