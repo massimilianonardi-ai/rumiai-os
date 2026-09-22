@@ -239,6 +239,8 @@ _pkg_integration_validate_definition()
   pkg_integration_root=$2
   pkg_integration_have_cmd=0
   pkg_integration_have_link=0
+  pkg_integration_format_file=
+  pkg_integration_component_file=
 
   for pkg_integration_entry in \
     "$pkg_integration_range"/* \
@@ -248,8 +250,16 @@ _pkg_integration_validate_definition()
     [ -e "$pkg_integration_entry" ] || [ -L "$pkg_integration_entry" ] || continue
     pkg_integration_entry_name=${pkg_integration_entry##*/}
     case "$pkg_integration_entry_name" in
-      archive_regex | digest_regex | digest_type | format)
+      archive_regex | digest_regex | digest_type)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        ;;
+      format)
+        [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        pkg_integration_format_file=$pkg_integration_entry
+        ;;
+      component)
+        [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        pkg_integration_component_file=$pkg_integration_entry
         ;;
       facility)
         _pkg_facility_file_validate "$pkg_integration_entry" || return 1
@@ -282,6 +292,19 @@ _pkg_integration_validate_definition()
         ;;
     esac
   done
+
+  [ -n "$pkg_integration_format_file" ] || return 1
+  pkg_integration_format_value="$(command -p -- cat -- "$pkg_integration_format_file")" || return 1
+  case "$pkg_integration_format_value" in
+    *'
+'*) return 1 ;;
+  esac
+  if [ "$pkg_integration_format_value" = dmg-pkg ]
+  then
+    [ -n "$pkg_integration_component_file" ] || return 1
+  else
+    [ -z "$pkg_integration_component_file" ] || return 1
+  fi
 
   _pkg_integration_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
 
