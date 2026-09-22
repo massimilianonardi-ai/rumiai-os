@@ -13,7 +13,9 @@ DESCRIPTION
 
     Facility dependencies are re-resolved at every launch. The launcher applies the
     consumer's configured binding when present, otherwise the system facility
-    default. Selected provider projections are interpreted generically from
+    default. A platform-independent consumer concrete uses the active m_OSARCH as
+    its applicable dependency platform class; its concrete identity remains
+    platform-independent. Selected provider projections are interpreted generically from
     facility-cmd and facility-env metadata; package-specific provider logic is not
     part of the launcher contract.
 

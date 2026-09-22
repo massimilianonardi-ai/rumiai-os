@@ -10,6 +10,9 @@ DESCRIPTION
     and verifies artifacts, extracts/materializes them, validates any provider
     realization against facility contracts from that exact catalog snapshot, and
     delegates final package integration to the package integration facilities.
+    A package resolved from `all` keeps a platform-independent concrete identity,
+    while dependency validation retains the requested/current target osarch as the
+    consumer's applicable platform class.
 
 FUNCTIONS
     pkg_install <package-spec>...

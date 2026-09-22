@@ -266,13 +266,27 @@ _pkg_dependency_provider_satisfies()
   return 1
 }
 
+_pkg_dependency_consumer_osarch_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_dependency_effective_osarch=$1
+
+  if [ -z "$pkg_dependency_effective_osarch" ]
+  then
+    pkg_dependency_effective_osarch=${m_OSARCH-}
+  fi
+
+  _pkg_provider_osarch_valid "$pkg_dependency_effective_osarch"
+}
+
 _pkg_dependency_resolve_one()
 {
   [ "$#" -eq 4 ] || return 2
   pkg_dependency_facility=$1
   pkg_dependency_constraints=$2
   pkg_dependency_consumer=$3
-  pkg_dependency_consumer_osarch=$4
+  _pkg_dependency_consumer_osarch_resolve "$4" || return 1
+  pkg_dependency_consumer_osarch=$pkg_dependency_effective_osarch
 
   pkg_dependency_selector="$(pkg_provider_effective_selector "$pkg_dependency_consumer" "$pkg_dependency_facility")" || return 1
   pkg_dependency_resolved_provider="$(pkg_provider_selector_resolve "$pkg_dependency_selector" "$pkg_dependency_consumer_osarch")" || return 1

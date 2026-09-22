@@ -21,6 +21,10 @@ FUNCTIONS
 
     pkg_dependency_resolve <dependency-file> <consumer> <consumer-osarch>
         Resolve every dependency declaration through the effective provider selector.
+        consumer-osarch is the consumer's applicable execution/install target class.
+        When it is empty, the active m_OSARCH class is used. This allows a
+        platform-independent consumer concrete to depend on a platform-specific
+        provider without adding an osarch suffix to the consumer identity.
         On success, print zero or more tab-separated lines:
 
             <facility><TAB><provider-concrete>

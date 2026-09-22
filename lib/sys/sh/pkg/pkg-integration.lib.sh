@@ -553,18 +553,31 @@ _pkg_default_create_bindings()
 
 pkg_integrate()
 (
-  [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
+  [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ] || return 2
   pkg_integrate_pkg=$1
   pkg_integrate_version=$2
   pkg_integrate_range_input=$3
   pkg_integrate_root_input=$4
   pkg_integrate_osarch=${5-}
+  pkg_integrate_dependency_osarch=$pkg_integrate_osarch
+  if [ "$#" -eq 6 ]
+  then
+    pkg_integrate_dependency_osarch=$6
+  fi
 
   _pkg_integration_name_valid "$pkg_integrate_pkg" || return 2
   _pkg_integration_version_valid "$pkg_integrate_version" || return 2
   if [ -n "$pkg_integrate_osarch" ]
   then
     _pkg_integration_osarch_valid "$pkg_integrate_osarch" || return 2
+  fi
+  if [ -n "$pkg_integrate_dependency_osarch" ]
+  then
+    _pkg_integration_osarch_valid "$pkg_integrate_dependency_osarch" || return 2
+  fi
+  if [ -n "$pkg_integrate_osarch" ] && [ "$pkg_integrate_dependency_osarch" != "$pkg_integrate_osarch" ]
+  then
+    return 2
   fi
 
   [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
@@ -583,7 +596,7 @@ pkg_integrate()
   _pkg_state_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_pkg" || return 1
   _pkg_setuid_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_osarch" "$pkg_state_paths" || return 1
 
-  if ! pkg_dependency_resolve "$pkg_integrate_range/dependency" "$pkg_integrate_pkg" "$pkg_integrate_osarch" >/dev/null
+  if ! pkg_dependency_resolve "$pkg_integrate_range/dependency" "$pkg_integrate_pkg" "$pkg_integrate_dependency_osarch" >/dev/null
   then
     _pkg_integration_error pkg-integrate dependency-resolution-failed
     return 1

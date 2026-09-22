@@ -504,12 +504,18 @@ _pkg_install_one()
     return 1
   fi
 
+  pkg_integrate \
+    "$pkg_install_pkg" \
+    "$pkg_install_version" \
+    "$pkg_install_selected_range" \
+    "$pkg_install_extract_dir" \
+    "$pkg_install_identity_osarch" \
+    "$pkg_install_target" || return 1
+
   if [ -n "$pkg_install_identity_osarch" ]
   then
-    pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_selected_range" "$pkg_install_extract_dir" "$pkg_install_identity_osarch" || return 1
     pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch"
   else
-    pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_selected_range" "$pkg_install_extract_dir" || return 1
     pkg_default_apply "$pkg_install_pkg" "$pkg_install_version"
   fi
 )

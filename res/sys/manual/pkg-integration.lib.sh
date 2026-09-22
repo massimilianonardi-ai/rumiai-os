@@ -6,7 +6,7 @@ DESCRIPTION
     default application inside the managed package store.
 
 FUNCTIONS
-    pkg_integrate <package> <version> <range-dir> <root-dir> [<osarch>]
+    pkg_integrate <package> <version> <range-dir> <root-dir> [<osarch> [<consumer-osarch>]]
         Validate a resolved package definition and extracted useful root, validate
         configured facility dependencies, materialize the managed concrete and its
         command/environment/facility/state metadata, validate and materialize
@@ -20,6 +20,14 @@ FUNCTIONS
         integration. Integration validates the local realization structure it
         materializes through the same trusted cmd/env/service typed-part handlers,
         while retaining package-definition envelope and declared-facility checks.
+
+        osarch controls the concrete package identity/class. consumer-osarch
+        controls the applicable platform class used for dependency validation. When
+        consumer-osarch is omitted it defaults to osarch; when both are empty,
+        dependency resolution uses the active m_OSARCH class. A platform-independent
+        concrete installed for an explicit target may therefore pass an empty osarch
+        and that target as consumer-osarch. A non-empty concrete osarch and
+        consumer-osarch must match.
 
         Dependency validation uses the consumer's configured binding or inherited
         system facility default. Integration stores dependency declarations but does
