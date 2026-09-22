@@ -12,6 +12,19 @@ DESCRIPTION
     a compatible facility.
 
 FUNCTIONS
+    pkg_dependency_default_resolve <facility> <constraint>...
+        Resolve the configured system facility default through the normal global
+        package-class/osarch semantics and require the selected installed concrete
+        to declare <facility> at a compatibility satisfying every supplied
+        constraint.
+
+        On success, print the selected concrete provider identity. The function is
+        read-only: it does not install packages, choose a provider implicitly,
+        create/change a facility default or create a consumer binding.
+
+        Returns 0 on success, 1 when the requirement is not currently satisfiable,
+        and 2 for invalid invocation, facility or constraint syntax.
+
     pkg_dependency_runtime_access_prepare <provider-concrete>
         Starting from one installed concrete provider, recursively resolve its
         facility dependencies using the normal binding/default rules and prepare
