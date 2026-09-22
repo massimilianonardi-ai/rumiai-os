@@ -8,7 +8,7 @@ pkg_command=$1
 shift
 
 case "$pkg_command" in
-  install|uninstall|versions|default|provider) :;;
+  install|uninstall|versions|default|provider|requirement) :;;
   *) fatal 2 execution invalid-arguments operation pkg subcommand "$pkg_command";;
 esac
 
