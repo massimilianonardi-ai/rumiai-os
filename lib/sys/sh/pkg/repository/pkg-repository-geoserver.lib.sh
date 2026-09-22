@@ -265,8 +265,14 @@ EOF_METADATA
   [ "${#md5}" -eq 32 ] || return 1
   case "$md5" in *[!0-9a-f]*) return 1;; esac
 
+  download_url="https://sourceforge.net/projects/geoserver/files/GeoServer/$version/$name/download"
+
   printf -- 'name=%s\n' "$name"
-  printf -- 'url=https://sourceforge.net/projects/geoserver/files/GeoServer/%s/%s/download\n' "$version" "$name"
+  printf -- 'url=%s\n' "$download_url"
+  for mirror in pilotfiber phoenixnap psychz cfhcable
+  do
+    printf -- 'url=%s?use_mirror=%s\n' "$download_url" "$mirror"
+  done
   printf -- 'size=%s\n' "$size"
   printf -- 'digest=md5:%s\n' "$md5"
 )

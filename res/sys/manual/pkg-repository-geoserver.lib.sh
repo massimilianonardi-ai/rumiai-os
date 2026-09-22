@@ -34,7 +34,8 @@ FUNCTIONS
 
     pkg_repository_resolve_artifact <repository-dir> <range-dir> <version>
         Print the generic artifact descriptor for the exact platform-independent
-        binary ZIP. The range must declare digest_type md5.
+        binary ZIP, including ordered SourceForge URL candidates plus the upstream
+        size and MD5 digest. The range must declare digest_type md5.
 
 DEPENDENCIES
     json.lib.sh
