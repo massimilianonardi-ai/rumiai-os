@@ -100,10 +100,13 @@ encode()
       "$2" \
       --output - \
       --symmetric \
-      3<<EOF_PASS ||
-        return 1
+      3<<EOF_PASS
 $1
 EOF_PASS
+    if [ "$?" -ne "0" ]
+    then
+      return 1
+    fi
   else
     command gpg \
       --no-options \
@@ -204,10 +207,13 @@ decode()
       --gnupg \
       --output - \
       --decrypt \
-      3<<EOF_PASS ||
-        return 1
+      3<<EOF_PASS
 $1
 EOF_PASS
+    if [ "$?" -ne "0" ]
+    then
+      return 1
+    fi
   else
     command gpg \
       --no-options \
