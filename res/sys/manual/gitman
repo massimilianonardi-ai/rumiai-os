@@ -157,14 +157,14 @@ EDIT CONFIGURATION
 
 GIT ACTION MENU
     Opening a repository shows a small set of frequent actions followed by
-    grouped submenus:
+    grouped submenus. Sync + Push is the first root action:
 
+        Sync + Push: git add --all → git commit -m <commit-message> →
+            git pull --no-rebase --no-edit → git push
         Status: git status --short --branch
         Diff: git diff
         Pull: git pull
         Commit: git commit -m <commit-message>
-        Sync + Push: git add --all → git commit -m <commit-message> →
-            git pull --no-rebase --no-edit → git push
 
         Changes >
         History >
@@ -276,14 +276,25 @@ OUTPUT MODES
         gitman invokes every Git action with --no-pager. Output is intentionally
         left in the normal terminal.
 
-        Before each command, gitman prints the repository and action so
-        accumulated output remains attributable. A normal leaf action displays:
+        Before each command sequence selected from a menu, gitman prints one
+        header containing the concrete selected menu label:
+
+            --------------------------------------------------
+            <selected-menu-label>
+            --------------------------------------------------
+
+        Each separator is exactly 50 hyphen characters. A composite action such
+        as Sync + Push prints the header once for the whole internal Git sequence,
+        not once for each Git subprocess. Branch switching uses the concrete
+        selected branch label, for example:
+
+            Switch: git switch feature/example
+
+        After the sequence stops or completes, gitman displays:
 
             Press any key to continue...
 
-        after the command. A composite action such as Sync + Push runs its
-        internal Git sequence without intermediate acknowledgements and waits
-        once after the sequence stops or completes.
+        A composite action does not add intermediate acknowledgements.
 
     gitman does not clear the normal terminal or insert arbitrary batches of
     blank lines to separate Git action output.
