@@ -24,8 +24,10 @@ FUNCTIONS
         binding.
 
 DEPENDENCIES
-    The library uses pkg-dependency.lib.sh for facility compatibility and
-    system-default resolution.
+    The library loads pkg-facility.lib.sh and pkg-dependency.lib.sh so the public
+    subcommand has the complete facility/compatibility contract independent of
+    historical caller load order. Resolution itself is delegated to
+    pkg-dependency.lib.sh.
 
 SEE ALSO
     pkg
