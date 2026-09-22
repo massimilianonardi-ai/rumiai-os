@@ -30,7 +30,7 @@ trap "tty_reset; exit 2" INT QUIT TERM HUP PIPE ABRT TSTP
 tty_init
 
 printf '%s\n' "$*" 1>&2
-read -r PASSWORD
+IFS="" read -r PASSWORD
 
 printf '%s\n' "$PASSWORD"
 
