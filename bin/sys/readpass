@@ -1,37 +1,78 @@
 #!/bin/sh
 
-# echoes prompt on stderr and read password securely from terminal and
-# NB echoes password on stdout!!! (only use it to store on env var or pass to pipe)
-# $@=prompt
+tty=/dev/tty
+tty_state=
+tty_changed=0
 
 #------------------------------------------------------------------------------
 
-tty_init()
+tty_restore()
 {
-  saved_tty_settings=$(stty -g)
-  stty -echo
+  [ "$tty_changed" -eq 1 ] || return 0
+
+  (
+    IFS='
+'
+    set -f
+    set -- $tty_state
+    command -p stty "$@" 2>/dev/null < "$tty"
+  ) || return 1
+
+  tty_changed=0
 }
 
 #------------------------------------------------------------------------------
 
-tty_reset()
+cleanup()
 {
-  stty "$saved_tty_settings"
+  status=$?
+
+  trap - 0 HUP INT QUIT TERM PIPE ABRT TSTP
+
+  if ! tty_restore
+  then
+    [ "$status" -ne 0 ] || status=1
+  fi
+
+  exit "$status"
 }
 
-#-------------------------------------------------------------------------------
+#------------------------------------------------------------------------------
 
-if [ ! -t 0 ]
-then
-  exit 1
-fi
+main()
+{
+  [ "$#" -le 1 ] || return 2
 
-trap "tty_reset; exit 2" INT QUIT TERM HUP PIPE ABRT TSTP
-tty_init
+  prompt=${1-}
 
-printf '%s\n' "$*" 1>&2
-IFS="" read -r PASSWORD
+  tty_state=$(command -p stty -g 2>/dev/null < "$tty") || return 1
+  [ -n "$tty_state" ] || return 1
 
-printf '%s\n' "$PASSWORD"
+  trap cleanup 0
+  trap 'exit 1' HUP INT QUIT TERM PIPE ABRT TSTP
 
-tty_reset
+  if [ -n "$prompt" ]
+  then
+    printf '%s' "$prompt" 2>/dev/null > "$tty" || return 1
+  fi
+
+  # From this point cleanup must attempt restoration even if stty itself fails.
+  tty_changed=1
+  command -p stty -echo 2>/dev/null < "$tty" || return 1
+
+  IFS= read -r password < "$tty"
+  read_status=$?
+
+  # Restore before doing anything with the captured secret.
+  tty_restore || return 1
+
+  printf '\n' 2>/dev/null > "$tty" || return 1
+
+  [ "$read_status" -eq 0 ] || return 1
+
+  printf '%s\n' "$password"
+}
+
+#------------------------------------------------------------------------------
+
+main "$@"

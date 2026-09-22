@@ -1,21 +1,47 @@
-#!/bin/sh
+#!/usr/bin/env m
 
-# echoes prompts on stderr, read password securely from terminal, verify it a secondo time and
-# NB echoes password on stdout!!! (only use it to store on env var or pass to pipe)
-# $1=first prompt, $2=prompt to verify, $3,...=verify error message
+main()
+{
+  [ "$#" -ge 2 ] && [ "$#" -le 3 ] || return 2
+
+  prompt=$1
+  verify_prompt=$2
+  mismatch_message=${3-}
+
+  password=$(readpass "$prompt")
+  status=$?
+
+  [ "$status" -eq 0 ] || return "$status"
+
+  password_verify=$(readpass "$verify_prompt")
+  status=$?
+
+  if [ "$status" -ne 0 ]
+  then
+    unset password password_verify
+    return "$status"
+  fi
+
+  if [ "$password" != "$password_verify" ]
+  then
+    unset password password_verify
+
+    if [ -n "$mismatch_message" ]
+    then
+      printf '%s\n' "$mismatch_message" > /dev/tty || return 1
+    fi
+
+    return 3
+  fi
+
+  printf '%s\n' "$password"
+  status=$?
+
+  unset password password_verify
+
+  return "$status"
+}
 
 #------------------------------------------------------------------------------
 
-PASSWORD="$(readpass "$1")"
-shift
-
-PASSWORD_VERIFY="$(readpass "$1")"
-shift
-
-if [ ! "$PASSWORD" = "$PASSWORD_VERIFY" ]
-then
-  printf '%s\n' "$*" 1>&2
-  exit 1
-fi
-
-echo "$PASSWORD"
+main "$@"
