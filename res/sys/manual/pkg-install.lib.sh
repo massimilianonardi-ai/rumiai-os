@@ -5,7 +5,8 @@ DESCRIPTION
     pkg-install.lib.sh implements the installation orchestration used by the
     public pkg install command. It processes package operands independently where
     possible, materializes the managed package store on demand, snapshots the
-    package catalog, resolves package repository metadata and artifacts, downloads
+    package catalog, selects an exact target stream when present and otherwise the
+    platform-independent `all` stream, resolves repository metadata and artifacts, downloads
     and verifies artifacts, extracts/materializes them, validates any provider
     realization against facility contracts from that exact catalog snapshot, and
     delegates final package integration to the package integration facilities.

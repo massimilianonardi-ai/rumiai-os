@@ -266,7 +266,7 @@ _pkg_install_stream_select()
   pkg_install_target=$3
   pkg_install_package_dir="$pkg_install_catalog/pkg/$pkg_install_pkg"
   pkg_install_target_stream="$pkg_install_package_dir/$pkg_install_target"
-  pkg_install_generic_stream="$pkg_install_package_dir/catalog"
+  pkg_install_generic_stream="$pkg_install_package_dir/all"
   [ -d "$pkg_install_package_dir" ] && [ ! -L "$pkg_install_package_dir" ] || return 1
 
   if [ -e "$pkg_install_target_stream" ] || [ -L "$pkg_install_target_stream" ]
