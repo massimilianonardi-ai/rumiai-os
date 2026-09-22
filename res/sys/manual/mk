@@ -19,7 +19,12 @@ DESCRIPTION
     A goal selects one or more root operations. Operations may have prerequisite
     operations and may execute an action. The first action type is process.
 
-    The current lifecycle engine is implemented in JavaScript and requires an
+    Version 2 additionally supports context-derived file collections, trusted
+    operation providers, declarative operation guards, named outputs and runtime
+    plan refinement. mk.json remains data; it does not name or embed arbitrary
+    JavaScript resolver modules.
+
+    The lifecycle engine is implemented in JavaScript and requires an
     installed/default RumiAI-managed nodejs package. mk does not install that
     runtime implicitly.
 
@@ -31,25 +36,31 @@ OPTIONS
         Apply the named profile overlay from mk.json.
 
     --plan
-        Resolve the requested goal set and write the operation execution plan
-        without executing actions.
+        Resolve the requested goal set from declarative configuration and the
+        currently observable project/runtime context without executing project
+        operations.
+
+        For version 1, write the existing line-oriented fully resolved operation
+        plan. For version 2, write structured JSON describing currently relevant
+        collections, providers and operations. A collection/provider that cannot
+        yet be resolved remains pending; an operation whose guard lacks required
+        evidence remains conditional.
 
     --goals
         List the available goal names in ascending lexical order.
 
     --show-goal <goal>
-        Resolve one goal and write JSON containing the goal name, its root
-        operations and its resolved operation plan.
+        Resolve one goal. Version 1 writes JSON containing goal, roots and the
+        fully resolved operation list. Version 2 writes goal, roots and the same
+        structured plan used by --plan.
 
     --
         End option processing. Remaining operands are goal names.
 
 PROJECT CONFIGURATION
-    The current schema requires:
+    mk.json requires a supported numeric version.
 
-        "version": 1
-
-    and accepts these top-level members:
+    Version 1 accepts these top-level members:
 
         version
         environment
@@ -57,20 +68,40 @@ PROJECT CONFIGURATION
         operations
         profiles
 
+    Version 2 accepts:
+
+        version
+        environment
+        goals
+        operations
+        collections
+        providers
+        profiles
+
     Unknown members are rejected.
 
-    goals maps each goal name to an array of root-operation names.
+    goals maps each goal name to an array of root operation/provider names.
 
-    operations maps each operation name to an object accepting:
+    In version 1, operations accept prerequisites and action.
 
-        prerequisites
-            Optional array of prerequisite operation names.
+    In version 2, operations additionally accept:
 
-        action
-            Optional action object. An operation with prerequisites and no
-            action acts as an aggregation node.
+        when
+            Optional declarative condition controlling whether the operation is
+            selected when its operands become known.
 
-    The current process action has this shape:
+        outputs
+            Optional map of named outputs. Each output currently declares a
+            pathname relative to the project root unless absolute.
+
+        failure
+            "stop" (default) or "continue". stop preserves normal fail-fast
+            behavior. continue records a failed execution result so later
+            conditions can observe it and refinement can continue. A failed
+            operation still does not satisfy an ordinary prerequisite.
+
+PROCESS ACTION
+    The process action has this shape:
 
         {
           "type": "process",
@@ -86,25 +117,131 @@ PROJECT CONFIGURATION
     project root; relative cwd values resolve from the project root. mk does not
     implicitly invoke a shell for process actions.
 
+COLLECTIONS (VERSION 2)
+    The first collection type is files:
+
+        {
+          "type": "files",
+          "root": "src",
+          "suffixes": [".c", ".cpp"],
+          "include": ["main.cpp"],
+          "exclude": ["old.cpp"],
+          "after": ["generate"]
+        }
+
+    root is required. Discovery is recursive below root.
+
+    Without include, mk discovers the current regular files below root. This is
+    the normal declarative form when the directory itself defines the intended
+    source set; mk.json does not need to copy the directory inventory.
+
+    include is an explicit relative-path selection used when intended membership
+    differs from the default discovery. exclude removes exact relative paths from
+    either selection form. suffixes filters selected relative paths by suffix.
+
+    after is an optional array of operations/providers that must complete
+    successfully before the collection becomes authoritative during execution.
+    Until then the collection remains pending. This prevents a generated-source
+    collection from treating an old output directory as the result of the current
+    lifecycle request.
+
+    A missing collection root with no pending after barrier resolves to an empty
+    collection.
+
+PROVIDERS (VERSION 2)
+    providers are a trusted mk boundary that derives ordinary operations from
+    declarative input. Project configuration selects a registered provider type;
+    it does not provide an executable resolver pathname/module.
+
+    The first provider type is map-process:
+
+        {
+          "type": "map-process",
+          "collection": "sources",
+          "prerequisites": ["prepare"],
+          "action": {
+            "type": "process",
+            "command": "tool",
+            "args": ["${item}"]
+          }
+        }
+
+    For every resolved collection item, map-process derives one process operation.
+    ${item} is substituted in command, args, cwd and env values of the provider
+    action template. No other executable configuration is evaluated.
+
+    The provider name acts as an aggregate operation. Operations/goals may depend
+    on it. The aggregate is satisfied after the collection is resolved and every
+    derived item operation plus provider prerequisites/collection after barriers
+    are satisfied.
+
+CONDITIONS (VERSION 2)
+    An operation when condition is declarative. Supported operators are:
+
+        eq ne lt lte gt gte
+        truthy
+        not
+
+    eq/ne compare resolved scalar values for equality/inequality. lt/lte/gt/gte
+    compare resolved scalar values using the current JavaScript runtime ordering.
+
+    An operand may be a JSON scalar literal or one source object:
+
+        {"result":{"operation":"attempt","field":"status"}}
+        {"output":{"operation":"build","name":"artifact","property":"size"}}
+        {"state":{"path":"marker","property":"exists"}}
+
+    Result fields are:
+
+        status
+        ok
+        signal
+        error
+
+    Output/state properties are:
+
+        exists
+        size
+
+    A result operand becomes known after the referenced operation actually has a
+    terminal execution result. An output operand is tied to that current-run
+    result: after producer success its declared pathname is observed; after
+    producer failure, exists is false while size remains unavailable. An old
+    pathname left by an earlier request is therefore not treated as a newly
+    produced output. State is observed from the current filesystem when the
+    condition is evaluated.
+
+    A condition reference creates an observation dependency: the guarded operation
+    waits for the referenced operation's evidence, but that relationship is not an
+    ordinary success prerequisite. This allows a failure declared continue to be
+    observed by a fallback branch.
+
 PROFILES
-    A profile may contain environment, goals and operations.
+    Version 1 profiles may contain environment, goals and operations.
 
-    Profile environment entries replace same-named base entries. Profile goal
-    and operation entries replace same-named base definitions and may add new
-    definitions. Other base entries remain inherited.
+    Version 2 profiles may additionally contain collections and providers.
 
-    No profile is selected implicitly in the current implementation.
+    Profile entries replace same-named base entries and may add new entries;
+    absent base entries remain inherited. Environment entries replace
+    same-named base values. No profile is selected implicitly.
 
 EXECUTION
-    mk validates references and prerequisite cycles before execution.
+    Multiple goal operands form one requested set. They do not imply semantic
+    left-to-right ordering between otherwise independent goals.
 
-    Multiple goal operands form one requested set. Each required operation is
-    included at most once in the resolved plan and every prerequisite precedes
-    the operation that requires it.
+    Version 1 retains the fully resolved sequential executor.
 
-    The current executor is sequential. This is an initial implementation
-    property rather than a semantic ordering rule for otherwise independent
-    operations.
+    Version 2 repeatedly resolves only the dynamic definitions reachable from
+    the requested goals, executes ready work, records results and refines the
+    reachable plan. Context-known files may therefore be concrete before the
+    first action while generated files remain pending until a generator runs.
+
+    Normal prerequisites require success (or a conditionally skipped operation).
+    A failed continued operation is terminal evidence but does not satisfy an
+    ordinary prerequisite.
+
+    The executor is sequential. This is an implementation property rather than a
+    semantic ordering rule for otherwise independent operations.
 
     Process actions inherit standard input, standard output and standard error.
     Their environment starts from the mk caller environment and is overlaid by
@@ -115,9 +252,24 @@ OUTPUT
 
     --goals writes one goal name per line.
 
-    --plan writes one operation name per line in planned execution order.
+    Version-1 --plan writes one operation name per line in planned execution order.
 
-    --show-goal writes a JSON object containing goal, roots and operations.
+    Version-2 --plan writes JSON with:
+
+        version
+        goals
+        collections
+        providers
+        operations
+
+    Resolved collection entries include current items; pending collections include
+    waitingFor. Provider entries identify their collection, current state and
+    derived operation names. Operation entries include state and prerequisites,
+    plus observation/condition/derived-provider information when applicable.
+
+    Version-2 operation states are ready, blocked, conditional, skipped, completed
+    or failed. Provider states are pending, resolved or completed; collection states
+    are pending or resolved.
 
 EXIT STATUS
     0   Success.

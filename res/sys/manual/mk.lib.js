@@ -2,9 +2,17 @@ NAME
     mk.lib.js - JavaScript lifecycle engine used by mk
 
 DESCRIPTION
-    mk.lib.js implements the current JavaScript project discovery, JSON project
-    model validation, profile composition, goal/operation planning and sequential
-    process-action execution used by the public mk command.
+    mk.lib.js implements the JavaScript lifecycle engine used by the public mk
+    command.
+
+    It provides project discovery, declarative JSON validation, profile
+    composition, goal/operation resolution and process-action execution.
+
+    Version 1 retains the original static prerequisite-plan behavior. Version 2
+    additionally resolves reachable context-derived file collections, invokes
+    trusted registered provider implementations to derive ordinary operations,
+    preserves unresolved declarative conditions in structured plans and refines
+    the reachable plan after execution produces new result/output/state evidence.
 
     The library is loaded by the bootstrap-integrated mk shell entrypoint through
     the current Node.js runtime.
@@ -17,8 +25,13 @@ PUBLIC FUNCTIONS
         command name.
 
         The function performs CLI parsing, project discovery, mk.json loading and
-        validation, optional profile composition, goal resolution, prerequisite
-        planning and either introspection, plan output or action execution.
+        validation, optional profile composition, goal resolution and either
+        introspection, plan output or action execution.
+
+        For version 2, resolution/execution is iterative: currently reachable
+        dynamic context is resolved, ready work executes, results are recorded and
+        resolution is refreshed until the requested goal roots are satisfied or
+        no valid refinement is possible.
 
         Return value:
             0   Success.
@@ -39,7 +52,7 @@ ENVIRONMENT
 
 FILES
     <project-root>/mk.json
-        Current declarative project configuration.
+        Declarative project configuration.
 
     lib/sys/js/mk.lib.js
         This library.
@@ -47,3 +60,7 @@ FILES
 NOTES
     Only mkMain is public. Underscore-prefixed functions are implementation
     details and are not callable API.
+
+    Version-2 provider implementations are trusted runtime behavior. mk.json
+    selects a supported provider type and data; it is not an executable module
+    loading surface.
