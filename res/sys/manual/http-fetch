@@ -11,6 +11,12 @@ DESCRIPTION
     By default the response body is written to standard output. Redirects are
     followed and redirected protocols remain restricted to HTTP and HTTPS.
 
+    With -o, when standard error is connected to a terminal, http-fetch leaves
+    the selected backend's native transfer progress visible on standard error.
+    Progress is suppressed when standard error is not a terminal, when the
+    response body is written to standard output, and for -l requests. Progress
+    formatting is backend-specific.
+
 OPTIONS
     -H <header>
         Add one HTTP request header. May be repeated. The value must contain a
