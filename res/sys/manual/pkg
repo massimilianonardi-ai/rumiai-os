@@ -10,6 +10,7 @@ SYNOPSIS
     pkg provider default -u [--] <facility>
     pkg provider bind <consumer> <facility> [<provider-selector>]
     pkg provider bind -u [--] <consumer> <facility>
+    pkg requirement resolve <facility> <constraint>...
 
 DESCRIPTION
     pkg is the public package command of the technical m layer. Package catalog
@@ -94,6 +95,22 @@ COMMANDS
         Remove the consumer binding. Absence of a binding means that dependency
         resolution inherits the system facility default.
 
+    requirement resolve <facility> <constraint>...
+        Resolve the configured system facility default using the normal global
+        package-class/osarch semantics and verify that the selected installed
+        concrete declares <facility> at a compatibility satisfying every supplied
+        constraint.
+
+        On success, print the selected concrete provider identity. The query is
+        read-only: it does not install providers, choose among installed providers
+        implicitly, change a facility default or create a consumer binding.
+
+        Compatibility constraints use the package dependency language, for example:
+
+            =25
+            >=21
+            >=21 <26
+
 STATE
     Mutable package state is resolved through state-path rather than reconstructed
     by callers. Package HOME and configuration used at launch are user-scoped state.
@@ -145,6 +162,10 @@ EXAMPLES
     Pin Maven to a specific Temurin version:
 
         pkg provider bind maven java temurin@25.0.4.1+1
+
+    Verify that the current system java provider satisfies a build requirement:
+
+        pkg requirement resolve java '>=21' '<26'
 
 SEE ALSO
     state-path
