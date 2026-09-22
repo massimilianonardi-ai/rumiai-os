@@ -728,6 +728,7 @@ gitman_git_exec()
 
   return 0
 }
+
 gitman_git_run()
 {
   gitman_git_exec "$@" || return $?
@@ -986,6 +987,7 @@ gitman_action_menu()
 
   return 0
 }
+
 gitman_action_dispatch()
 {
   [ "$#" -eq 3 ] || return 2
@@ -1001,6 +1003,7 @@ gitman_action_dispatch()
   gitman_action_handler="gitman_action_$2"
   "$gitman_action_handler" "$1"
 }
+
 gitman_action_group()
 {
   [ "$#" -ge 4 ] || return 2
