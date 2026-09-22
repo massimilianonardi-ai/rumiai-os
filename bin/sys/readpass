@@ -11,8 +11,8 @@ tty_restore()
   [ "$tty_changed" -eq 1 ] || return 0
 
   (
-    IFS='
-'
+    IFS=$(printf ' \t\n_')
+    IFS=${IFS%_}
     set -f
     set -- $tty_state
     command -p stty "$@" 2>/dev/null < "$tty"
@@ -60,7 +60,7 @@ main()
   tty_changed=1
   command -p stty -echo 2>/dev/null < "$tty" || return 1
 
-  IFS= read -r password < "$tty"
+  IFS= read -r password 2>/dev/null < "$tty"
   read_status=$?
 
   # Restore before doing anything with the captured secret.

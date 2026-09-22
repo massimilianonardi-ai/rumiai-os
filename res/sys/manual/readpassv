@@ -1,0 +1,48 @@
+NAME
+    readpassv - read and verify a secret line twice
+
+SYNOPSIS
+    readpassv <prompt> <verify-prompt> [<mismatch-message>]
+
+DESCRIPTION
+    readpassv invokes the RumiAI readpass command twice, compares the two
+    captured values exactly and writes the secret to standard output only when
+    they match.
+
+    readpassv is bootstrap-integrated. It resolves readpass from the m system
+    command directory supplied by the bootstrap rather than from the inherited
+    host PATH.
+
+    If the values differ, the optional mismatch message is written directly to
+    /dev/tty and no secret is written to standard output. The command performs
+    one verification attempt; it does not retry automatically.
+
+OUTPUT
+    On successful verification, standard output contains exactly the secret
+    followed by a newline.
+
+    A mismatch produces no standard output. When supplied, mismatch-message is
+    written to /dev/tty.
+
+EXIT STATUS
+    0   The two values match and the secret was written successfully.
+    1   Operational failure, including a readpass failure.
+    2   Invalid invocation.
+    3   The two entered values do not match.
+
+FILES
+    /dev/tty
+        Used by readpass for terminal input and by readpassv for an optional
+        mismatch message.
+
+SECURITY
+    Standard output deliberately carries the verified secret. Callers should
+    capture it into a shell variable or connect it only to the intended
+    consumer.
+
+EXAMPLES
+    password=$(readpassv 'Password: ' 'Repeat password: ' \
+        'Passwords do not match.') || exit $?
+
+SEE ALSO
+    readpass

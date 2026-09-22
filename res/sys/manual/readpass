@@ -1,0 +1,47 @@
+NAME
+    readpass - read one secret line from the controlling terminal
+
+SYNOPSIS
+    readpass [<prompt>]
+
+DESCRIPTION
+    readpass reads one line from /dev/tty with terminal echo disabled.
+
+    The command is a standalone POSIX sh utility and does not depend on the m
+    bootstrap. Standard input is not consumed.
+
+    An optional prompt is written directly to /dev/tty. Before reading,
+    readpass saves the exact terminal state and disables echo. The saved state
+    is restored before the secret is written to standard output.
+
+    Leading and trailing IFS whitespace and backslashes in the entered line are
+    preserved. As a line-oriented shell interface, the command does not
+    represent embedded newline or NUL bytes.
+
+OUTPUT
+    On success, standard output contains exactly the captured secret followed
+    by a newline.
+
+    Prompt and terminal-interaction output are written to /dev/tty, not to
+    standard output.
+
+EXIT STATUS
+    0   Secret read successfully.
+    1   Terminal, input, restoration, output or handled-signal failure.
+    2   Invalid invocation.
+
+FILES
+    /dev/tty
+        Controlling terminal used for prompt, input and terminal-state changes.
+
+SECURITY
+    Standard output deliberately carries the secret. Callers should capture it
+    into a shell variable or connect it only to the intended consumer rather
+    than allowing it to reach an unintended terminal, log or file.
+
+EXAMPLES
+    password=$(readpass 'Password: ') || exit $?
+
+SEE ALSO
+    readpassv
+    read-key

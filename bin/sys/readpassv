@@ -7,13 +7,20 @@ main()
   prompt=$1
   verify_prompt=$2
   mismatch_message=${3-}
+  readpass_command=$m_BIN_SYS_DIR/readpass
 
-  password=$(readpass "$prompt")
+  [ -x "$readpass_command" ] || return 1
+
+  password=$("$readpass_command" "$prompt")
   status=$?
 
-  [ "$status" -eq 0 ] || return "$status"
+  if [ "$status" -ne 0 ]
+  then
+    unset password
+    return "$status"
+  fi
 
-  password_verify=$(readpass "$verify_prompt")
+  password_verify=$("$readpass_command" "$verify_prompt")
   status=$?
 
   if [ "$status" -ne 0 ]
@@ -28,7 +35,7 @@ main()
 
     if [ -n "$mismatch_message" ]
     then
-      printf '%s\n' "$mismatch_message" > /dev/tty || return 1
+      printf '%s\n' "$mismatch_message" 2>/dev/null > /dev/tty || return 1
     fi
 
     return 3
