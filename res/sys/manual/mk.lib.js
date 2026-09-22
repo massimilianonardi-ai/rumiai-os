@@ -9,10 +9,12 @@ DESCRIPTION
     composition, goal/operation resolution and process-action execution.
 
     Version 1 retains the original static prerequisite-plan behavior. Version 2
-    additionally resolves reachable context-derived file collections, invokes
-    trusted registered provider implementations to derive ordinary operations,
-    preserves unresolved declarative conditions in structured plans and refines
-    the reachable plan after execution produces new result/output/state evidence.
+    additionally resolves project-to-project dependencies through recursive child
+    mk engine processes, resolves reachable context-derived file collections,
+    invokes trusted registered provider implementations to derive ordinary
+    operations, preserves unresolved declarative conditions in structured plans
+    and refines the reachable plan after execution produces new
+    result/output/state evidence.
 
     The library is loaded by the bootstrap-integrated mk shell entrypoint through
     the current Node.js runtime.
@@ -28,10 +30,13 @@ PUBLIC FUNCTIONS
         validation, optional profile composition, goal resolution and either
         introspection, plan output or action execution.
 
-        For version 2, resolution/execution is iterative: currently reachable
-        dynamic context is resolved, ready work executes, results are recorded and
-        resolution is refreshed until the requested goal roots are satisfied or
-        no valid refinement is possible.
+        For version 2, active project dependencies are first delegated to child
+        mk engine processes. Child project internals remain encapsulated and child
+        profiles are selected only when explicitly declared by the dependency.
+        After dependencies succeed, local resolution/execution is iterative:
+        currently reachable dynamic context is resolved, ready work executes,
+        results are recorded and resolution is refreshed until the requested goal
+        roots are satisfied or no valid refinement is possible.
 
         Return value:
             0   Success.
@@ -45,8 +50,10 @@ PUBLIC FUNCTIONS
 ENVIRONMENT
     The public mk launcher supplies private caller-environment preservation data
     used to prevent the Node.js package launcher's HOME/PATH setup from becoming
-    the intended environment of project actions. Those private variables are
-    consumed internally and are not public library API.
+    the intended environment of project actions. Recursive project-dependency
+    delegation also carries a private active-project chain used only for cycle
+    detection. Those private variables are consumed internally and are not public
+    library API.
 
     Project/profile/action environment overlays are supplied by mk.json.
 
