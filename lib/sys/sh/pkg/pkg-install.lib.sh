@@ -484,6 +484,15 @@ _pkg_install_one()
   fi
 
   pkg_install_format="$(_pkg_install_scalar "$pkg_install_selected_range/format")" || return 1
+  pkg_install_component=
+  if [ -e "$pkg_install_selected_range/component" ] || [ -L "$pkg_install_selected_range/component" ]
+  then
+    pkg_install_component="$(_pkg_install_scalar "$pkg_install_selected_range/component")" || return 1
+  fi
+  case "$pkg_install_format" in
+    dmg-pkg) [ -n "$pkg_install_component" ] || return 1 ;;
+    *) [ -z "$pkg_install_component" ] || return 1 ;;
+  esac
 
   pkg_install_download_dir="$pkg_install_item/download"
   pkg_install_extract_dir="$pkg_install_item/extract"
@@ -496,7 +505,12 @@ _pkg_install_one()
   fi
   pkg_install_artifact="$(_pkg_install_scalar "$pkg_install_artifact_file")" || return 1
 
-  pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
+  if [ "$pkg_install_format" = dmg-pkg ]
+  then
+    pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || return 1
+  else
+    pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
+  fi
 
   if ! pkg_facility_provider_validate "$pkg_install_catalog" "$pkg_install_selected_range" "$pkg_install_extract_dir"
   then
