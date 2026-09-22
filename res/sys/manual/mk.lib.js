@@ -12,9 +12,10 @@ DESCRIPTION
     additionally resolves project-to-project dependencies through recursive child
     mk engine processes, resolves reachable external facility requirements through
     the public pkg requirement query, resolves reachable context-derived file
-    collections, invokes trusted registered provider implementations to derive
-    ordinary operations, preserves unresolved declarative conditions in structured
-    plans and refines the reachable plan after execution produces new
+    collections, applies content-based incremental freshness to opted-in ordinary
+    process operations, invokes trusted registered provider implementations to
+    derive ordinary operations, preserves unresolved declarative conditions in
+    structured plans and refines the reachable plan after execution produces new
     result/output/state/external-state evidence.
 
     The library is loaded by the bootstrap-integrated mk shell entrypoint through
@@ -35,10 +36,19 @@ PUBLIC FUNCTIONS
         mk engine processes. Child project internals remain encapsulated and child
         profiles are selected only when explicitly declared by the dependency.
         After dependencies succeed, local resolution/execution is iterative:
-        currently reachable dynamic context and named external requirements are
-        resolved, ready work executes, results are recorded and resolution is
-        refreshed until the requested goal roots are satisfied or no valid
-        refinement is possible.
+        currently reachable dynamic context, named external requirements and
+        incremental data dependencies are resolved, verified up-to-date work is
+        established when possible, ready work executes, results are recorded and
+        resolution is refreshed until the requested goal roots are satisfied or no
+        valid refinement is possible.
+
+        Incremental freshness records are non-authoritative user cache state
+        resolved through state-path. A hit requires a matching effective operation
+        fingerprint plus current declared outputs matching the recorded successful
+        output fingerprints. Up-to-date work may satisfy prerequisites,
+        collection barriers and output evidence, but it does not synthesize
+        current execution-result fields; result observation forces actual
+        execution. Failed executions do not create reusable freshness state.
 
         Facility requirements are queried through the public pkg requirement
         resolve boundary against the configured system facility default. The
@@ -67,9 +77,18 @@ ENVIRONMENT
     Facility requirements are gates only. Provider command/environment projection
     remains owned by the normal m/pkg bootstrap and is not reimplemented here.
 
+    Incremental fingerprints include the complete effective process environment,
+    effective operation/action definition, supported executable identity,
+    requirement-provider identities and declared incremental inputs. Supported
+    file identity is content-based; mtime is not used as freshness evidence.
+
 FILES
     <project-root>/mk.json
         Declarative project configuration.
+
+    state-path user sys mk cache
+        Semantic user cache area used for non-authoritative incremental freshness
+        metadata. Private layout below it is an implementation detail.
 
     lib/sys/js/mk.lib.js
         This library.
