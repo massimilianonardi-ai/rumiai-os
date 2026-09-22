@@ -181,7 +181,10 @@ _pkg_extract_dmg_pkg()
   done
   [ "$pkg_extract_dmg_pkg_count" -eq 1 ] || return 1
 
-  command -- xar -xf "$pkg_extract_dmg_pkg_installer" -C "$pkg_extract_dmg_pkg_work/xar" || return 1
+  (
+    CDPATH= cd -- "$pkg_extract_dmg_pkg_work/xar" || exit 1
+    command -- xar -xf "$pkg_extract_dmg_pkg_installer"
+  ) || return 1
   pkg_extract_dmg_pkg_component_dir="$pkg_extract_dmg_pkg_work/xar/$pkg_extract_dmg_pkg_component"
   [ -d "$pkg_extract_dmg_pkg_component_dir" ] && [ ! -L "$pkg_extract_dmg_pkg_component_dir" ] || return 1
   pkg_extract_dmg_pkg_payload="$pkg_extract_dmg_pkg_component_dir/Payload"
