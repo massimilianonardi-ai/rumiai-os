@@ -90,9 +90,7 @@ PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${
 export -- PATH
 
 PAGER="pager"
-EDITOR="editor"
-VISUAL="editor"
-export_readonly PAGER EDITOR VISUAL
+export_readonly PAGER
 
 m_LANGUAGE_FALLBACK="en_US"
 m_TEXT_ENCODING="UTF-8"
