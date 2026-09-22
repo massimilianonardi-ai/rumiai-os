@@ -19,9 +19,10 @@ DESCRIPTION
     A goal selects one or more root operations. Operations may have prerequisite
     operations and may execute an action. The first action type is process.
 
-    Version 2 additionally supports project-to-project dependencies,
-    context-derived file collections, trusted operation providers, declarative
-    operation guards, named outputs and runtime plan refinement. mk.json remains
+    Version 2 additionally supports project-to-project dependencies, declarative
+    external requirements, context-derived file collections, trusted operation
+    providers, declarative operation guards, named outputs and runtime plan
+    refinement. mk.json remains
     data; it does not name or embed arbitrary JavaScript resolver modules.
 
     The lifecycle engine is implemented in JavaScript and requires an
@@ -77,6 +78,7 @@ PROJECT CONFIGURATION
         collections
         providers
         dependencies
+        requirements
         profiles
 
     Unknown members are rejected.
@@ -86,6 +88,10 @@ PROJECT CONFIGURATION
     In version 1, operations accept prerequisites and action.
 
     In version 2, operations additionally accept:
+
+        requirements
+            Optional array of named external requirements. The operation cannot
+            become ready until all current requirements are satisfied.
 
         when
             Optional declarative condition controlling whether the operation is
@@ -171,10 +177,46 @@ PROVIDERS (VERSION 2)
     ${item} is substituted in command, args, cwd and env values of the provider
     action template. No other executable configuration is evaluated.
 
+    A provider may also declare a requirements array. Its derived work cannot run
+    until those named requirements are currently satisfied.
+
     The provider name acts as an aggregate operation. Operations/goals may depend
-    on it. The aggregate is satisfied after the collection is resolved and every
-    derived item operation plus provider prerequisites/collection after barriers
-    are satisfied.
+    on it. The aggregate is satisfied after the collection is resolved, provider
+    requirements and prerequisites are satisfied, and every derived item operation
+    plus collection after barriers are satisfied.
+
+FACILITY REQUIREMENTS (VERSION 2)
+    requirements declares named external conditions. The first type is facility:
+
+        {
+          "type": "facility",
+          "facility": "java",
+          "constraints": [">=21", "<26"]
+        }
+
+    facility is a provider-independent pkg facility identity. constraints uses the
+    existing pkg facility compatibility language.
+
+    Operations and providers refer to named requirements through their requirements
+    arrays. Only requirements reachable from the requested lifecycle are queried.
+
+    mk resolves a facility requirement through:
+
+        pkg requirement resolve <facility> <constraint>...
+
+    That package-owned query uses the configured system facility default and
+    validates the selected installed provider against every compatibility
+    constraint. mk does not create package-consumer bindings, install packages,
+    change provider defaults or choose a provider implicitly.
+
+    A reachable requirement is satisfied or unsatisfied. Unsatisfied requirements
+    remain visible in --plan and block only their consumer nodes. Execution
+    re-resolves them during normal runtime refinement, so an explicit prerequisite
+    may change relevant external state before the consumer becomes ready.
+
+    Facility requirements are gates, not a second command/environment projection
+    layer. Facility commands/environment remain supplied by normal m/pkg bootstrap
+    semantics.
 
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
@@ -256,8 +298,8 @@ PROJECT DEPENDENCIES (VERSION 2)
 PROFILES
     Version 1 profiles may contain environment, goals and operations.
 
-    Version 2 profiles may additionally contain collections, providers and
-    dependencies.
+    Version 2 profiles may additionally contain collections, providers,
+    dependencies and requirements.
 
     Profile entries replace same-named base entries and may add new entries;
     absent base entries remain inherited. Environment entries replace
@@ -271,8 +313,8 @@ EXECUTION
 
     Version 2 first delegates active project dependencies for the requested goal
     set and requires them to succeed. It then repeatedly resolves only the dynamic
-    definitions reachable from the requested local goals, executes ready work,
-    records results and refines the reachable plan. Context-known files may
+    definitions and external requirements reachable from the requested local goals,
+    executes ready work, records results and refines the reachable plan. Context-known files may
     therefore be concrete before the first action while generated files remain
     pending until a generator runs.
 
@@ -299,6 +341,7 @@ OUTPUT
         version
         goals
         dependencies
+        requirements
         collections
         providers
         operations
@@ -307,6 +350,11 @@ OUTPUT
     root, requested child goals, optional explicit child profile and nested child
     plan. Planning recursively asks child mk instances for plans but does not
     execute their lifecycle work.
+
+    Reachable requirement entries include requirement name/type, facility,
+    constraints, satisfaction state and the selected concrete provider when
+    satisfied. Operation/provider entries include named and currently unsatisfied
+    requirements.
 
     Resolved collection entries include current items; pending collections include
     waitingFor. Provider entries identify their collection, current state and
