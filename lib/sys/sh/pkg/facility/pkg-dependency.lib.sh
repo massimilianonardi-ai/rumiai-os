@@ -273,7 +273,11 @@ _pkg_dependency_consumer_osarch_resolve()
 
   if [ -z "$pkg_dependency_effective_osarch" ]
   then
-    pkg_dependency_effective_osarch=${m_OSARCH-}
+    if [ -z "${m_OSARCH-}" ]
+    then
+      . "$m_LIB_DIR/sys/sh/osarch.lib.sh" || return 1
+    fi
+    pkg_dependency_effective_osarch=$m_OSARCH
   fi
 
   _pkg_provider_osarch_valid "$pkg_dependency_effective_osarch"
