@@ -673,6 +673,17 @@ gitman_pause()
     fatal 1 execution execution-failed operation gitman reason key-read-failed
 }
 
+gitman_terminal_header()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '\n%s\n%s\n%s\n' \
+    '--------------------------------------------------' \
+    "$1" \
+    '--------------------------------------------------' ||
+    fatal 1 execution execution-failed operation gitman reason terminal-output-failed
+}
+
 gitman_git_exec()
 {
   [ "$#" -ge 3 ] || return 2
@@ -694,7 +705,11 @@ gitman_git_exec()
       gitman_git_exec_status=$?
       ;;
     terminal)
-      printf '\nRepository: %s\nAction: %s\n\n' "$gitman_git_exec_repository" "$gitman_git_exec_action"
+      if [ "$gitman_action_sequence_header_printed" -eq 0 ]
+      then
+        gitman_terminal_header "$gitman_action_sequence_label" || return 2
+        gitman_action_sequence_header_printed=1
+      fi
 
       command -- git --no-pager -C "$gitman_git_exec_repository" "$@"
       gitman_git_exec_status=$?
@@ -713,7 +728,6 @@ gitman_git_exec()
 
   return 0
 }
-
 gitman_git_run()
 {
   gitman_git_exec "$@" || return $?
@@ -897,6 +911,8 @@ gitman_action_menu()
   [ $(( $# % 2 )) -eq 0 ] || return 2
 
   array gitman_action_menu_items || return 2
+  array gitman_action_menu_ids || return 2
+  array gitman_action_menu_labels || return 2
 
   while [ "$#" -gt 0 ]
   do
@@ -911,6 +927,8 @@ gitman_action_menu()
     esac
 
     array gitman_action_menu_items add "$gitman_action_menu_id@:=$gitman_action_menu_label" || return 2
+    array gitman_action_menu_ids add "$gitman_action_menu_id" || return 2
+    array gitman_action_menu_labels add "$gitman_action_menu_label" || return 2
   done
 
   set --
@@ -944,12 +962,33 @@ gitman_action_menu()
 
   gitman_action_menu_key=$1
   gitman_action_menu_value=$2
+  gitman_action_menu_selected_label=
+
+  if [ "$gitman_action_menu_key" = enter ]
+  then
+    gitman_action_menu_index=0
+
+    while [ "$gitman_action_menu_index" -lt "$gitman_action_menu_count" ]
+    do
+      array gitman_action_menu_ids get "$gitman_action_menu_index" gitman_action_menu_id || return 2
+
+      if [ "$gitman_action_menu_id" = "$gitman_action_menu_value" ]
+      then
+        array gitman_action_menu_labels get "$gitman_action_menu_index" gitman_action_menu_selected_label || return 2
+        break
+      fi
+
+      gitman_action_menu_index=$((gitman_action_menu_index + 1))
+    done
+
+    [ -n "$gitman_action_menu_selected_label" ] || return 2
+  fi
+
   return 0
 }
-
 gitman_action_dispatch()
 {
-  [ "$#" -eq 2 ] || return 2
+  [ "$#" -eq 3 ] || return 2
 
   case "$2" in
     ""|*[!abcdefghijklmnopqrstuvwxyz0123456789_]*)
@@ -957,10 +996,11 @@ gitman_action_dispatch()
       ;;
   esac
 
+  gitman_action_sequence_label=$3
+  gitman_action_sequence_header_printed=0
   gitman_action_handler="gitman_action_$2"
   "$gitman_action_handler" "$1"
 }
-
 gitman_action_group()
 {
   [ "$#" -ge 4 ] || return 2
@@ -989,7 +1029,7 @@ gitman_action_group()
         gitman_last_error=
         ;;
       enter)
-        gitman_action_dispatch "$1" "$gitman_action_menu_value" || return 2
+        gitman_action_dispatch "$1" "$gitman_action_menu_value" "$gitman_action_menu_selected_label" || return 2
         ;;
       *)
         return 2
@@ -1069,6 +1109,9 @@ EOF_GITMAN_SWITCH
           ;;
       esac
       array gitman_switch_branches get "$gitman_switch_index" gitman_switch_branch || return 2
+      gitman_switch_branch_display=$(gitman_display_safe "$gitman_switch_branch") || return 2
+      gitman_action_sequence_label="Switch: git switch $gitman_switch_branch_display"
+      gitman_action_sequence_header_printed=0
       gitman_git_run "$gitman_switch_repository" 'switch <branch>' switch "$gitman_switch_branch"
       ;;
     *)
@@ -1111,7 +1154,7 @@ gitman_repository_actions()
 {
   [ "$#" -eq 1 ] || return 2
 
-  gitman_action_group "$1" 'Git actions'     status 'Status: git status --short --branch'     diff 'Diff: git diff'     pull 'Pull: git pull'     commit 'Commit: git commit -m <commit-message>'     sync_push 'Sync + Push: git add --all → git commit -m <commit-message> → git pull --no-rebase --no-edit → git push'     changes 'Changes >'     history 'History >'     branches 'Branches >'     remote 'Remote >'     stash 'Stash >'
+  gitman_action_group "$1" 'Git actions'     sync_push 'Sync + Push: git add --all → git commit -m <commit-message> → git pull --no-rebase --no-edit → git push'     status 'Status: git status --short --branch'     diff 'Diff: git diff'     pull 'Pull: git pull'     commit 'Commit: git commit -m <commit-message>'     changes 'Changes >'     history 'History >'     branches 'Branches >'     remote 'Remote >'     stash 'Stash >'
 }
 
 for gitman_required_command in git menu pager read-key state-path
@@ -1134,6 +1177,8 @@ array gitman_repositories ||
 
 gitman_last_error=
 gitman_output_mode=pager
+gitman_action_sequence_label=
+gitman_action_sequence_header_printed=0
 
 gitman_initial_candidates_load "$@" ||
   fatal 1 execution execution-failed operation gitman reason initial-candidate-load-failed
