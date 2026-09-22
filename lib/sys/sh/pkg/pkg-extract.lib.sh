@@ -161,9 +161,17 @@ _pkg_extract_dmg_pkg()
 
   pkg_extract_dmg_pkg_parent=${pkg_extract_dmg_pkg_staging%/*}
   [ "$pkg_extract_dmg_pkg_parent" != "$pkg_extract_dmg_pkg_staging" ] || return 1
-  pkg_extract_dmg_pkg_work="$pkg_extract_dmg_pkg_parent/.rumiai-pkg-dmg-$"
-  [ ! -e "$pkg_extract_dmg_pkg_work" ] && [ ! -L "$pkg_extract_dmg_pkg_work" ] || return 1
-  command -p -- mkdir "$pkg_extract_dmg_pkg_work" || return 1
+  pkg_extract_dmg_pkg_counter=0
+  while :
+  do
+    pkg_extract_dmg_pkg_work="$pkg_extract_dmg_pkg_parent/.rumiai-pkg-dmg-$pkg_extract_dmg_pkg_counter"
+    if command -p -- mkdir "$pkg_extract_dmg_pkg_work" 2>/dev/null
+    then
+      break
+    fi
+    pkg_extract_dmg_pkg_counter=$((pkg_extract_dmg_pkg_counter + 1))
+    [ "$pkg_extract_dmg_pkg_counter" -lt 1000 ] || return 1
+  done
   trap 'command -p -- rm -rf -- "$pkg_extract_dmg_pkg_work" 2>/dev/null || :' 0 HUP INT TERM
 
   command -p -- mkdir "$pkg_extract_dmg_pkg_work/dmg" "$pkg_extract_dmg_pkg_work/xar" || return 1
