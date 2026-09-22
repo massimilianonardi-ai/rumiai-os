@@ -4,6 +4,7 @@ http_fetch_timeout=30
 http_fetch_output=
 http_fetch_headers=
 http_fetch_length="0"
+http_fetch_progress=0
 http_fetch_lf='
 '
 http_fetch_cr="$(printf '\r')"
@@ -109,13 +110,24 @@ case "$http_fetch_url" in
   *) fatal 2 execution invalid-arguments operation http-fetch;;
 esac
 
+if [ -n "$http_fetch_output" ] && [ -t 2 ]
+then
+  http_fetch_progress=1
+fi
+
 if command -- curl --version >/dev/null 2>&1
 then
   set -- \
     -q \
     --fail \
-    --location \
-    --silent \
+    --location
+
+  if [ "$http_fetch_progress" -eq "0" ]
+  then
+    set -- "$@" --silent
+  fi
+
+  set -- "$@" \
     --show-error \
     --connect-timeout "$http_fetch_timeout" \
     --speed-limit 1 \
@@ -171,8 +183,14 @@ then
   case "$http_fetch_wget_version" in
     'GNU Wget '*|*"$http_fetch_lf"'GNU Wget '*)
       set -- \
-        --no-config \
-        --no-verbose \
+        --no-config
+
+      if [ "$http_fetch_progress" -eq "0" ]
+      then
+        set -- "$@" --no-verbose
+      fi
+
+      set -- "$@" \
         --tries=1 \
         --timeout="$http_fetch_timeout" \
         --max-redirect=20
