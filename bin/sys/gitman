@@ -684,6 +684,20 @@ gitman_terminal_header()
     fatal 1 execution execution-failed operation gitman reason terminal-output-failed
 }
 
+gitman_action_sequence_begin()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  if [ "$gitman_output_mode" = terminal ] &&
+     [ "$gitman_action_sequence_header_printed" -eq 0 ]
+  then
+    gitman_terminal_header "$gitman_action_sequence_label" || return 2
+    gitman_action_sequence_header_printed=1
+  fi
+
+  return 0
+}
+
 gitman_git_exec()
 {
   [ "$#" -ge 3 ] || return 2
@@ -705,11 +719,7 @@ gitman_git_exec()
       gitman_git_exec_status=$?
       ;;
     terminal)
-      if [ "$gitman_action_sequence_header_printed" -eq 0 ]
-      then
-        gitman_terminal_header "$gitman_action_sequence_label" || return 2
-        gitman_action_sequence_header_printed=1
-      fi
+      gitman_action_sequence_begin || return 2
 
       command -- git --no-pager -C "$gitman_git_exec_repository" "$@"
       gitman_git_exec_status=$?
@@ -792,6 +802,8 @@ gitman_action_sync_push()
   [ "$#" -eq 1 ] || return 2
   gitman_sync_repository=$1
   gitman_sync_continue=1
+
+  gitman_action_sequence_begin || return 2
 
   gitman_sync_status=$(command -- git -C "$gitman_sync_repository" status --porcelain)
   gitman_sync_status_code=$?
