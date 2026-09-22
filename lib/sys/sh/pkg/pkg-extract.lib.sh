@@ -121,12 +121,89 @@ _pkg_extract_executable()
   command -p -- chmod +x "$pkg_extract_executable_target"
 }
 
-pkg_extract()
+_pkg_extract_component_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    ""|.|..|*/*|*'
+'*) return 1 ;;
+    *.pkg) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_pkg_extract_payload_paths_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  command -- cpio -it < "$1" 2>/dev/null | LC_ALL=C command -p -- awk '
+{
+  name=$0
+  if (name == "" || substr(name, 1, 1) == "/") exit 1
+  count=split(name, part, "/")
+  for (i=1; i<=count; i++) {
+    if (part[i] == "..") exit 1
+  }
+}
+END { if (NR == 0) exit 1 }
+'
+}
+
+_pkg_extract_dmg_pkg()
 (
   [ "$#" -eq 3 ] || return 2
+  pkg_extract_dmg_pkg_artifact=$1
+  pkg_extract_dmg_pkg_staging=$2
+  pkg_extract_dmg_pkg_component=$3
+
+  _pkg_extract_component_valid "$pkg_extract_dmg_pkg_component" || return 1
+  command -v xar >/dev/null 2>&1 || return 1
+  command -v cpio >/dev/null 2>&1 || return 1
+
+  pkg_extract_dmg_pkg_parent=${pkg_extract_dmg_pkg_staging%/*}
+  [ "$pkg_extract_dmg_pkg_parent" != "$pkg_extract_dmg_pkg_staging" ] || return 1
+  pkg_extract_dmg_pkg_work="$pkg_extract_dmg_pkg_parent/.rumiai-pkg-dmg-$"
+  [ ! -e "$pkg_extract_dmg_pkg_work" ] && [ ! -L "$pkg_extract_dmg_pkg_work" ] || return 1
+  command -p -- mkdir "$pkg_extract_dmg_pkg_work" || return 1
+  trap 'command -p -- rm -rf -- "$pkg_extract_dmg_pkg_work" 2>/dev/null || :' 0 HUP INT TERM
+
+  command -p -- mkdir "$pkg_extract_dmg_pkg_work/dmg" "$pkg_extract_dmg_pkg_work/xar" || return 1
+  extract dmg "$pkg_extract_dmg_pkg_artifact" "$pkg_extract_dmg_pkg_work/dmg" || return 1
+
+  pkg_extract_dmg_pkg_count=0
+  pkg_extract_dmg_pkg_installer=
+  for pkg_extract_dmg_pkg_candidate in "$pkg_extract_dmg_pkg_work/dmg"/*.pkg
+  do
+    [ -e "$pkg_extract_dmg_pkg_candidate" ] || [ -L "$pkg_extract_dmg_pkg_candidate" ] || continue
+    [ -f "$pkg_extract_dmg_pkg_candidate" ] && [ ! -L "$pkg_extract_dmg_pkg_candidate" ] || return 1
+    pkg_extract_dmg_pkg_count=$((pkg_extract_dmg_pkg_count + 1))
+    pkg_extract_dmg_pkg_installer=$pkg_extract_dmg_pkg_candidate
+    [ "$pkg_extract_dmg_pkg_count" -le 1 ] || return 1
+  done
+  [ "$pkg_extract_dmg_pkg_count" -eq 1 ] || return 1
+
+  command -- xar -xf "$pkg_extract_dmg_pkg_installer" -C "$pkg_extract_dmg_pkg_work/xar" || return 1
+  pkg_extract_dmg_pkg_component_dir="$pkg_extract_dmg_pkg_work/xar/$pkg_extract_dmg_pkg_component"
+  [ -d "$pkg_extract_dmg_pkg_component_dir" ] && [ ! -L "$pkg_extract_dmg_pkg_component_dir" ] || return 1
+  pkg_extract_dmg_pkg_payload="$pkg_extract_dmg_pkg_component_dir/Payload"
+  [ -f "$pkg_extract_dmg_pkg_payload" ] && [ ! -L "$pkg_extract_dmg_pkg_payload" ] && [ -r "$pkg_extract_dmg_pkg_payload" ] || return 1
+  _pkg_extract_payload_paths_valid "$pkg_extract_dmg_pkg_payload" || return 1
+
+  (
+    CDPATH= cd -- "$pkg_extract_dmg_pkg_staging" || exit 1
+    command -- cpio -idm < "$pkg_extract_dmg_pkg_payload" >/dev/null
+  ) || return 1
+
+  command -p -- rm -rf -- "$pkg_extract_dmg_pkg_work" || return 1
+  trap - 0 HUP INT TERM
+)
+
+pkg_extract()
+(
+  [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || return 2
   pkg_extract_input=$1
   pkg_extract_format=$2
   pkg_extract_staging_input=$3
+  pkg_extract_component=${4-}
 
   [ -f "$pkg_extract_input" ] && [ ! -L "$pkg_extract_input" ] && [ -r "$pkg_extract_input" ] || return 1
   _pkg_extract_require_empty_dir "$pkg_extract_staging_input" || return 1
@@ -136,15 +213,23 @@ pkg_extract()
   [ -f "$pkg_extract_artifact" ] && [ -d "$pkg_extract_staging" ] || return 1
 
   case "$pkg_extract_format" in
+    dmg-pkg)
+      [ "$#" -eq 4 ] || return 2
+      _pkg_extract_dmg_pkg "$pkg_extract_artifact" "$pkg_extract_staging" "$pkg_extract_component"
+      pkg_extract_status=$?
+      ;;
     appimage)
+      [ "$#" -eq 3 ] || return 2
       _pkg_extract_appimage "$pkg_extract_artifact" "$pkg_extract_staging"
       pkg_extract_status=$?
       ;;
     executable)
+      [ "$#" -eq 3 ] || return 2
       _pkg_extract_executable "$pkg_extract_artifact" "$pkg_extract_staging"
       pkg_extract_status=$?
       ;;
     tar|tar.gz|tgz|tar.bz2|tar.bzip2|tbz|tbz2|tar.xz|txz|tar.zst|tzst|gzip|gz|bzip|bzip2|bz2|xz|zstd|zst|zip|jar|war|7z|7zip|dmg|deb)
+      [ "$#" -eq 3 ] || return 2
       extract "$pkg_extract_format" "$pkg_extract_artifact" "$pkg_extract_staging"
       pkg_extract_status=$?
       ;;
