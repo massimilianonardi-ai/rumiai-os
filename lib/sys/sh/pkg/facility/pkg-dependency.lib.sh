@@ -334,6 +334,39 @@ pkg_dependency_resolve()
   [ -z "$pkg_dependency_resolved" ] || printf -- '%s\n' "$pkg_dependency_resolved"
 )
 
+pkg_dependency_default_resolve()
+(
+  [ "$#" -ge 2 ] || return 2
+  pkg_dependency_default_facility=$1
+  shift
+
+  _pkg_facility_name_valid "$pkg_dependency_default_facility" || return 2
+
+  pkg_dependency_default_constraints=
+  for pkg_dependency_default_constraint
+  do
+    _pkg_dependency_constraint_parse "$pkg_dependency_default_constraint" || return 2
+    if [ -n "$pkg_dependency_default_constraints" ]
+    then
+      pkg_dependency_default_constraints="$pkg_dependency_default_constraints $pkg_dependency_default_constraint"
+    else
+      pkg_dependency_default_constraints=$pkg_dependency_default_constraint
+    fi
+  done
+
+  pkg_dependency_default_provider="$(pkg_provider_default_resolve "$pkg_dependency_default_facility")"
+  pkg_dependency_default_status=$?
+  case "$pkg_dependency_default_status" in
+    0) : ;;
+    2) return 2 ;;
+    *) return 1 ;;
+  esac
+
+  _pkg_dependency_provider_satisfies     "$pkg_dependency_default_provider"     "$pkg_dependency_default_facility"     "$pkg_dependency_default_constraints" || return 1
+
+  printf -- '%s\n' "$pkg_dependency_default_provider"
+)
+
 _pkg_dependency_runtime_access_prepare_concrete()
 (
   [ "$#" -eq 2 ] || return 2
