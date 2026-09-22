@@ -1,29 +1,162 @@
 NAME
-    mk - execute the current m development materialization capability
+    mk - orchestrate a project's development lifecycle
 
 SYNOPSIS
-    mk materialize <source-root> <definition-root> <useful-root>
+    mk [options] [--] <goal> [<goal> ...]
+    mk [options] --goals
+    mk [options] --show-goal <goal>
 
 DESCRIPTION
-    mk is the technical development-lifecycle command. The currently implemented
-    public operation is materialize.
+    mk is the project development-lifecycle orchestrator of the technical m layer.
 
-    materialize transforms an existing source tree according to an existing
-    declarative definition root and publishes the result at a requested useful
-    root that does not already exist.
+    A project is described by declarative JSON in mk.json at the project root.
+    Without --project, mk searches the current directory and then parent
+    directories for the first mk.json.
 
-    The current definition requires a scalar type file. The currently supported
-    materialization type is copy.
+    Goal names are project data. Names such as build, test, run, clean or docs
+    have no built-in semantics unless the project defines them.
 
-OPERANDS
-    <source-root>
-        Existing source directory.
-    <definition-root>
-        Existing declarative materialization definition directory.
-    <useful-root>
-        Destination pathname whose parent already exists and whose leaf does not.
+    A goal selects one or more root operations. Operations may have prerequisite
+    operations and may execute an action. The first action type is process.
+
+    The current lifecycle engine is implemented in JavaScript and requires an
+    installed/default RumiAI-managed nodejs package. mk does not install that
+    runtime implicitly.
+
+OPTIONS
+    --project <path>
+        Select <path> as the project root instead of performing upward discovery.
+
+    --profile <profile>
+        Apply the named profile overlay from mk.json.
+
+    --plan
+        Resolve the requested goal set and write the operation execution plan
+        without executing actions.
+
+    --goals
+        List the available goal names in ascending lexical order.
+
+    --show-goal <goal>
+        Resolve one goal and write JSON containing the goal name, its root
+        operations and its resolved operation plan.
+
+    --
+        End option processing. Remaining operands are goal names.
+
+PROJECT CONFIGURATION
+    The current schema requires:
+
+        "version": 1
+
+    and accepts these top-level members:
+
+        version
+        environment
+        goals
+        operations
+        profiles
+
+    Unknown members are rejected.
+
+    goals maps each goal name to an array of root-operation names.
+
+    operations maps each operation name to an object accepting:
+
+        prerequisites
+            Optional array of prerequisite operation names.
+
+        action
+            Optional action object. An operation with prerequisites and no
+            action acts as an aggregation node.
+
+    The current process action has this shape:
+
+        {
+          "type": "process",
+          "command": "mvn",
+          "args": ["package"],
+          "cwd": ".",
+          "env": {
+            "NAME": "value"
+          }
+        }
+
+    command is required. args, cwd and env are optional. cwd defaults to the
+    project root; relative cwd values resolve from the project root. mk does not
+    implicitly invoke a shell for process actions.
+
+PROFILES
+    A profile may contain environment, goals and operations.
+
+    Profile environment entries replace same-named base entries. Profile goal
+    and operation entries replace same-named base definitions and may add new
+    definitions. Other base entries remain inherited.
+
+    No profile is selected implicitly in the current implementation.
+
+EXECUTION
+    mk validates references and prerequisite cycles before execution.
+
+    Multiple goal operands form one requested set. Each required operation is
+    included at most once in the resolved plan and every prerequisite precedes
+    the operation that requires it.
+
+    The current executor is sequential. This is an initial implementation
+    property rather than a semantic ordering rule for otherwise independent
+    operations.
+
+    Process actions inherit standard input, standard output and standard error.
+    Their environment starts from the mk caller environment and is overlaid by
+    project, profile and action environment entries in that order.
+
+OUTPUT
+    Normal successful execution adds no required mk output beyond action output.
+
+    --goals writes one goal name per line.
+
+    --plan writes one operation name per line in planned execution order.
+
+    --show-goal writes a JSON object containing goal, roots and operations.
 
 EXIT STATUS
     0   Success.
-    1   Operational, filesystem, definition or materialization failure.
-    2   Invalid CLI invocation.
+    1   Project/configuration/resolution/execution/runtime failure.
+    2   Invalid command invocation.
+
+FILES
+    <project-root>/mk.json
+        Declarative project configuration.
+
+REQUIREMENTS
+    nodejs
+        An installed/default RumiAI-managed nodejs package provides the current
+        JavaScript runtime used by the lifecycle engine.
+
+EXAMPLES
+    Execute a project-defined build goal:
+
+        mk build
+
+    Resolve without executing:
+
+        mk --plan build
+
+    Select a profile:
+
+        mk --profile release build
+
+    Request multiple goals as one plan:
+
+        mk test package
+
+    List goals:
+
+        mk --goals
+
+    Select another project:
+
+        mk --project ../other-project build
+
+SEE ALSO
+    pkg

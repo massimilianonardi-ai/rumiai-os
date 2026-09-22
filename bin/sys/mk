@@ -1,18 +1,29 @@
 #!/usr/bin/env m
 
-[ "$#" -ge 1 ] || fatal 2 error execution invalid-arguments operation mk
+main()
+{
+  mk_engine="$m_LIB_DIR/sys/js/mk.lib.js"
+  [ -f "$mk_engine" ] && [ ! -L "$mk_engine" ] && [ -r "$mk_engine" ] && [ ! -x "$mk_engine" ] ||
+    fatal 1 error execution execution-failed operation mk reason javascript-engine-unavailable path "$mk_engine"
 
-mk_command=$1
-shift
+  pkg default nodejs >/dev/null 2>&1 ||
+    fatal 1 error execution execution-failed operation mk reason nodejs-runtime-unavailable
 
-case "$mk_command" in
-  materialize)
-    [ "$#" -eq 3 ] || fatal 2 error execution invalid-arguments operation mk subcommand materialize
-    . "$m_LIB_DIR/sys/sh/mk/mk-materialize.lib.sh"
-    mk_materialize "$@"
-    exit $?
-    ;;
-  *)
-    fatal 2 error execution invalid-arguments operation mk subcommand "$mk_command"
-    ;;
-esac
+  command -v node >/dev/null 2>&1 ||
+    fatal 1 error execution execution-failed operation mk reason node-command-unavailable
+
+  m_MK_CALLER_PATH=$PATH
+  if [ "${HOME+x}" = x ]
+  then
+    m_MK_CALLER_HOME_DEFINED=1
+    m_MK_CALLER_HOME=$HOME
+  else
+    m_MK_CALLER_HOME_DEFINED=0
+    m_MK_CALLER_HOME=
+  fi
+  export m_MK_CALLER_PATH m_MK_CALLER_HOME_DEFINED m_MK_CALLER_HOME
+
+  exec node -e 'const mk=require(process.argv[1]); process.exit(mk.mkMain(process.argv.slice(2)));' -- "$mk_engine" "$@"
+}
+
+main "$@"
