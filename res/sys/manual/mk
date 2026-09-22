@@ -19,10 +19,10 @@ DESCRIPTION
     A goal selects one or more root operations. Operations may have prerequisite
     operations and may execute an action. The first action type is process.
 
-    Version 2 additionally supports context-derived file collections, trusted
-    operation providers, declarative operation guards, named outputs and runtime
-    plan refinement. mk.json remains data; it does not name or embed arbitrary
-    JavaScript resolver modules.
+    Version 2 additionally supports project-to-project dependencies,
+    context-derived file collections, trusted operation providers, declarative
+    operation guards, named outputs and runtime plan refinement. mk.json remains
+    data; it does not name or embed arbitrary JavaScript resolver modules.
 
     The lifecycle engine is implemented in JavaScript and requires an
     installed/default RumiAI-managed nodejs package. mk does not install that
@@ -76,6 +76,7 @@ PROJECT CONFIGURATION
         operations
         collections
         providers
+        dependencies
         profiles
 
     Unknown members are rejected.
@@ -216,10 +217,47 @@ CONDITIONS (VERSION 2)
     ordinary success prerequisite. This allows a failure declared continue to be
     observed by a fallback branch.
 
+PROJECT DEPENDENCIES (VERSION 2)
+    dependencies declares project-to-project lifecycle relations. A dependency
+    currently has this shape:
+
+        {
+          "project": "../core",
+          "goals": {
+            "build": ["compile"],
+            "check": ["verify"]
+          },
+          "profile": "release"
+        }
+
+    project is required. Relative paths resolve from the declaring project root.
+
+    goals maps requested parent-project goals to requested child-project goals.
+    An unmapped parent goal does not activate that dependency. If multiple
+    requested parent goals map to the same direct dependency, their child goals
+    are de-duplicated and sent as one child request.
+
+    profile is optional. The parent profile is not inherited implicitly by the
+    child project; a child profile is selected only when the dependency declares
+    one explicitly.
+
+    Active dependencies are executed by separate recursive mk engine processes.
+    The child owns its own operations, providers, collections, conditions and
+    further project dependencies. The parent does not flatten that graph.
+
+    Active direct dependencies must succeed before parent-local lifecycle work
+    begins. Recursive project cycles are rejected from canonical project identity
+    in the active invocation chain.
+
+    Independent sibling branches are independent lifecycle requests. A diamond
+    dependency may therefore request the same downstream project more than once;
+    no request-wide exactly-once/cache semantics are implied by dependencies.
+
 PROFILES
     Version 1 profiles may contain environment, goals and operations.
 
-    Version 2 profiles may additionally contain collections and providers.
+    Version 2 profiles may additionally contain collections, providers and
+    dependencies.
 
     Profile entries replace same-named base entries and may add new entries;
     absent base entries remain inherited. Environment entries replace
@@ -231,10 +269,12 @@ EXECUTION
 
     Version 1 retains the fully resolved sequential executor.
 
-    Version 2 repeatedly resolves only the dynamic definitions reachable from
-    the requested goals, executes ready work, records results and refines the
-    reachable plan. Context-known files may therefore be concrete before the
-    first action while generated files remain pending until a generator runs.
+    Version 2 first delegates active project dependencies for the requested goal
+    set and requires them to succeed. It then repeatedly resolves only the dynamic
+    definitions reachable from the requested local goals, executes ready work,
+    records results and refines the reachable plan. Context-known files may
+    therefore be concrete before the first action while generated files remain
+    pending until a generator runs.
 
     Normal prerequisites require success (or a conditionally skipped operation).
     A failed continued operation is terminal evidence but does not satisfy an
@@ -258,9 +298,15 @@ OUTPUT
 
         version
         goals
+        dependencies
         collections
         providers
         operations
+
+    Active dependency entries include the dependency name, canonical child project
+    root, requested child goals, optional explicit child profile and nested child
+    plan. Planning recursively asks child mk instances for plans but does not
+    execute their lifecycle work.
 
     Resolved collection entries include current items; pending collections include
     waitingFor. Provider entries identify their collection, current state and
