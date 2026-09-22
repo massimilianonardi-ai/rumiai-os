@@ -21,9 +21,9 @@ DESCRIPTION
 
     Version 2 additionally supports project-to-project dependencies, declarative
     external requirements, context-derived file collections, trusted operation
-    providers, declarative operation guards, named outputs and runtime plan
-    refinement. mk.json remains
-    data; it does not name or embed arbitrary JavaScript resolver modules.
+    providers, declarative operation guards, named outputs, incremental freshness
+    and runtime plan refinement. mk.json remains data; it does not name or embed
+    arbitrary JavaScript resolver modules.
 
     The lifecycle engine is implemented in JavaScript and requires an
     installed/default RumiAI-managed nodejs package. mk does not install that
@@ -106,6 +106,10 @@ PROJECT CONFIGURATION
             behavior. continue records a failed execution result so later
             conditions can observe it and refinement can continue. A failed
             operation still does not satisfy an ordinary prerequisite.
+
+        incremental
+            Optional incremental-freshness declaration for an ordinary process
+            operation. The operation must declare at least one named output.
 
 PROCESS ACTION
     The process action has this shape:
@@ -218,6 +222,69 @@ FACILITY REQUIREMENTS (VERSION 2)
     layer. Facility commands/environment remain supplied by normal m/pkg bootstrap
     semantics.
 
+INCREMENTAL FRESHNESS (VERSION 2)
+    An ordinary process operation may opt into incremental freshness:
+
+        {
+          "incremental": {
+            "inputs": {
+              "source": {"path": "src/main.c"},
+              "sources": {"collection": "sources"},
+              "generated": {"output": {"operation": "generate", "name": "artifact"}}
+            }
+          },
+          "action": {
+            "type": "process",
+            "command": "cc",
+            "args": ["..."]
+          },
+          "outputs": {
+            "artifact": {"path": "out/app"}
+          }
+        }
+
+    inputs is a named map. The first supported source forms are path, collection
+    and another operation's named output. An output input is a data dependency on
+    its producer and does not require the same relation to be repeated as an
+    ordinary prerequisite merely for reachability.
+
+    Incremental identity is content-based. Supported regular files and directory
+    trees are fingerprinted deterministically with SHA-256; modification time is
+    not freshness identity. The effective operation definition, process
+    environment, resolved executable identity, selected concrete providers for
+    referenced facility requirements and resolved named inputs also participate in
+    the operation fingerprint.
+
+    A previous success is reusable only when the current effective fingerprint
+    matches and every declared output still exists in supported fingerprintable
+    form with the same recorded output fingerprint. Unsupported or corrupt
+    freshness metadata produces a conservative miss and ordinary execution.
+
+    A verified hit has state up-to-date. It satisfies ordinary prerequisites,
+    collection after barriers and named-output evidence in the current request.
+    It does not fabricate process-result evidence. If a reachable condition
+    observes result.status, result.ok, result.signal or result.error for an
+    otherwise up-to-date producer, that producer executes in the current request.
+
+    Only successful executions with complete fingerprintable declared outputs
+    refresh freshness metadata. Failed execution never creates reusable freshness
+    state.
+
+    Freshness metadata is non-authoritative user cache state resolved through:
+
+        state-path user sys mk cache
+
+    Private layout below that semantic cache area is an mk implementation detail.
+    Project identity is based on the canonical project root, so a copied/moved
+    checkout starts with a cache miss in this baseline.
+
+    --plan may read existing freshness metadata and report up-to-date, but it does
+    not create or refresh persistent cache state.
+
+    This baseline stores freshness metadata only. It does not store or restore
+    artifact bytes, provide shared/remote cache, or define provider-level
+    incremental templates.
+
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
 
@@ -313,10 +380,11 @@ EXECUTION
 
     Version 2 first delegates active project dependencies for the requested goal
     set and requires them to succeed. It then repeatedly resolves only the dynamic
-    definitions and external requirements reachable from the requested local goals,
-    executes ready work, records results and refines the reachable plan. Context-known files may
-    therefore be concrete before the first action while generated files remain
-    pending until a generator runs.
+    definitions, external requirements and incremental data dependencies reachable
+    from the requested local goals, establishes verified up-to-date work when
+    possible, executes ready work, records results and refines the reachable plan.
+    Context-known files may therefore be concrete before the first action while
+    generated files remain pending until a generator runs.
 
     Normal prerequisites require success (or a conditionally skipped operation).
     A failed continued operation is terminal evidence but does not satisfy an
@@ -361,9 +429,9 @@ OUTPUT
     derived operation names. Operation entries include state and prerequisites,
     plus observation/condition/derived-provider information when applicable.
 
-    Version-2 operation states are ready, blocked, conditional, skipped, completed
-    or failed. Provider states are pending, resolved or completed; collection states
-    are pending or resolved.
+    Version-2 operation states are ready, blocked, conditional, skipped,
+    up-to-date, completed or failed. Provider states are pending, resolved or
+    completed; collection states are pending or resolved.
 
 EXIT STATUS
     0   Success.
