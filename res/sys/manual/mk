@@ -93,6 +93,11 @@ PROJECT CONFIGURATION
             Optional array of named external requirements. The operation cannot
             become ready until all current requirements are satisfied.
 
+        inputs
+            Optional named path/collection/output data inputs. Input identity is
+            independent from incremental reuse policy and may be declared by an
+            otherwise ordinary non-incremental operation.
+
         when
             Optional declarative condition controlling whether the operation is
             selected when its operands become known.
@@ -222,17 +227,16 @@ FACILITY REQUIREMENTS (VERSION 2)
     layer. Facility commands/environment remain supplied by normal m/pkg bootstrap
     semantics.
 
-INCREMENTAL FRESHNESS (VERSION 2)
-    An ordinary process operation may opt into incremental freshness:
+OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
+    Operation inputs are first-class lifecycle data identity:
 
         {
-          "incremental": {
-            "inputs": {
-              "source": {"path": "src/main.c"},
-              "sources": {"collection": "sources"},
-              "generated": {"output": {"operation": "generate", "name": "artifact"}}
-            }
+          "inputs": {
+            "source": {"path": "src/main.c"},
+            "sources": {"collection": "sources"},
+            "generated": {"output": {"operation": "generate", "name": "artifact"}}
           },
+          "incremental": {},
           "action": {
             "type": "process",
             "command": "cc",
@@ -246,7 +250,20 @@ INCREMENTAL FRESHNESS (VERSION 2)
     inputs is a named map. The first supported source forms are path, collection
     and another operation's named output. An output input is a data dependency on
     its producer and does not require the same relation to be repeated as an
-    ordinary prerequisite merely for reachability.
+    ordinary prerequisite merely for reachability. Collection inputs make their
+    collection part of the operation's reachable data relation.
+
+    inputs does not itself enable caching or assert that the action is pure.
+    Without incremental, the operation executes normally whenever reached.
+
+    incremental opts an ordinary process operation into freshness reuse using the
+    shared operation inputs. The operation must also declare at least one named
+    output.
+
+    The previous incremental.inputs form remains accepted for compatibility and is
+    normalized to the same shared operation input map. A non-empty inputs map and
+    a non-empty incremental.inputs map on the same operation are rejected as an
+    ambiguous duplicate declaration.
 
     Incremental identity is content-based. Supported regular files and directory
     trees are fingerprinted deterministically with SHA-256; modification time is
@@ -380,7 +397,7 @@ EXECUTION
 
     Version 2 first delegates active project dependencies for the requested goal
     set and requires them to succeed. It then repeatedly resolves only the dynamic
-    definitions, external requirements and incremental data dependencies reachable
+    definitions, external requirements and declared data dependencies reachable
     from the requested local goals, establishes verified up-to-date work when
     possible, executes ready work, records results and refines the reachable plan.
     Context-known files may therefore be concrete before the first action while
@@ -426,8 +443,8 @@ OUTPUT
 
     Resolved collection entries include current items; pending collections include
     waitingFor. Provider entries identify their collection, current state and
-    derived operation names. Operation entries include state and prerequisites,
-    plus observation/condition/derived-provider information when applicable.
+    derived operation names. Operation entries include state, prerequisites and
+    normalized inputs, plus observation/condition/derived-provider information when applicable.
 
     Version-2 operation states are ready, blocked, conditional, skipped,
     up-to-date, completed or failed. Provider states are pending, resolved or
