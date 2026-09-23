@@ -10,6 +10,7 @@
 
 #------------------------------------------------------------------------------
 
+. "$m_LIB_DIR/sys/sh/rand.lib.sh"
 . "$m_LIB_DIR/sys/sh/enc.lib.sh"
 . "$m_LIB_DIR/sys/sh/rsudo/rsudo-env.lib.sh"
 
