@@ -80,8 +80,45 @@ rsudo_core()
   # log debug "ARGS - END"
 
   # prepare vars for executing
+  RSUDO_IPC_CHANNEL="$(ipc_create "$RSUDO_RUNTIME_DIR")" || return 1
+  RSUDO_IPC_TOKEN="$(randhex 32)" || { ipc_destroy "$RSUDO_IPC_CHANNEL"; return 1; }
+
+  (
+      set +x
+
+      ipc_open "$RSUDO_IPC_CHANNEL" a 3 4 || exit 20
+
+      _token="$(ipc_read 3)" || {
+          ipc_close 3 4
+          exit 21
+      }
+
+      [ "$_token" = "$RSUDO_IPC_TOKEN" ] || {
+          ipc_close 3 4
+          exit 22
+      }
+
+      ipc_write 4 "$RSUDO_PASSWORD" || {
+          ipc_close 3 4
+          exit 23
+      }
+
+      _ack="$(ipc_read 3)" || {
+          ipc_close 3 4
+          exit 24
+      }
+
+      [ "$_ack" = "ok" ] || {
+          ipc_close 3 4
+          exit 25
+      }
+
+      ipc_close 3 4
+  ) &
+  RSUDO_IPC_PID="$!"
+
   # export DISPLAY=":0.0"
-  export SSH_ASKPASS="rsudo-askpass"
+  export SSH_ASKPASS="$m_BIN_SYS_DIR/rsudo-askpass"
   export SSH_ASKPASS_REQUIRE="force"
 
   # check if impersonating another user

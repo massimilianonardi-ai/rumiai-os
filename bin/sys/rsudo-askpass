@@ -1,38 +1,29 @@
 #!/usr/bin/env m
 
-# if not interactive password is passed via pipe because fd0 is not attached to tty
-# if interactive fd0 is attached to tty and pipe cannot be used otherwise ssh switch to not interactive
-# -> every workaround was already tested and will not work
-# => password is passed through fifo, but encrypted with a temporary token passed insecurely through env
+. "$m_LIB_DIR/sys/sh/ipc.lib.sh"
 
-log debug "rsudo-askpass called! ...checking if caller is ssh! RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && printf '%s\n' "is exported and not null" || printf '%s\n' "is NOT exported (null)")"
-if [ "$(ps -o "comm=" -p "$PPID")" = "ssh" ]
-then
-  if [ -t 0 ]
-  then
-    if [ -n "$RSUDO_FIFO" ]
-    then
-      # delete redundant to ensure removal even on some interruption
-      trap "rm -f '$RSUDO_FIFO'" INT QUIT TERM HUP PIPE ABRT TSTP EXIT
-      exec 0<"$RSUDO_FIFO"
-      read -r RSUDO_PASSWORD
-      # delete redundant with main process to ensure removal even on some interruption
-      rm -f "$RSUDO_FIFO"
-      RSUDO_PASSWORD="$(printf '%s\n' "$RSUDO_PASSWORD" | openssl enc -d -A -base64 | RSUDO_TOKEN="$RSUDO_TOKEN" openssl enc -d -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN")"
-    else
-      log_fatal "wrong rsudo-askpass method"
-      exit 1
-    fi
-  else
-    read -r RSUDO_PASSWORD
-  fi
+set +x
 
-  printf '%s\n' "$RSUDO_PASSWORD"
+[ -n "$RSUDO_IPC_CHANNEL" ] || exit 1
+[ -n "$RSUDO_IPC_TOKEN" ] || exit 1
 
-  log debug "rsudo askpass called by ssh! RSUDO_PASSWORD read and $([ -n "$RSUDO_PASSWORD" ] && printf '%s\n' "is not null" || printf '%s\n' "is null")"
-  # log trace "RSUDO_PASSWORD=$RSUDO_PASSWORD"
+ipc_open "$RSUDO_IPC_CHANNEL" b 3 4 || exit 1
 
-  [ -z "$RSUDO_PASSWORD" ] && fatal "password is null!"
-else
-  fatal "security checkfailed!"
-fi
+ipc_write 4 "$RSUDO_IPC_TOKEN" || {
+    ipc_close 3 4
+    exit 1
+}
+
+RSUDO_PASSWORD="$(ipc_read 3)" || {
+    ipc_close 3 4
+    exit 1
+}
+
+ipc_write 4 "ok" || {
+    ipc_close 3 4
+    exit 1
+}
+
+ipc_close 3 4
+
+printf '%s\n' "$RSUDO_PASSWORD"
