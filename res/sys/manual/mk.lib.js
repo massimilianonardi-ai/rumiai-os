@@ -15,8 +15,9 @@ DESCRIPTION
     collections, applies content-based incremental freshness to opted-in ordinary
     process operations, invokes trusted registered provider implementations to
     derive ordinary operations, preserves unresolved declarative conditions in
-    structured plans and refines the reachable plan after execution produces new
-    result/output/state/external-state evidence.
+    structured plans, refines the reachable plan after execution produces new
+    result/output/state/external-state evidence, and implements long-running
+    watch supervision around fresh one-shot lifecycle requests.
 
     The library is loaded by the bootstrap-integrated mk shell entrypoint through
     the current Node.js runtime.
@@ -35,7 +36,17 @@ PUBLIC FUNCTIONS
         For version 2, active project dependencies are first delegated to child
         mk engine processes. Child project internals remain encapsulated and child
         profiles are selected only when explicitly declared by the dependency.
-        After dependencies succeed, local resolution/execution is iterative:
+
+        With --watch, mkMain returns an asynchronous result for a long-running
+        version-2 watch session. The session derives authoritative trigger identity
+        through the same trusted resolver, composes active child-project trigger
+        identity recursively, and executes every trigger pass and lifecycle cycle
+        through a fresh m bootstrap. Temporary invalid project configuration pauses
+        without lifecycle work; failed lifecycle cycles are reported and followed
+        by waiting for another trigger change. SIGINT/SIGTERM are forwarded to an
+        active one-shot lifecycle child.
+
+        After dependencies succeed, ordinary local resolution/execution is iterative:
         currently reachable dynamic context, named external requirements and
         operation data dependencies are resolved, verified up-to-date work is
         established when possible, ready work executes, results are recorded and
@@ -86,6 +97,12 @@ ENVIRONMENT
     requirement-provider identities and resolved operation inputs. Supported file
     identity is content-based; mtime is not used as freshness evidence.
 
+    Watch trigger identity reuses these resolver-owned identities plus current
+    reachable collection content, declared input evidence and incremental output
+    validity. Ordinary non-incremental unconsumed outputs are excluded. Active
+    dependent projects contribute only opaque recursively resolved child digests
+    to their parent.
+
 FILES
     <project-root>/mk.json
         Declarative project configuration.
@@ -98,6 +115,10 @@ FILES
         This library.
 
 NOTES
+    mkMain may return either an integer status for ordinary requests or a Promise
+    resolving to an integer status for --watch. The public shell launcher handles
+    both forms through Promise.resolve().
+
     Only mkMain is public. Underscore-prefixed functions are implementation
     details and are not callable API.
 
