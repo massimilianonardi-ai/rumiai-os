@@ -436,7 +436,7 @@ EOF_ASSET
 
   if [ "$pkg_repository_github_have_download_override" -eq 1 ]
   then
-    pkg_repository_github_download="$(pkg_repository_artifact_download_override "$pkg_repository_github_repository_dir" "$pkg_repository_github_requested")" || return 1
+    pkg_repository_github_download="$(pkg_repository_artifact_download_resolve "$pkg_repository_github_repository_dir/download" "$pkg_repository_github_requested")" || return 1
     pkg_repository_github_tab="$(printf '\t')"
     IFS="$pkg_repository_github_tab" read -r \
       pkg_repository_github_name \
@@ -458,9 +458,9 @@ EOF_DOWNLOAD
 
   if [ "$pkg_repository_github_have_metadata_override" -eq 1 ]
   then
-    pkg_repository_github_metadata="$(pkg_repository_artifact_metadata_override \
-      "$pkg_repository_github_repository_dir" \
-      "$pkg_repository_github_range_dir" \
+    pkg_repository_github_metadata="$(pkg_repository_artifact_metadata_resolve \
+      "$pkg_repository_github_repository_dir/metadata" \
+      "$pkg_repository_github_digest_type" \
       "$pkg_repository_github_requested" \
       "$pkg_repository_github_name" \
       "$pkg_repository_github_url")" || return 1

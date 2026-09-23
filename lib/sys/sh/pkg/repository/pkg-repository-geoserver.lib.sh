@@ -1,4 +1,5 @@
 . "$m_LIB_DIR/sys/sh/json.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-artifact.lib.sh"
 
 _pkg_repository_geoserver_scalar()
 {
@@ -91,7 +92,15 @@ _pkg_repository_geoserver_validate_exact_release()
   _pkg_repository_geoserver_validate_repository "$1" || return 1
   _pkg_repository_geoserver_validate_version "$2" || return 1
 
-  _pkg_repository_geoserver_artifact_metadata "$2" "geoserver-$2-bin.zip" >/dev/null
+  name="geoserver-$2-bin.zip"
+  download_url="https://sourceforge.net/projects/geoserver/files/GeoServer/$2/$name/download"
+  pkg_repository_artifact_metadata_sourceforge_rss \
+    geoserver \
+    '/GeoServer/{version}/' \
+    md5 \
+    "$2" \
+    "$name" \
+    "$download_url" >/dev/null
 )
 
 _pkg_repository_geoserver_versions()
@@ -144,69 +153,6 @@ EOF_RECORDS
     LC_ALL=C command -p -- awk -F "$tab" 'NF!=7{exit 1} seen[$7]++{exit 1} {print $7}'
 )
 
-_pkg_repository_geoserver_rss_get()
-{
-  [ "$#" -eq 1 ] || return 2
-  _pkg_repository_geoserver_validate_version "$1" || return 2
-  http-fetch -- "https://sourceforge.net/projects/geoserver/rss?path=/GeoServer/$1/"
-}
-
-_pkg_repository_geoserver_artifact_metadata()
-(
-  [ "$#" -eq 2 ] || return 2
-  version=$1
-  name=$2
-  _pkg_repository_geoserver_validate_version "$version" || return 2
-  [ -n "$name" ] || return 2
-
-  url="https://sourceforge.net/projects/geoserver/files/GeoServer/$version/$name/download"
-  body="$(_pkg_repository_geoserver_rss_get "$version")" || return 1
-
-  printf '%s\n' "$body" | LC_ALL=C command -p -- awk -v expected_url="$url" '
-{
-  source=source $0 "\n"
-}
-END {
-  count=split(source, part, /<media:content/)
-  found=0
-  for (i=2; i<=count; i++) {
-    block=part[i]
-    close_pos=index(block, "</media:content>")
-    if (!close_pos) {
-      if (index(block, "url=\"" expected_url "\"") != 0) exit 1
-      continue
-    }
-    block=substr(block, 1, close_pos-1)
-    if (index(block, "url=\"" expected_url "\"") == 0) continue
-
-    found++
-    if (found != 1) exit 1
-
-    marker="filesize=\""
-    start=index(block, marker)
-    if (!start) exit 1
-    rest=substr(block, start+length(marker))
-    finish=index(rest, "\"")
-    if (!finish) exit 1
-    size=substr(rest, 1, finish-1)
-    if (size !~ /^[1-9][0-9]*$/) exit 1
-    if (index(substr(rest, finish+1), marker) != 0) exit 1
-
-    marker="<media:hash algo=\"md5\">"
-    start=index(block, marker)
-    if (!start) exit 1
-    rest=substr(block, start+length(marker))
-    finish=index(rest, "</media:hash>")
-    if (!finish) exit 1
-    digest=substr(rest, 1, finish-1)
-    if (length(digest) != 32 || digest !~ /^[0-9A-Fa-f]+$/) exit 1
-    if (index(substr(rest, finish+length("</media:hash>")), marker) != 0) exit 1
-  }
-  if (found != 1) exit 1
-  printf "%s\t%s\n", size, tolower(digest)
-}'
-)
-
 pkg_repository_list_versions()
 (
   [ "$#" -eq 1 ] || return 2
@@ -250,29 +196,34 @@ pkg_repository_resolve_artifact()
   archive_regex="$(_pkg_repository_geoserver_scalar "$range/archive_regex")" || return 1
   LC_ALL=C command -p -- awk -v expression="$archive_regex" 'BEGIN{value=""; value~expression; exit 0}' || return 1
   [ ! -e "$range/digest_regex" ] && [ ! -L "$range/digest_regex" ] || return 1
-  [ "$(_pkg_repository_geoserver_scalar "$range/digest_type")" = md5 ] || return 1
+  digest_type="$(_pkg_repository_geoserver_scalar "$range/digest_type")" || return 1
+  [ "$digest_type" = md5 ] || return 1
 
   name="geoserver-$version-bin.zip"
   LC_ALL=C command -p -- awk -v value="$name" -v expression="$archive_regex" 'BEGIN{exit(value~expression?0:1)}' || return 1
-  metadata="$(_pkg_repository_geoserver_artifact_metadata "$version" "$name")" || return 1
+  download_url="https://sourceforge.net/projects/geoserver/files/GeoServer/$version/$name/download"
+  metadata="$(pkg_repository_artifact_metadata_sourceforge_rss \
+    geoserver \
+    '/GeoServer/{version}/' \
+    "$digest_type" \
+    "$version" \
+    "$name" \
+    "$download_url")" || return 1
+
   tab="$(printf '\t')"
-  IFS="$tab" read -r size md5 extra <<EOF_METADATA
+  IFS="$tab" read -r size digest extra <<EOF_METADATA
 $metadata
 EOF_METADATA
   [ -z "$extra" ] || return 1
-  case "$size" in ''|*[!0-9]*|0[0-9]*) return 1;; esac
-  [ "$size" -gt 0 ] || return 1
-  [ "${#md5}" -eq 32 ] || return 1
-  case "$md5" in *[!0-9a-f]*) return 1;; esac
+  case "$digest" in md5:*) md5=${digest#md5:};; *) return 1;; esac
 
-  download_url="https://sourceforge.net/projects/geoserver/files/GeoServer/$version/$name/download"
-
-  printf -- 'name=%s\n' "$name"
-  printf -- 'url=%s\n' "$download_url"
+  printf 'name=%s\n' "$name"
+  printf 'url=%s\n' "$download_url"
   for mirror in pilotfiber phoenixnap psychz cfhcable
   do
-    printf -- 'url=%s?use_mirror=%s\n' "$download_url" "$mirror"
+    printf 'url=%s?use_mirror=%s\n' "$download_url" "$mirror"
   done
-  printf -- 'size=%s\n' "$size"
-  printf -- 'digest=md5:%s\n' "$md5"
+  printf 'size=%s\n' "$size"
+  printf 'digest=md5:%s\n' "$md5"
 )
+

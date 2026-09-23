@@ -13,12 +13,11 @@ DESCRIPTION
     versions with strict numeric X.Y.Z syntax are exposed, and those versions
     are ordered locally.
 
-    Exact-version validation and artifact resolution use the official SourceForge
-    GeoServer release RSS for that version. The exact
-    geoserver-<version>-bin.zip entry proves the released binary exists and
-    supplies the artifact size and MD5 digest, which are returned for enforcement
-    by pkg-download. Exact installs therefore do not depend on anonymous GitHub
-    API quota.
+    Exact-version validation and artifact resolution use the shared
+    sourceforge-rss artifact metadata mechanism against the official GeoServer
+    SourceForge project. The exact geoserver-<version>-bin.zip entry proves the
+    released binary exists and supplies the artifact size and MD5 digest.
+    SourceForge mirror candidates remain GeoServer adapter download policy.
 
 FUNCTIONS
     pkg_repository_list_versions <repository-dir>
@@ -33,13 +32,15 @@ FUNCTIONS
         inventory when no version is supplied.
 
     pkg_repository_resolve_artifact <repository-dir> <range-dir> <version>
-        Print the generic artifact descriptor for the exact platform-independent
-        binary ZIP, including ordered SourceForge URL candidates plus the upstream
-        size and MD5 digest. The range must declare digest_type md5.
+        Print the canonical descriptor for the platform-independent binary ZIP,
+        including ordered SourceForge URL candidates plus authoritative size and
+        MD5 digest. The range must declare digest_type md5.
 
 DEPENDENCIES
     json.lib.sh
+    pkg-repository-artifact.lib.sh
     http-fetch
 
 SEE ALSO
+    pkg-repository-artifact.lib.sh
     pkg-install.lib.sh

@@ -1,65 +1,58 @@
 NAME
-    pkg-repository-artifact.lib.sh - typed package artifact override handlers
+    pkg-repository-artifact.lib.sh - typed package artifact handlers
 
 DESCRIPTION
-    Provides reusable, trusted handlers for optional artifact-resolution overrides
-    used by package repository adapters.
+    Provides reusable trusted handlers for package artifact-resolution
+    responsibilities. Repository type adapters remain complete implementations;
+    optional catalog overrides replace only the responsibility represented by
+    their typed subdescriptor.
 
-    Repository type adapters remain complete implementations. An override is
-    optional and replaces only the artifact responsibility represented by its
-    subdescriptor. Catalog metadata is declarative and cannot provide executable
-    handler logic.
+    Download descriptors currently support:
 
-    A download override lives under:
+        type = template-url
+        name-template
+        url-template
 
-        <repository>/download/
+    name-template accepts {version}. url-template accepts {version} and {name}.
+    Unknown placeholders are invalid.
 
-    The current download type is:
-
-        template-url
-
-    Its closed schema contains type, name-template and url-template. A
-    name-template may contain {version}. A url-template may contain {version} and
-    {name}. Unknown template placeholders are rejected.
-
-    A metadata override lives under:
-
-        <repository>/metadata/
-
-    Current metadata types are:
+    Metadata descriptors currently support:
 
         checksum-sidecar
         checksum-manifest
+        sourceforge-rss
 
-    Both obtain artifact size from the resolved HTTPS download URL and obtain the
-    integrity digest from the configured checksum URL template. The checksum
-    algorithm remains selected by the package range digest_type value; the
-    metadata type does not redefine the algorithm.
+    checksum-sidecar requires url-template plus record-format = digest-name.
+    checksum-manifest requires url-template. Both resolve size from the HTTPS
+    artifact URL and validate exactly one checksum record for the resolved name.
 
-    checksum-sidecar requires record-format = digest-name and exactly one
-    non-empty checksum record naming the resolved artifact. checksum-manifest
-    accepts a checksum list and requires exactly one record for the resolved
-    artifact name.
+    sourceforge-rss requires project and path-template. path-template accepts
+    {version}; the RSS entry matching the exact download URL supplies authoritative
+    positive byte size and digest.
+
+    The digest algorithm is always supplied separately by the caller from the
+    package range digest_type contract. A metadata handler never redefines it.
 
 FUNCTIONS
     pkg_repository_artifact_overrides_validate <repository-dir>
-        Validate any present download and metadata override subdescriptors.
-        Absence of either override is valid.
+        Validate any present download/ and metadata/ typed subdescriptors.
 
-    pkg_repository_artifact_download_override <repository-dir> <version>
-        Resolve the configured download override and print one tab-separated
-        artifact name and HTTPS URL.
+    pkg_repository_artifact_download_resolve <download-dir> <version>
+        Resolve a typed download descriptor and print one tab-separated artifact
+        name and HTTPS URL.
 
-    pkg_repository_artifact_metadata_override <repository-dir> <range-dir> <version> <name> <download-url>
-        Resolve the configured metadata override and print one tab-separated
-        positive byte size and digest descriptor in <algorithm>:<hex> form.
-        The range must contain a supported digest_type and must not contain
-        digest_regex.
+    pkg_repository_artifact_metadata_resolve <metadata-dir> <digest-type> <version> <name> <download-url>
+        Resolve a typed metadata descriptor and print one tab-separated positive
+        byte size and <algorithm>:<hex> digest.
+
+    pkg_repository_artifact_metadata_sourceforge_rss <project> <path-template> <digest-type> <version> <name> <download-url>
+        Resolve the SourceForge RSS metadata mechanism directly. This public
+        mechanism entrypoint lets a complete custom repository type reuse the same
+        trusted implementation without requiring a catalog override.
 
 STATUS
-    Public functions return 0 on success, 1 when supplied metadata or upstream
-    data does not satisfy the handler contract, and 2 for invalid function
-    invocation.
+    Public functions return 0 on success, 1 when descriptor/upstream data violates
+    the handler contract, and 2 for invalid invocation.
 
 DEPENDENCIES
     http-fetch
@@ -69,4 +62,5 @@ DEPENDENCIES
 
 SEE ALSO
     pkg-repository-github.lib.sh
+    pkg-repository-geoserver.lib.sh
     pkg-install.lib.sh
