@@ -18,8 +18,9 @@ DESCRIPTION
     digest from Apache's digest-only SHA-512 sidecar and obtains a positive byte
     size from the selected download URL.
 
-    The checksum sidecar mechanism is delegated to
-    pkg-repository-artifact.lib.sh. The apache-maven repository type remains a
+    The artifact-name/download-URL template mechanism and checksum-sidecar
+    mechanism are delegated to pkg-repository-artifact.lib.sh. The apache-maven
+    repository type remains a
     complete adapter; this internal reuse does not require an artifact override
     in catalog metadata.
 
