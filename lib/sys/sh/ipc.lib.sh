@@ -1,4 +1,3 @@
-
 . "$m_LIB_DIR/sys/sh/rand.lib.sh"
 
 #-------------------------------------------------------------------------------
@@ -12,6 +11,45 @@ _ipc_fd_valid()
     *) return 1 ;;
   esac
 }
+
+#-------------------------------------------------------------------------------
+
+_ipc_pid_valid()
+{
+  [ "$#" -eq "1" ] || return 2
+
+  case "$1" in
+    "" | 0* | *[!0123456789]*) return 1 ;;
+  esac
+
+  [ "$1" -gt "0" ] 2>/dev/null
+}
+
+#-------------------------------------------------------------------------------
+
+_ipc_channel_valid()
+(
+  [ "$#" -eq "1" ] || return 2
+
+  case "$1" in
+    /*) ;;
+    *) return 1 ;;
+  esac
+
+  _ipc_name="${1##*/}"
+  _ipc_rest="${_ipc_name#ipc.}"
+
+  [ "$_ipc_rest" != "$_ipc_name" ] || return 1
+
+  _ipc_pid="${_ipc_rest%%.*}"
+  _ipc_token="${_ipc_rest#*.}"
+
+  [ "$_ipc_token" != "$_ipc_rest" ] || return 1
+  _ipc_pid_valid "$_ipc_pid" || return 1
+
+  [ "${#_ipc_token}" -eq "32" ] || return 1
+  [ "$_ipc_token" = "${_ipc_token%%[!0123456789abcdef]*}" ] || return 1
+)
 
 #-------------------------------------------------------------------------------
 
@@ -91,16 +129,18 @@ ipc_open()
   _ipc_read_fd="$3"
   _ipc_write_fd="$4"
 
+  _ipc_channel_valid "$_ipc_dir" || return 1
   _ipc_fd_valid "$_ipc_read_fd" || return 1
   _ipc_fd_valid "$_ipc_write_fd" || return 1
   [ "$_ipc_read_fd" != "$_ipc_write_fd" ] || return 1
 
-  [ -d "$_ipc_dir" ] || return 1
+  [ -d "$_ipc_dir" ] && [ ! -L "$_ipc_dir" ] || return 1
 
   _ipc_ab="$_ipc_dir/a-to-b"
   _ipc_ba="$_ipc_dir/b-to-a"
 
-  [ -p "$_ipc_ab" ] && [ -p "$_ipc_ba" ] || return 1
+  [ -p "$_ipc_ab" ] && [ ! -L "$_ipc_ab" ] || return 1
+  [ -p "$_ipc_ba" ] && [ ! -L "$_ipc_ba" ] || return 1
 
   case "$_ipc_endpoint" in
     a)
@@ -156,13 +196,18 @@ ipc_open()
 #-------------------------------------------------------------------------------
 
 # ipc_write write_fd data
-# writes one newline-delimited shell string record
+# writes one newline-delimited shell string record; data must not contain newline
 ipc_write()
 (
   set +x
 
   [ "$#" -eq "2" ] || return 2
   _ipc_fd_valid "$1" || return 1
+
+  case "$2" in
+    *'
+'*) return 1 ;;
+  esac
 
   _ipc_fd="$1"
 
@@ -207,10 +252,11 @@ ipc_close()
 #-------------------------------------------------------------------------------
 
 # ipc_sync pid
-# waits for an asynchronous IPC operation and returns its status
+# waits for an asynchronous IPC child operation and returns its status
 ipc_sync()
 {
   [ "$#" -eq "1" ] || return 2
+  _ipc_pid_valid "$1" || return 1
 
   wait "$1"
 }
@@ -218,10 +264,11 @@ ipc_sync()
 #-------------------------------------------------------------------------------
 
 # ipc_cancel pid
-# stops an asynchronous IPC operation and reaps it
+# stops an asynchronous IPC child operation started by the current shell and reaps it
 ipc_cancel()
 {
   [ "$#" -eq "1" ] || return 2
+  _ipc_pid_valid "$1" || return 1
 
   kill "$1" 2>/dev/null || :
   wait "$1" 2>/dev/null || :
@@ -230,7 +277,7 @@ ipc_cancel()
 #-------------------------------------------------------------------------------
 
 # ipc_destroy channel
-# removes a channel that has not yet been fully opened
+# removes a channel only before either endpoint has begun ipc_open
 ipc_destroy()
 (
   set +x
@@ -239,18 +286,36 @@ ipc_destroy()
 
   _ipc_dir="$1"
 
-  [ "${_ipc_dir#/}" != "$_ipc_dir" ] || return 1
+  _ipc_channel_valid "$_ipc_dir" || return 1
 
+  [ ! -L "$_ipc_dir" ] || return 1
   [ -d "$_ipc_dir" ] || return 0
 
-  if [ -p "$_ipc_dir/a-to-b" ]
+  _ipc_ab="$_ipc_dir/a-to-b"
+  _ipc_ba="$_ipc_dir/b-to-a"
+
+  if [ -p "$_ipc_ab" ] && [ ! -L "$_ipc_ab" ]
   then
-    rm -f "$_ipc_dir/a-to-b" || return 1
+    _ipc_has_fifo="1"
+  else
+    _ipc_has_fifo="0"
   fi
 
-  if [ -p "$_ipc_dir/b-to-a" ]
+  if [ -p "$_ipc_ba" ] && [ ! -L "$_ipc_ba" ]
   then
-    rm -f "$_ipc_dir/b-to-a" || return 1
+    _ipc_has_fifo="1"
+  fi
+
+  [ "$_ipc_has_fifo" -eq "1" ] || return 1
+
+  if [ -p "$_ipc_ab" ] && [ ! -L "$_ipc_ab" ]
+  then
+    rm -f "$_ipc_ab" || return 1
+  fi
+
+  if [ -p "$_ipc_ba" ] && [ ! -L "$_ipc_ba" ]
+  then
+    rm -f "$_ipc_ba" || return 1
   fi
 
   rmdir "$_ipc_dir"
