@@ -23,7 +23,7 @@ main()
   fi
   export m_MK_CALLER_PATH m_MK_CALLER_HOME_DEFINED m_MK_CALLER_HOME
 
-  exec node -e 'const mk=require(process.argv[1]); process.exit(mk.mkMain(process.argv.slice(2)));' -- "$mk_engine" "$@"
+  exec node -e 'const mk=require(process.argv[1]); Promise.resolve(mk.mkMain(process.argv.slice(2))).then(status => { process.exitCode=status; }, error => { process.stderr.write(`mk: ${error && error.message ? error.message : "unexpected failure"}\n`); process.exitCode=1; });' -- "$mk_engine" "$@"
 }
 
 main "$@"
