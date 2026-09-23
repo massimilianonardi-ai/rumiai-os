@@ -358,7 +358,7 @@ OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
     refresh freshness metadata. Failed execution never creates reusable freshness
     state.
 
-    Freshness metadata is non-authoritative user cache state resolved through:
+    Incremental cache state is non-authoritative user cache state resolved through:
 
         state-path user sys mk cache
 
@@ -366,16 +366,38 @@ OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
     Project identity is based on the canonical project root, so a copied/moved
     checkout starts with a cache miss in this baseline.
 
-    --plan may read existing freshness metadata and report up-to-date, but it does
-    not create or refresh persistent cache state.
+    In addition to freshness metadata, successful incremental operations may keep
+    verified local copies of their declared output files/directory trees in the
+    same non-authoritative cache area. Artifact bytes remain separate from the
+    freshness record.
 
-    This baseline stores freshness metadata only. It does not store or restore
-    artifact bytes or provide a shared/remote artifact cache.
+    If a later execution has the same effective fingerprint but current declared
+    outputs are missing or modified, mk may restore them from that local artifact
+    store instead of running the action. Restore is attempted only during ordinary
+    execution. --plan never restores or otherwise mutates project outputs.
 
-    The same per-operation freshness machinery also applies to derived map-process
-    members when their provider template opts into incremental: {}. No aggregate
-    provider cache is introduced, and stale freshness/output cleanup for members
-    that later become unreachable is not implied.
+    A restoration candidate is accepted only when its manifest/fingerprint and
+    every cached output snapshot match the recorded successful output evidence.
+    Cached artifacts are staged and verified before replacing declared
+    destinations. Missing, corrupt, incomplete or unsupported artifact state is a
+    conservative miss and the action executes normally.
+
+    Successful restoration is observed by the next normal refinement pass as
+    ordinary up-to-date output evidence. It does not fabricate process-result
+    fields; reachable result.status/result.ok/result.signal/result.error
+    observation still forces actual execution.
+
+    The local artifact representation supports the same regular-file/directory
+    forms as incremental output snapshots, including portable mode bits and
+    content hashes. Symlinks and special objects remain non-restorable.
+
+    The same per-operation freshness/restoration machinery also applies to derived
+    map-process members when their provider template opts into incremental: {}.
+    Output-input consumers observe restored producer outputs through normal
+    refinement. No aggregate provider cache is introduced.
+
+    This local baseline does not provide shared/remote or cross-project artifact
+    reuse, cache garbage collection, or stale provider-member artifact cleanup.
 
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
