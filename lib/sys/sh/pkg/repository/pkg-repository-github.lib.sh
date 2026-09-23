@@ -1,4 +1,5 @@
 . "$m_LIB_DIR/sys/sh/json.lib.sh"
+. "$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-artifact.lib.sh"
 
 _pkg_repository_github_scalar()
 {
@@ -56,7 +57,14 @@ _pkg_repository_github_validate_repository()
     [ -e "$pkg_repository_github_repository_item" ] || [ -L "$pkg_repository_github_repository_item" ] || continue
     pkg_repository_github_repository_name=${pkg_repository_github_repository_item##*/}
     case "$pkg_repository_github_repository_name" in
-      type|owner|repository) :;;
+      type|owner|repository)
+        [ -f "$pkg_repository_github_repository_item" ] && \
+        [ ! -L "$pkg_repository_github_repository_item" ] && \
+        [ ! -x "$pkg_repository_github_repository_item" ] || return 1
+        ;;
+      download|metadata)
+        [ -d "$pkg_repository_github_repository_item" ] && [ ! -L "$pkg_repository_github_repository_item" ] || return 1
+        ;;
       *) return 1;;
     esac
   done
@@ -72,6 +80,8 @@ _pkg_repository_github_validate_repository()
   case "$pkg_repository_github_repository" in
     ''|*[!A-Za-z0-9._-]*) return 1;;
   esac
+
+  pkg_repository_artifact_overrides_validate "$pkg_repository_github_repository_dir"
 }
 
 _pkg_repository_github_get()
@@ -304,28 +314,45 @@ EOF_JSON
 pkg_repository_resolve_artifact()
 (
   [ "$#" -eq 3 ] || return 2
-  _pkg_repository_github_validate_repository "$1" || return 1
+  pkg_repository_github_repository_dir=$1
   pkg_repository_github_range_dir=$2
   pkg_repository_github_requested=$3
 
+  _pkg_repository_github_validate_repository "$pkg_repository_github_repository_dir" || return 1
   _pkg_repository_github_validate_version "$pkg_repository_github_requested" || return 1
   [ -d "$pkg_repository_github_range_dir" ] && [ ! -L "$pkg_repository_github_range_dir" ] || return 1
 
   pkg_repository_github_archive_regex="$(_pkg_repository_github_scalar "$pkg_repository_github_range_dir/archive_regex")" || return 1
+  LC_ALL=C command -p -- awk -v expression="$pkg_repository_github_archive_regex" 'BEGIN { value=""; value ~ expression; exit 0 }' || return 1
 
   if [ -e "$pkg_repository_github_range_dir/digest_regex" ] || [ -L "$pkg_repository_github_range_dir/digest_regex" ]
   then
     return 1
   fi
 
+  pkg_repository_github_have_download_override=0
+  pkg_repository_github_have_metadata_override=0
+  if [ -e "$pkg_repository_github_repository_dir/download" ] || [ -L "$pkg_repository_github_repository_dir/download" ]
+  then
+    pkg_repository_github_have_download_override=1
+  fi
+  if [ -e "$pkg_repository_github_repository_dir/metadata" ] || [ -L "$pkg_repository_github_repository_dir/metadata" ]
+  then
+    pkg_repository_github_have_metadata_override=1
+  fi
+
   pkg_repository_github_digest_type=
   if [ -e "$pkg_repository_github_range_dir/digest_type" ] || [ -L "$pkg_repository_github_range_dir/digest_type" ]
   then
     pkg_repository_github_digest_type="$(_pkg_repository_github_scalar "$pkg_repository_github_range_dir/digest_type")" || return 1
+  fi
+  if [ "$pkg_repository_github_have_metadata_override" -eq 1 ]
+  then
+    [ -n "$pkg_repository_github_digest_type" ] || return 1
+  elif [ -n "$pkg_repository_github_digest_type" ]
+  then
     [ "$pkg_repository_github_digest_type" = sha256 ] || return 1
   fi
-
-  LC_ALL=C command -p -- awk -v expression="$pkg_repository_github_archive_regex" 'BEGIN { value=""; value ~ expression; exit 0 }' || return 1
 
   pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested")" || return 1
   json_object_read \
@@ -344,12 +371,19 @@ EOF_JSON
     "$pkg_repository_github_created_token" || return 1
   [ "$pkg_repository_github_release_tag" = "$pkg_repository_github_requested" ] || return 1
 
-  pkg_repository_github_assets="$(printf '%s\n' "$pkg_repository_github_body" | json_object_array_object_fields assets name state size digest browser_download_url)" || return 1
-  [ -n "$pkg_repository_github_assets" ] || return 1
+  pkg_repository_github_asset_name=
+  pkg_repository_github_asset_size=
+  pkg_repository_github_asset_digest_token=
+  pkg_repository_github_asset_url=
 
-  pkg_repository_github_tab="$(printf '\t')"
-  pkg_repository_github_selected="$(printf '%s\n' "$pkg_repository_github_assets" | \
-    LC_ALL=C command -p -- awk -F "$pkg_repository_github_tab" -v expression="$pkg_repository_github_archive_regex" '
+  if [ "$pkg_repository_github_have_download_override" -eq 0 ] || [ "$pkg_repository_github_have_metadata_override" -eq 0 ]
+  then
+    pkg_repository_github_assets="$(printf '%s\n' "$pkg_repository_github_body" | json_object_array_object_fields assets name state size digest browser_download_url)" || return 1
+    [ -n "$pkg_repository_github_assets" ] || return 1
+
+    pkg_repository_github_tab="$(printf '\t')"
+    pkg_repository_github_selected="$(printf '%s\n' "$pkg_repository_github_assets" | \
+      LC_ALL=C command -p -- awk -F "$pkg_repository_github_tab" -v expression="$pkg_repository_github_archive_regex" '
 function fail() { exit 1 }
 {
   if (NF != 5) fail()
@@ -367,56 +401,103 @@ END {
 }
 ')" || return 1
 
-  IFS="$pkg_repository_github_tab" read -r \
-    pkg_repository_github_name_token \
-    pkg_repository_github_state_token \
-    pkg_repository_github_size_token \
-    pkg_repository_github_digest_token \
-    pkg_repository_github_url_token \
-    pkg_repository_github_extra <<EOF_ASSET
+    IFS="$pkg_repository_github_tab" read -r \
+      pkg_repository_github_name_token \
+      pkg_repository_github_state_token \
+      pkg_repository_github_size_token \
+      pkg_repository_github_digest_token \
+      pkg_repository_github_url_token \
+      pkg_repository_github_extra <<EOF_ASSET
 $pkg_repository_github_selected
 EOF_ASSET
-  [ -z "$pkg_repository_github_extra" ] || return 1
+    [ -z "$pkg_repository_github_extra" ] || return 1
 
-  case "$pkg_repository_github_name_token" in
-    s:*) pkg_repository_github_name=${pkg_repository_github_name_token#s:};;
-    *) return 1;;
-  esac
-  [ -n "$pkg_repository_github_name" ] || return 1
-  [ "$pkg_repository_github_state_token" = s:uploaded ] || return 1
-
-  case "$pkg_repository_github_size_token" in
-    n:*) pkg_repository_github_size=${pkg_repository_github_size_token#n:};;
-    *) return 1;;
-  esac
-  case "$pkg_repository_github_size" in
-    ''|*[!0-9]*) return 1;;
-  esac
-
-  case "$pkg_repository_github_url_token" in
-    s:https://*) pkg_repository_github_url=${pkg_repository_github_url_token#s:};;
-    *) return 1;;
-  esac
-
-  pkg_repository_github_digest=
-  if [ -n "$pkg_repository_github_digest_type" ]
-  then
-    case "$pkg_repository_github_digest_token" in
-      s:sha256:*) pkg_repository_github_digest=${pkg_repository_github_digest_token#s:sha256:};;
+    case "$pkg_repository_github_name_token" in
+      s:*) pkg_repository_github_asset_name=${pkg_repository_github_name_token#s:};;
       *) return 1;;
     esac
-    [ "${#pkg_repository_github_digest}" -eq 64 ] || return 1
-    case "$pkg_repository_github_digest" in
-      *[!0-9A-Fa-f]*) return 1;;
+    [ -n "$pkg_repository_github_asset_name" ] || return 1
+    [ "$pkg_repository_github_state_token" = s:uploaded ] || return 1
+
+    case "$pkg_repository_github_size_token" in
+      n:*) pkg_repository_github_asset_size=${pkg_repository_github_size_token#n:};;
+      *) return 1;;
     esac
-    pkg_repository_github_digest="$(printf '%s\n' "$pkg_repository_github_digest" | command -p -- tr 'A-F' 'a-f')" || return 1
+    case "$pkg_repository_github_asset_size" in
+      ''|*[!0-9]*) return 1;;
+    esac
+    [ "$pkg_repository_github_asset_size" -gt 0 ] || return 1
+
+    case "$pkg_repository_github_url_token" in
+      s:https://*) pkg_repository_github_asset_url=${pkg_repository_github_url_token#s:};;
+      *) return 1;;
+    esac
   fi
 
-  printf -- 'name=%s\n' "$pkg_repository_github_name"
-  printf -- 'url=%s\n' "$pkg_repository_github_url"
-  printf -- 'size=%s\n' "$pkg_repository_github_size"
-  if [ -n "$pkg_repository_github_digest_type" ]
+  if [ "$pkg_repository_github_have_download_override" -eq 1 ]
   then
-    printf -- 'digest=sha256:%s\n' "$pkg_repository_github_digest"
+    pkg_repository_github_download="$(pkg_repository_artifact_download_override "$pkg_repository_github_repository_dir" "$pkg_repository_github_requested")" || return 1
+    pkg_repository_github_tab="$(printf '\t')"
+    IFS="$pkg_repository_github_tab" read -r \
+      pkg_repository_github_name \
+      pkg_repository_github_url \
+      pkg_repository_github_extra <<EOF_DOWNLOAD
+$pkg_repository_github_download
+EOF_DOWNLOAD
+    [ -z "$pkg_repository_github_extra" ] || return 1
+    [ -n "$pkg_repository_github_name" ] && [ -n "$pkg_repository_github_url" ] || return 1
+  else
+    pkg_repository_github_name=$pkg_repository_github_asset_name
+    pkg_repository_github_url=$pkg_repository_github_asset_url
+  fi
+
+  LC_ALL=C command -p -- awk \
+    -v value="$pkg_repository_github_name" \
+    -v expression="$pkg_repository_github_archive_regex" \
+    'BEGIN { exit(value ~ expression ? 0 : 1) }' || return 1
+
+  if [ "$pkg_repository_github_have_metadata_override" -eq 1 ]
+  then
+    pkg_repository_github_metadata="$(pkg_repository_artifact_metadata_override \
+      "$pkg_repository_github_repository_dir" \
+      "$pkg_repository_github_range_dir" \
+      "$pkg_repository_github_requested" \
+      "$pkg_repository_github_name" \
+      "$pkg_repository_github_url")" || return 1
+    pkg_repository_github_tab="$(printf '\t')"
+    IFS="$pkg_repository_github_tab" read -r \
+      pkg_repository_github_size \
+      pkg_repository_github_digest \
+      pkg_repository_github_extra <<EOF_METADATA
+$pkg_repository_github_metadata
+EOF_METADATA
+    [ -z "$pkg_repository_github_extra" ] || return 1
+    [ -n "$pkg_repository_github_size" ] && [ -n "$pkg_repository_github_digest" ] || return 1
+  else
+    [ "$pkg_repository_github_name" = "$pkg_repository_github_asset_name" ] || return 1
+    pkg_repository_github_size=$pkg_repository_github_asset_size
+    pkg_repository_github_digest=
+    if [ -n "$pkg_repository_github_digest_type" ]
+    then
+      case "$pkg_repository_github_digest_token" in
+        s:sha256:*) pkg_repository_github_digest=${pkg_repository_github_digest_token#s:sha256:};;
+        *) return 1;;
+      esac
+      [ "${#pkg_repository_github_digest}" -eq 64 ] || return 1
+      case "$pkg_repository_github_digest" in
+        *[!0-9A-Fa-f]*) return 1;;
+      esac
+      pkg_repository_github_digest="$(printf '%s\n' "$pkg_repository_github_digest" | command -p -- tr 'A-F' 'a-f')" || return 1
+      pkg_repository_github_digest="sha256:$pkg_repository_github_digest"
+    fi
+  fi
+
+  printf 'name=%s\n' "$pkg_repository_github_name"
+  printf 'url=%s\n' "$pkg_repository_github_url"
+  printf 'size=%s\n' "$pkg_repository_github_size"
+  if [ -n "$pkg_repository_github_digest" ]
+  then
+    printf 'digest=%s\n' "$pkg_repository_github_digest"
   fi
 )
+
