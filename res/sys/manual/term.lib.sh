@@ -2,7 +2,7 @@ NAME
     term.lib.sh - reusable POSIX sh terminal, TTY and terminfo helpers
 
 DESCRIPTION
-    term.lib.sh provides terminal primitives for RumiAI-owned shell code
+    term.lib.sh provides terminal primitives for shell code using the m runtime
     without imposing menu, logging, layout or signal-handling policy.
 
     The library operates on a selected terminal device, /dev/tty by default.

@@ -6,7 +6,7 @@ SYNOPSIS
     m <command> [argument ...]
 
 DESCRIPTION
-    m resolves the RumiAI OS technical root, initializes the relocatable m
+    m resolves the technical runtime root, initializes the relocatable m
     runtime environment, exposes technical command paths, loads the core shell
     facilities, establishes the current state/resource roots and applies the
     environment projections of currently resolvable system facility defaults.
