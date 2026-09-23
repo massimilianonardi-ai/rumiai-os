@@ -289,7 +289,20 @@ ipc_destroy()
   _ipc_channel_valid "$_ipc_dir" || return 1
 
   [ ! -L "$_ipc_dir" ] || return 1
-  [ -d "$_ipc_dir" ] || return 0
+
+  if [ ! -d "$_ipc_dir" ]
+  then
+    _ipc_parent="${_ipc_dir%/*}"
+    [ -n "$_ipc_parent" ] || _ipc_parent="/"
+    [ -d "$_ipc_parent" ] && [ -x "$_ipc_parent" ] || return 1
+
+    if command -p ls -d "$_ipc_dir" >/dev/null 2>&1
+    then
+      return 1
+    fi
+
+    return 0
+  fi
 
   _ipc_ab="$_ipc_dir/a-to-b"
   _ipc_ba="$_ipc_dir/b-to-a"
