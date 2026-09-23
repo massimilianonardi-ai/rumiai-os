@@ -132,6 +132,36 @@ _pkg_extract_component_valid()
   esac
 }
 
+_pkg_extract_relative_path_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    ""|/*|*/|*//*|*'
+'*) return 1 ;;
+  esac
+  case "/$1/" in
+    */./*|*/../*) return 1 ;;
+  esac
+  return 0
+}
+
+_pkg_extract_move_contents()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_extract_move_source=$1
+  pkg_extract_move_destination=$2
+  [ -d "$pkg_extract_move_source" ] && [ ! -L "$pkg_extract_move_source" ] || return 1
+  [ -d "$pkg_extract_move_destination" ] && [ ! -L "$pkg_extract_move_destination" ] || return 1
+
+  for pkg_extract_move_item in     "$pkg_extract_move_source"/*     "$pkg_extract_move_source"/.[!.]*     "$pkg_extract_move_source"/..?*
+  do
+    [ -e "$pkg_extract_move_item" ] || [ -L "$pkg_extract_move_item" ] || continue
+    pkg_extract_move_target="$pkg_extract_move_destination/${pkg_extract_move_item##*/}"
+    [ ! -e "$pkg_extract_move_target" ] && [ ! -L "$pkg_extract_move_target" ] || return 1
+    command -p -- mv -- "$pkg_extract_move_item" "$pkg_extract_move_destination/" || return 1
+  done
+}
+
 _pkg_extract_payload_paths_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -170,10 +200,11 @@ _pkg_extract_payload_prepare()
 
 _pkg_extract_dmg_pkg()
 (
-  [ "$#" -eq 3 ] || return 2
+  [ "$#" -eq 4 ] || return 2
   pkg_extract_dmg_pkg_artifact=$1
   pkg_extract_dmg_pkg_staging=$2
   pkg_extract_dmg_pkg_component=$3
+  pkg_extract_dmg_pkg_payload_root=$4
 
   _pkg_extract_component_valid "$pkg_extract_dmg_pkg_component" || return 1
   command -v xar >/dev/null 2>&1 || return 1
@@ -220,10 +251,30 @@ _pkg_extract_dmg_pkg()
   pkg_extract_dmg_pkg_cpio="$pkg_extract_dmg_pkg_work/payload.cpio"
   _pkg_extract_payload_prepare "$pkg_extract_dmg_pkg_payload" "$pkg_extract_dmg_pkg_cpio" || return 1
 
-  (
-    CDPATH= cd -- "$pkg_extract_dmg_pkg_staging" || exit 1
-    command -- cpio -idm < "$pkg_extract_dmg_pkg_cpio" >/dev/null
-  ) || return 1
+  if [ -n "$pkg_extract_dmg_pkg_payload_root" ]
+  then
+    _pkg_extract_relative_path_valid "$pkg_extract_dmg_pkg_payload_root" || return 1
+    command -p -- mkdir "$pkg_extract_dmg_pkg_work/payload" || return 1
+    (
+      CDPATH= cd -- "$pkg_extract_dmg_pkg_work/payload" || exit 1
+      command -- cpio -idm < "$pkg_extract_dmg_pkg_cpio" >/dev/null
+    ) || return 1
+
+    readpathce pkg_extract_dmg_pkg_payload_base "$pkg_extract_dmg_pkg_work/payload" || return 1
+    pkg_extract_dmg_pkg_selected="$pkg_extract_dmg_pkg_work/payload/$pkg_extract_dmg_pkg_payload_root"
+    [ -d "$pkg_extract_dmg_pkg_selected" ] && [ ! -L "$pkg_extract_dmg_pkg_selected" ] || return 1
+    readpathce pkg_extract_dmg_pkg_selected_resolved "$pkg_extract_dmg_pkg_selected" || return 1
+    case "$pkg_extract_dmg_pkg_selected_resolved" in
+      "$pkg_extract_dmg_pkg_payload_base"/*) : ;;
+      *) return 1 ;;
+    esac
+    _pkg_extract_move_contents "$pkg_extract_dmg_pkg_selected_resolved" "$pkg_extract_dmg_pkg_staging" || return 1
+  else
+    (
+      CDPATH= cd -- "$pkg_extract_dmg_pkg_staging" || exit 1
+      command -- cpio -idm < "$pkg_extract_dmg_pkg_cpio" >/dev/null
+    ) || return 1
+  fi
 
   command -p -- rm -rf -- "$pkg_extract_dmg_pkg_work" || return 1
   trap - 0 HUP INT TERM
@@ -231,11 +282,12 @@ _pkg_extract_dmg_pkg()
 
 pkg_extract()
 (
-  [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || return 2
+  [ "$#" -eq 3 ] || [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
   pkg_extract_input=$1
   pkg_extract_format=$2
   pkg_extract_staging_input=$3
   pkg_extract_component=${4-}
+  pkg_extract_payload_root=${5-}
 
   [ -f "$pkg_extract_input" ] && [ ! -L "$pkg_extract_input" ] && [ -r "$pkg_extract_input" ] || return 1
   _pkg_extract_require_empty_dir "$pkg_extract_staging_input" || return 1
@@ -246,8 +298,12 @@ pkg_extract()
 
   case "$pkg_extract_format" in
     dmg-pkg)
-      [ "$#" -eq 4 ] || return 2
-      _pkg_extract_dmg_pkg "$pkg_extract_artifact" "$pkg_extract_staging" "$pkg_extract_component"
+      [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
+      if [ "$#" -eq 5 ]
+      then
+        _pkg_extract_relative_path_valid "$pkg_extract_payload_root" || return 2
+      fi
+      _pkg_extract_dmg_pkg "$pkg_extract_artifact" "$pkg_extract_staging" "$pkg_extract_component" "$pkg_extract_payload_root"
       pkg_extract_status=$?
       ;;
     appimage)
