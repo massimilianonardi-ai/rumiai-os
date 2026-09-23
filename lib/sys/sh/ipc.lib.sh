@@ -277,7 +277,7 @@ ipc_cancel()
 #-------------------------------------------------------------------------------
 
 # ipc_destroy channel
-# removes a channel only before either endpoint has begun ipc_open
+# removes an unused channel or cleans an incomplete rendezvous after all openers ended
 ipc_destroy()
 (
   set +x
