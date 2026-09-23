@@ -1,5 +1,5 @@
 
-. enc.lib.sh
+. "$m_LIB_DIR/sys/sh/enc.lib.sh"
 
 #-------------------------------------------------------------------------------
 
@@ -34,7 +34,7 @@ ipc_create()
 
   while [ "$_ipc_try" -lt "10" ]
   do
-    _ipc_token="$(randh 16)" || return 1
+    _ipc_token="$(randhex 16)" || return 1
 
     [ "${#_ipc_token}" -eq "32" ] || return 1
     [ "$_ipc_token" = "${_ipc_token%%[!0123456789abcdef]*}" ] || return 1
