@@ -103,7 +103,7 @@ _pkg_repository_artifact_url_validate()
 }
 
 _pkg_repository_artifact_download_validate()
-{
+(
   [ "$#" -eq 1 ] || return 2
   pkg_repository_artifact_download_dir=$1
   [ -d "$pkg_repository_artifact_download_dir" ] && [ ! -L "$pkg_repository_artifact_download_dir" ] || return 1
@@ -120,10 +120,10 @@ _pkg_repository_artifact_download_validate()
   pkg_repository_artifact_url_template="$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_download_dir/url-template")" || return 1
   _pkg_repository_artifact_template_validate "$pkg_repository_artifact_name_template" name || return 1
   _pkg_repository_artifact_template_validate "$pkg_repository_artifact_url_template" url
-}
+)
 
 _pkg_repository_artifact_metadata_validate()
-{
+(
   [ "$#" -eq 1 ] || return 2
   pkg_repository_artifact_metadata_dir=$1
   [ -d "$pkg_repository_artifact_metadata_dir" ] && [ ! -L "$pkg_repository_artifact_metadata_dir" ] || return 1
@@ -169,7 +169,7 @@ _pkg_repository_artifact_metadata_validate()
       _pkg_repository_artifact_template_validate "$pkg_repository_artifact_path_template" path || return 1
       ;;
   esac
-}
+)
 
 pkg_repository_artifact_overrides_validate()
 {
