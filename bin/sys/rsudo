@@ -1,0 +1,7 @@
+#!/bin/sh
+
+. rsudo.lib.sh
+
+log_debug "RSUDO COMMAND CALLED!"
+
+rsudo "$@"
