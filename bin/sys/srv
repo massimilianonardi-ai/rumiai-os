@@ -431,7 +431,7 @@ srv_host_systemd_install()
   umask 077
   (
     printf '%s\n' '[Unit]'
-    printf 'Description=RumiAI user service %s\n' "$srv_name"
+    printf 'Description=m user service %s\n' "$srv_name"
     printf '%s\n' ''
     printf '%s\n' '[Service]'
     printf '%s\n' 'Type=simple'
@@ -961,7 +961,7 @@ srv_host_systemd_system_install()
   umask 077
   (
     printf '%s\n' '[Unit]'
-    printf 'Description=RumiAI system service %s\n' "$srv_name"
+    printf 'Description=m system service %s\n' "$srv_name"
     printf '%s\n' ''
     printf '%s\n' '[Service]'
     printf '%s\n' 'Type=simple'

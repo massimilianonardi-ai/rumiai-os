@@ -115,7 +115,7 @@ STATE
     Mutable package state is resolved through state-path rather than reconstructed
     by callers. Package HOME and configuration used at launch are user-scoped state.
 
-    RumiAI-managed package configuration normally uses the reserved .m subnamespace
+    m-managed package configuration normally uses the reserved .m subnamespace
     inside the package conf area. Provider bindings are the explicit exception:
     a system-scoped consumer binding is stored as binding/<facility> in that
     package's system conf area and contains exactly one provider selector.

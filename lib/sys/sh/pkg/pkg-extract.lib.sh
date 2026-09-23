@@ -72,7 +72,7 @@ _pkg_extract_normalize_root()
   pkg_extract_swap_counter=0
   while :
   do
-    pkg_extract_swap_name=".rumiai-pkg-extract-$$-$pkg_extract_swap_counter"
+    pkg_extract_swap_name="m-pkg-extract-$$-$pkg_extract_swap_counter"
     pkg_extract_swap="$pkg_extract_output/$pkg_extract_swap_name"
     if [ ! -e "$pkg_extract_swap" ] && [ ! -L "$pkg_extract_swap" ] && \
        [ ! -e "$pkg_extract_useful_root/$pkg_extract_swap_name" ] && [ ! -L "$pkg_extract_useful_root/$pkg_extract_swap_name" ]
@@ -164,7 +164,7 @@ _pkg_extract_dmg_pkg()
   pkg_extract_dmg_pkg_counter=0
   while :
   do
-    pkg_extract_dmg_pkg_work="$pkg_extract_dmg_pkg_parent/.rumiai-pkg-dmg-$pkg_extract_dmg_pkg_counter"
+    pkg_extract_dmg_pkg_work="$pkg_extract_dmg_pkg_parent/m-pkg-dmg-$pkg_extract_dmg_pkg_counter"
     if command -p -- mkdir "$pkg_extract_dmg_pkg_work" 2>/dev/null
     then
       break

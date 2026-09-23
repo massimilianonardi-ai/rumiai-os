@@ -27,7 +27,7 @@ DESCRIPTION
     arbitrary JavaScript resolver modules.
 
     The lifecycle engine is implemented in JavaScript and requires an
-    installed/default RumiAI-managed nodejs package. mk does not install that
+    installed/default m-managed nodejs package. mk does not install that
     runtime implicitly.
 
 OPTIONS
@@ -558,7 +558,7 @@ FILES
 
 REQUIREMENTS
     nodejs
-        An installed/default RumiAI-managed nodejs package provides the current
+        An installed/default m-managed nodejs package provides the current
         JavaScript runtime used by the lifecycle engine.
 
 EXAMPLES
