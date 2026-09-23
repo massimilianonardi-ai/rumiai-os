@@ -363,41 +363,51 @@ OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
         state-path user sys mk cache
 
     Private layout below that semantic cache area is an mk implementation detail.
-    Project identity is based on the canonical project root, so a copied/moved
-    checkout starts with a cache miss in this baseline.
+    Freshness metadata remains scoped by canonical project root plus operation.
+    A copied/moved checkout therefore starts without local freshness evidence.
 
-    In addition to freshness metadata, successful incremental operations may keep
-    verified local copies of their declared output files/directory trees in the
-    same non-authoritative cache area. Artifact bytes remain separate from the
-    freshness record.
+    In addition to freshness metadata, successful incremental operations may
+    publish verified local copies of declared output files/directory trees in the
+    same non-authoritative user cache area. Artifact bytes remain separate from
+    freshness records and are keyed by the existing effective operation
+    fingerprint, so equivalent work may be reused across different canonical
+    project roots.
 
-    If a later execution has the same effective fingerprint but current declared
-    outputs are missing or modified, mk may restore them from that local artifact
-    store instead of running the action. Restore is attempted only during ordinary
-    execution. --plan never restores or otherwise mutates project outputs.
+    Restore is attempted only during ordinary execution. --plan never restores or
+    otherwise mutates project outputs or creates receiving-checkout freshness
+    metadata.
 
-    A restoration candidate is accepted only when its manifest/fingerprint and
-    every cached output snapshot match the recorded successful output evidence.
+    A restoration candidate is accepted only when its selected immutable
+    manifest/fingerprint and every cached output snapshot verify completely.
     Cached artifacts are staged and verified before replacing declared
     destinations. Missing, corrupt, incomplete or unsupported artifact state is a
     conservative miss and the action executes normally.
 
-    Successful restoration is observed by the next normal refinement pass as
-    ordinary up-to-date output evidence. It does not fabricate process-result
-    fields; reachable result.status/result.ok/result.signal/result.error
-    observation still forces actual execution.
+    A checkout may restore from a shared local candidate without already having a
+    local freshness record. Successful restoration writes that checkout's own
+    project-scoped freshness evidence, then the next normal refinement pass
+    observes ordinary up-to-date output evidence. Restoration does not fabricate
+    process-result fields; reachable result.status/result.ok/result.signal/
+    result.error observation still forces actual execution.
 
-    The local artifact representation supports the same regular-file/directory
-    forms as incremental output snapshots, including portable mode bits and
-    content hashes. Symlinks and special objects remain non-restorable.
+    The artifact representation supports the same regular-file/directory forms as
+    incremental output snapshots, including portable mode bits and content hashes.
+    Symlinks and special objects remain non-restorable.
+
+    Shared-local publication uses verified immutable candidates plus an atomic
+    selector per fingerprint. Equivalent concurrent publishers may converge
+    idempotently without a global lock. Writers do not destructively replace
+    another process's verified committed candidate. Corrupt selected state is a
+    conservative miss; refresh publishes/selects another verified candidate.
 
     The same per-operation freshness/restoration machinery also applies to derived
     map-process members when their provider template opts into incremental: {}.
     Output-input consumers observe restored producer outputs through normal
     refinement. No aggregate provider cache is introduced.
 
-    This local baseline does not provide shared/remote or cross-project artifact
-    reuse, cache garbage collection, or stale provider-member artifact cleanup.
+    The current baseline does not provide remote/network artifact transport,
+    cross-user sharing/trust, cache eviction/garbage collection, abandoned-staging
+    reclamation, or stale provider-member artifact cleanup.
 
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
