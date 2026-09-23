@@ -186,7 +186,7 @@ DEPENDENCIES
     documented by rand.lib.sh, currently OpenSSL for randhex.
 
     The implementation also uses POSIX shell facilities and standard utilities
-    including mkdir, mkfifo, chmod, rm and rmdir.
+    including mkdir, mkfifo, chmod, ls, rm and rmdir.
 
 CONCURRENCY
     A channel is established by two processes opening complementary endpoints.
