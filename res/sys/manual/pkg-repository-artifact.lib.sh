@@ -22,8 +22,11 @@ DESCRIPTION
         checksum-manifest
         sourceforge-rss
 
-    checksum-sidecar requires url-template plus record-format = digest-name.
-    checksum-manifest requires url-template. Both resolve size from the HTTPS
+    checksum-sidecar requires url-template plus record-format = digest-name or
+    digest-only. digest-name accepts exactly one checksum record containing the
+    digest and the resolved artifact name; digest-only accepts exactly one record
+    containing only the digest. checksum-manifest requires url-template. These
+    handlers resolve size from the HTTPS
     artifact URL and validate exactly one checksum record for the resolved name.
 
     sourceforge-rss requires project and path-template. path-template accepts
@@ -44,6 +47,12 @@ FUNCTIONS
     pkg_repository_artifact_metadata_resolve <metadata-dir> <digest-type> <version> <name> <download-url>
         Resolve a typed metadata descriptor and print one tab-separated positive
         byte size and <algorithm>:<hex> digest.
+
+    pkg_repository_artifact_metadata_checksum_sidecar <metadata-url> <record-format> <digest-type> <name> <download-url>
+        Resolve the checksum-sidecar mechanism directly. record-format is
+        digest-name or digest-only. This public mechanism entrypoint lets a
+        complete repository type reuse the trusted sidecar implementation without
+        requiring a catalog override.
 
     pkg_repository_artifact_metadata_sourceforge_rss <project> <path-template> <digest-type> <version> <name> <download-url>
         Resolve the SourceForge RSS metadata mechanism directly. This public
