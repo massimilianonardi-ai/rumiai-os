@@ -3,6 +3,7 @@ NAME
 
 SYNOPSIS
     mk [options] [--] <goal> [<goal> ...]
+    mk --watch [options] [--] <goal> [<goal> ...]
     mk [options] --goals
     mk [options] --show-goal <goal>
 
@@ -36,6 +37,23 @@ OPTIONS
     --profile <profile>
         Apply the named profile overlay from mk.json.
 
+    --watch
+        Run a version-2 lifecycle request initially and again whenever its
+        authoritative trigger identity changes.
+
+        Watch is an execution mode, not a project goal or mk.json namespace.
+        It is incompatible with --plan, --goals and --show-goal. The first
+        baseline has no public polling interval, debounce, host notification
+        backend or stop-on-cycle-failure option.
+
+        Every trigger-resolution pass and lifecycle cycle starts through a fresh
+        m bootstrap. A temporary invalid root or active-child configuration pauses
+        the session without running lifecycle work; the last valid trigger
+        baseline is retained until valid resolution returns. Failed lifecycle
+        cycles are reported and the session waits for another relevant trigger
+        change. SIGINT/SIGTERM terminate the session and are forwarded to an
+        active lifecycle child.
+
     --plan
         Resolve the requested goal set from declarative configuration and the
         currently observable project/runtime context without executing project
@@ -57,6 +75,24 @@ OPTIONS
 
     --
         End option processing. Remaining operands are goal names.
+
+WATCH EXECUTION (VERSION 2)
+    Watch trigger identity is derived by trusted mk resolution from the selected
+    normalized model and currently reachable lifecycle evidence. It includes
+    declared operation inputs, reachable collection member content, process
+    executable/effective-environment identity, resolved requirement/provider
+    identity, incremental fingerprints and incremental declared-output validity.
+
+    Active project dependencies contribute recursively through child-owned opaque
+    trigger digests; their internal lifecycle graphs are not flattened into the
+    parent watch identity.
+
+    Ordinary non-incremental outputs that are neither consumed as declared inputs
+    nor incremental freshness evidence are not watch triggers merely because their
+    bytes change.
+
+    The first implementation uses portable polling only as an internal wakeup
+    mechanism. Polling cadence is not public project semantics.
 
 PROJECT CONFIGURATION
     mk.json requires a supported numeric version.
@@ -476,6 +512,10 @@ EXAMPLES
     Select a profile:
 
         mk --profile release build
+
+    Watch a version-2 build goal:
+
+        mk --watch build
 
     Request multiple goals as one plan:
 
