@@ -154,7 +154,8 @@ _pkg_repository_artifact_metadata_validate()
     checksum-sidecar)
       pkg_repository_artifact_url_template="$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_metadata_dir/url-template")" || return 1
       _pkg_repository_artifact_template_validate "$pkg_repository_artifact_url_template" url || return 1
-      [ "$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_metadata_dir/record-format")" = digest-name ] || return 1
+      pkg_repository_artifact_record_format="$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_metadata_dir/record-format")" || return 1
+      case "$pkg_repository_artifact_record_format" in digest-name|digest-only) :;; *) return 1;; esac
       ;;
     checksum-manifest)
       pkg_repository_artifact_url_template="$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_metadata_dir/url-template")" || return 1
@@ -206,30 +207,51 @@ _pkg_repository_artifact_size()
   printf '%s\n' "$pkg_repository_artifact_size"
 }
 
-_pkg_repository_artifact_checksum_sidecar()
-{
-  [ "$#" -eq 4 ] || return 2
-  pkg_repository_artifact_body="$(http-fetch -- "$1")" || return 1
-  pkg_repository_artifact_expected_length="$(_pkg_repository_artifact_digest_length "$2")" || return 1
-  pkg_repository_artifact_digest="$(printf '%s\n' "$pkg_repository_artifact_body" | LC_ALL=C command -p -- awk -v expected="$3" -v digest_length="$pkg_repository_artifact_expected_length" '
+pkg_repository_artifact_metadata_checksum_sidecar()
+(
+  [ "$#" -eq 5 ] || return 2
+  pkg_repository_artifact_metadata_url=$1
+  pkg_repository_artifact_record_format=$2
+  pkg_repository_artifact_digest_type=$3
+  pkg_repository_artifact_name=$4
+  pkg_repository_artifact_download_url=$5
+
+  _pkg_repository_artifact_url_validate "$pkg_repository_artifact_metadata_url" || return 1
+  _pkg_repository_artifact_digest_length "$pkg_repository_artifact_digest_type" >/dev/null || return 1
+  case "$pkg_repository_artifact_record_format" in digest-name|digest-only) :;; *) return 1;; esac
+  case "$pkg_repository_artifact_name" in ''|.|..|*/*) return 1;; esac
+  _pkg_repository_artifact_url_validate "$pkg_repository_artifact_download_url" || return 1
+
+  pkg_repository_artifact_body="$(http-fetch -- "$pkg_repository_artifact_metadata_url")" || return 1
+  pkg_repository_artifact_expected_length="$(_pkg_repository_artifact_digest_length "$pkg_repository_artifact_digest_type")" || return 1
+  pkg_repository_artifact_digest="$(printf '%s\n' "$pkg_repository_artifact_body" | LC_ALL=C command -p -- awk \
+    -v expected="$pkg_repository_artifact_name" \
+    -v digest_length="$pkg_repository_artifact_expected_length" \
+    -v record_format="$pkg_repository_artifact_record_format" '
 function fail() { exit 1 }
 NF == 0 { next }
 {
-  if (NF != 2) fail()
-  digest=$1
-  name=$2
-  if (name == "./" expected) name=expected
-  if (name != expected) fail()
+  if (record_format == "digest-only") {
+    if (NF != 1) fail()
+    digest=$1
+  } else if (record_format == "digest-name") {
+    if (NF != 2) fail()
+    digest=$1
+    name=$2
+    if (name == "./" expected) name=expected
+    if (name != expected) fail()
+  } else fail()
+
   if (length(digest) != digest_length || digest !~ /^[0-9A-Fa-f]+$/) fail()
   count++
   selected=digest
 }
 END { if (count != 1) exit 1; print selected }
 ')" || return 1
-  pkg_repository_artifact_digest="$(_pkg_repository_artifact_digest_normalize "$2" "$pkg_repository_artifact_digest")" || return 1
-  pkg_repository_artifact_size="$(_pkg_repository_artifact_size "$4")" || return 1
-  printf '%s\t%s:%s\n' "$pkg_repository_artifact_size" "$2" "$pkg_repository_artifact_digest"
-}
+  pkg_repository_artifact_digest="$(_pkg_repository_artifact_digest_normalize "$pkg_repository_artifact_digest_type" "$pkg_repository_artifact_digest")" || return 1
+  pkg_repository_artifact_size="$(_pkg_repository_artifact_size "$pkg_repository_artifact_download_url")" || return 1
+  printf '%s\t%s:%s\n' "$pkg_repository_artifact_size" "$pkg_repository_artifact_digest_type" "$pkg_repository_artifact_digest"
+)
 
 _pkg_repository_artifact_checksum_manifest()
 {
@@ -358,7 +380,13 @@ pkg_repository_artifact_metadata_resolve()
       _pkg_repository_artifact_url_validate "$pkg_repository_artifact_metadata_url" || return 1
       case "$pkg_repository_artifact_metadata_type" in
         checksum-sidecar)
-          _pkg_repository_artifact_checksum_sidecar "$pkg_repository_artifact_metadata_url" "$pkg_repository_artifact_digest_type" "$pkg_repository_artifact_name" "$pkg_repository_artifact_download_url"
+          pkg_repository_artifact_record_format="$(_pkg_repository_artifact_scalar "$pkg_repository_artifact_metadata_dir/record-format")" || return 1
+          pkg_repository_artifact_metadata_checksum_sidecar \
+            "$pkg_repository_artifact_metadata_url" \
+            "$pkg_repository_artifact_record_format" \
+            "$pkg_repository_artifact_digest_type" \
+            "$pkg_repository_artifact_name" \
+            "$pkg_repository_artifact_download_url"
           ;;
         checksum-manifest)
           _pkg_repository_artifact_checksum_manifest "$pkg_repository_artifact_metadata_url" "$pkg_repository_artifact_digest_type" "$pkg_repository_artifact_name" "$pkg_repository_artifact_download_url"
