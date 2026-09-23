@@ -53,21 +53,28 @@ PUBLIC FUNCTIONS
         resolution is refreshed until the requested goal roots are satisfied or no
         valid refinement is possible.
 
-        Incremental freshness records and local cached copies of supported
-        declared outputs are non-authoritative user cache state resolved through
-        state-path. A current-output hit requires a matching effective operation
-        fingerprint plus declared outputs matching the recorded successful output
-        fingerprints.
+        Incremental freshness records and cached copies of supported declared
+        outputs are non-authoritative user cache state resolved through state-path.
+        Freshness metadata remains canonical-project-root/operation scoped, while
+        verified artifact bytes are shared locally by the existing effective
+        operation fingerprint.
 
-        When the fingerprint still matches but current outputs are missing or
-        modified, ordinary execution may restore verified cached output
-        files/directory trees before running the action. Restoration is
-        execution-only; plan resolution remains non-mutating. Invalid/incomplete
-        artifact state is a conservative miss. A successful restore becomes
-        ordinary up-to-date output evidence through the next refinement pass and
-        does not synthesize current execution-result fields, so result observation
-        still forces actual execution. Failed executions do not create reusable
-        freshness state.
+        When current outputs are missing or modified, ordinary execution may
+        restore a complete verified selected artifact candidate before running the
+        action, including in another canonical checkout with the same effective
+        fingerprint. Restoration is execution-only; plan resolution remains
+        non-mutating. A successful cross-checkout restore writes the receiving
+        checkout's own freshness record before normal refinement observes
+        up-to-date output evidence. Invalid/incomplete artifact state is a
+        conservative miss. Restoration does not synthesize current execution-result
+        fields, so result observation still forces actual execution. Failed
+        executions do not create reusable freshness state.
+
+        Concurrent publication uses immutable verified candidates and an atomic
+        per-fingerprint selector. Equivalent publishers may converge without a
+        global lock; corrupt selected state is refreshed through another immutable
+        candidate rather than destructively replacing a verified candidate another
+        process may be reading.
 
         Facility requirements are queried through the public pkg requirement
         resolve boundary against the configured system facility default. The
@@ -124,9 +131,10 @@ FILES
         Declarative project configuration.
 
     state-path user sys mk cache
-        Semantic user cache area used for non-authoritative incremental freshness
-        metadata and verified local copies of supported declared output artifacts.
-        Private layout below it is an implementation detail.
+        Semantic user cache area used for project-scoped non-authoritative
+        incremental freshness metadata and user-local shared verified copies of
+        supported declared output artifacts. Private layout below it is an
+        implementation detail.
 
     lib/sys/js/mk.lib.js
         This library.
@@ -147,10 +155,10 @@ NOTES
     provider identity plus collection-item pathname identity rather than collection
     enumeration position. Adding/removing/reordering members therefore does not by
     itself invalidate unchanged reachable members. Derived members use the same
-    ordinary per-operation local artifact restoration path as configured
+    ordinary per-operation shared-local artifact restoration path as configured
     incremental operations. Unreachable stale output/cache cleanup is not implied
     by this freshness model.
 
-    Local artifact restoration remains canonical-project-root scoped and does not
-    establish shared/remote or cross-project artifact reuse, eviction/garbage
-    collection, or a public artifact-cache API.
+    Shared-local artifact reuse remains user-local and does not establish
+    remote/network transport, cross-user sharing/trust, eviction/garbage
+    collection, distributed locking, or a public artifact-cache API.
