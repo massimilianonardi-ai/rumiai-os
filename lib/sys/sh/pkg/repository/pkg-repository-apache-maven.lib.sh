@@ -1,3 +1,5 @@
+. "$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-artifact.lib.sh"
+
 _pkg_repository_apache_maven_scalar()
 {
   [ "$#" -eq 1 ] || return 2
@@ -196,25 +198,24 @@ _pkg_repository_apache_maven_release_metadata()
   pkg_repository_apache_maven_url="https://dlcdn.apache.org/maven/maven-4/$pkg_repository_apache_maven_version/binaries/$pkg_repository_apache_maven_name"
   pkg_repository_apache_maven_checksum_url="https://downloads.apache.org/maven/maven-4/$pkg_repository_apache_maven_version/binaries/$pkg_repository_apache_maven_name.sha512"
 
-  pkg_repository_apache_maven_sidecar="$(http-fetch -- "$pkg_repository_apache_maven_checksum_url")" || return 1
-  pkg_repository_apache_maven_digest="$(printf '%s\n' "$pkg_repository_apache_maven_sidecar" | LC_ALL=C command -p -- awk '
-NF == 0 { next }
-{
-  if (NF != 1) exit 1
-  if (length($1) != 128 || $1 !~ /^[0-9A-Fa-f]+$/) exit 1
-  count++
-  selected=$1
-}
-END {
-  if (count != 1) exit 1
-  print selected
-}
-')" || return 1
-  pkg_repository_apache_maven_digest="$(printf '%s\n' "$pkg_repository_apache_maven_digest" | command -p -- tr 'A-F' 'a-f')" || return 1
+  pkg_repository_apache_maven_metadata="$(pkg_repository_artifact_metadata_checksum_sidecar \
+    "$pkg_repository_apache_maven_checksum_url" \
+    digest-only \
+    sha512 \
+    "$pkg_repository_apache_maven_name" \
+    "$pkg_repository_apache_maven_url")" || return 1
 
-  pkg_repository_apache_maven_size="$(http-fetch -l -- "$pkg_repository_apache_maven_url")" || return 1
-  case "$pkg_repository_apache_maven_size" in
-    ''|*[!0-9]*|0[0-9]*) return 1;;
+  pkg_repository_apache_maven_tab="$(printf '\t')"
+  IFS="$pkg_repository_apache_maven_tab" read -r \
+    pkg_repository_apache_maven_size \
+    pkg_repository_apache_maven_digest \
+    pkg_repository_apache_maven_extra <<EOF_METADATA
+$pkg_repository_apache_maven_metadata
+EOF_METADATA
+  [ -z "$pkg_repository_apache_maven_extra" ] || return 1
+  case "$pkg_repository_apache_maven_digest" in
+    sha512:*) pkg_repository_apache_maven_digest=${pkg_repository_apache_maven_digest#sha512:};;
+    *) return 1;;
   esac
 
   printf -- '%s\t%s\n' "$pkg_repository_apache_maven_size" "$pkg_repository_apache_maven_digest"
