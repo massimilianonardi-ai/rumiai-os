@@ -13,11 +13,6 @@
 . $m_LIB_DIR/sys/sh/enc.lib.sh
 . $m_LIB_DIR/sys/sh/rsudo/rsudo-env.lib.sh
 
-LOG_PROC_NAME="rsudo"
-
-# export PS1='RSSH \u@\h:\w\$ '
-export PS1='$(tput setaf 7)$(tput bold)RSSH$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \$$(tput sgr0) '
-
 #------------------------------------------------------------------------------
 
 # needs the following env vars to be defined outside
@@ -122,7 +117,7 @@ rm -f '$RSUDO_REMOTE_FIFO'
 EOF
 )"
 
-    ((echo "$RSUDO_PASSWORD"; echo "$RSUDO_DAEMON_COMMANDS") | RSUDO_INTERACTIVE="" ssh -o 'StrictHostKeyChecking no' -l "$RSUDO_USER" "$RSUDO_HOST" sh -s) &
+    ((echo "$RSUDO_PASSWORD"; echo "$RSUDO_DAEMON_COMMANDS") | RSUDO_INTERACTIVE="" ssh -l "$RSUDO_USER" "$RSUDO_HOST" sh -s) &
 
     export RSUDO_FIFO="/tmp/$(randstr 32)"
     # delete redundant to ensure removal even on some interruption
@@ -133,7 +128,7 @@ EOF
     # echo "$RSUDO_PASSWORD" > "$RSUDO_FIFO"
     echo "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_FIFO"
 
-    ssh -t -o 'StrictHostKeyChecking no' -l "$RSUDO_USER" "$RSUDO_HOST" \
+    ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
     while [ ! -e "$RSUDO_REMOTE_FIFO" ]\; do true\; done\; \
     read RSUDO_DAEMON_READY \< "$RSUDO_REMOTE_FIFO"\; echo "$RSUDO_TOKEN" \> "$RSUDO_REMOTE_FIFO"\; read RSUDO_PASSWORD \< "$RSUDO_REMOTE_FIFO"\; echo "OK_ACKNOWLEDGED" \> "$RSUDO_REMOTE_FIFO"\; \
     'RSUDO_PASSWORD=$(echo "$RSUDO_PASSWORD" | openssl enc -d -A -base64 | RSUDO_TOKEN="'$RSUDO_TOKEN'" openssl enc -d -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN");' \
@@ -148,7 +143,7 @@ EOF
     log debug "non interactive command"
 
     (echo "$RSUDO_PASSWORD"; echo "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
-    ssh -o 'StrictHostKeyChecking no' -l "$RSUDO_USER" "$RSUDO_HOST" \
+    ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
     "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
     sudo -S --prompt='' $SUDO_AS_USER -- "$@"
 
