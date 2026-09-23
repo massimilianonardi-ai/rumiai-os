@@ -148,6 +148,26 @@ END { if (NR == 0) exit 1 }
 '
 }
 
+_pkg_extract_payload_prepare()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_extract_payload_input=$1
+  pkg_extract_payload_output=$2
+
+  [ -f "$pkg_extract_payload_input" ] && [ ! -L "$pkg_extract_payload_input" ] && [ -r "$pkg_extract_payload_input" ] || return 1
+  [ ! -e "$pkg_extract_payload_output" ] && [ ! -L "$pkg_extract_payload_output" ] || return 1
+
+  if _pkg_extract_payload_paths_valid "$pkg_extract_payload_input"
+  then
+    command -p -- cp -p -- "$pkg_extract_payload_input" "$pkg_extract_payload_output" || return 1
+    return 0
+  fi
+
+  command -v gzip >/dev/null 2>&1 || return 1
+  GZIP= command -- gzip -dc < "$pkg_extract_payload_input" > "$pkg_extract_payload_output" || return 1
+  _pkg_extract_payload_paths_valid "$pkg_extract_payload_output"
+}
+
 _pkg_extract_dmg_pkg()
 (
   [ "$#" -eq 3 ] || return 2
@@ -197,11 +217,12 @@ _pkg_extract_dmg_pkg()
   [ -d "$pkg_extract_dmg_pkg_component_dir" ] && [ ! -L "$pkg_extract_dmg_pkg_component_dir" ] || return 1
   pkg_extract_dmg_pkg_payload="$pkg_extract_dmg_pkg_component_dir/Payload"
   [ -f "$pkg_extract_dmg_pkg_payload" ] && [ ! -L "$pkg_extract_dmg_pkg_payload" ] && [ -r "$pkg_extract_dmg_pkg_payload" ] || return 1
-  _pkg_extract_payload_paths_valid "$pkg_extract_dmg_pkg_payload" || return 1
+  pkg_extract_dmg_pkg_cpio="$pkg_extract_dmg_pkg_work/payload.cpio"
+  _pkg_extract_payload_prepare "$pkg_extract_dmg_pkg_payload" "$pkg_extract_dmg_pkg_cpio" || return 1
 
   (
     CDPATH= cd -- "$pkg_extract_dmg_pkg_staging" || exit 1
-    command -- cpio -idm < "$pkg_extract_dmg_pkg_payload" >/dev/null
+    command -- cpio -idm < "$pkg_extract_dmg_pkg_cpio" >/dev/null
   ) || return 1
 
   command -p -- rm -rf -- "$pkg_extract_dmg_pkg_work" || return 1
