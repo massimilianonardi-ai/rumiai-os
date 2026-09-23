@@ -21,9 +21,9 @@ FUNCTIONS
         arguments. For format dmg-pkg it has exactly four arguments and
         <component> must be a basename ending in .pkg. The DMG must contain
         exactly one top-level flat installer package; that installer must contain
-        the named component directory with a readable Payload archive. Payload
-        entries are rejected when they are absolute or contain a parent
-        traversal component.
+        the named component directory with a readable Payload archive. Raw cpio
+        and gzip-compressed cpio Payloads are accepted. Payload entries are
+        rejected when they are absolute or contain a parent traversal component.
 
         Returns 0 on success, 1 when materialization or normalization fails, and
         2 for invalid invocation or an unsupported format.
@@ -32,6 +32,7 @@ DEPENDENCIES
     readpathce
     extract
     xar and cpio for dmg-pkg
+    gzip when a dmg-pkg component Payload is gzip-compressed
 
 SEE ALSO
     pkg-install.lib.sh
