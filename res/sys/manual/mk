@@ -405,9 +405,23 @@ OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
     Output-input consumers observe restored producer outputs through normal
     refinement. No aggregate provider cache is introduced.
 
-    The current baseline does not provide remote/network artifact transport,
-    cross-user sharing/trust, cache eviction/garbage collection, abandoned-staging
-    reclamation, or stale provider-member artifact cleanup.
+    Shared-local artifact state also receives private best-effort structural
+    hygiene when mk touches a fingerprint namespace. The currently selected
+    candidate is preserved; committed unselected candidates and abandoned
+    staging/selector residue may be reclaimed. Reader leases are not required:
+    reclamation first removes an unselected immutable candidate from the canonical
+    namespace and transactional restore degrades safely to ordinary execution if
+    those bytes disappear before commit.
+
+    Publication and hygiene coordinate through private POSIX FIFO activity tokens.
+    Process death closes the owning descriptor, so a leftover token becomes
+    detectably stale without PID inspection or age-based timeout.
+
+    This hygiene is not a retention policy. The current baseline does not provide
+    remote/network artifact transport, cross-user sharing/trust, TTL/LRU or
+    cache-size policy, whole-fingerprint eviction, global sweep guarantees, a
+    public artifact-cache management command, or stale provider-member output/
+    freshness cleanup.
 
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
