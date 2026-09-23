@@ -1,31 +1,6 @@
-#!/bin/sh
+#!/usr/bin/env m
 
-# rssh: start a rsudo interactive shell
-# rssh $commands: execute $commands (eg. eval "commands string", . $script $args) and keeps the shell open
-# echo "$commands" | rssh or rssh [heredoc]: executes $commands or heredoc and exits
-# NB executing (and not sourcing) a script or launching a shell, loses availability of rsudo functions
+export m_SHELL_EXT="$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
 
-# bash --init-file "$(command -v "rsudo.lib.sh")" -i "$@"
-
-if [ -z "$RSSH" ]
-then
-  . arg.lib.sh
-
-  export RSSH="true"
-  export RSSH_ARGS="$(saveargs "$@")"
-
-  # RSSH="true" bash --init-file "$(command -v "rssh")" -i
-  bash --init-file "$0" -i
-  exit "$?"
-fi
-
-. rsudo.lib.sh
-
-LOG_PROC_NAME="rssh"
-
-log_debug "RSSH init args step 0: $@ - RSSH_ARGS=$RSSH_ARGS"
-eval "set -- $RSSH_ARGS"
-
-log_debug "RSSH init args: $@ - RSSH_ARGS=$RSSH_ARGS"
-
-"$@"
+export PS1='$(tput setaf 7)$(tput bold)RSSH$(tput sgr0) $(tput setaf 2)\u$(tput setaf 7)@$(tput setaf 2)\h$(tput setaf 7):$(tput setaf 2)\w$(tput setaf 4) \$$(tput sgr0) '
+shell "$@"
