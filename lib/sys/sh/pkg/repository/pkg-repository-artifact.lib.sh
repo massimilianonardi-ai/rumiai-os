@@ -185,17 +185,32 @@ pkg_repository_artifact_overrides_validate()
   fi
 }
 
+pkg_repository_artifact_download_template_url()
+(
+  [ "$#" -eq 3 ] || return 2
+  pkg_repository_artifact_name_template=$1
+  pkg_repository_artifact_url_template=$2
+  pkg_repository_artifact_version=$3
+
+  _pkg_repository_artifact_template_validate "$pkg_repository_artifact_name_template" name || return 1
+  _pkg_repository_artifact_template_validate "$pkg_repository_artifact_url_template" url || return 1
+  pkg_repository_artifact_name="$(_pkg_repository_artifact_template_expand "$pkg_repository_artifact_name_template" "$pkg_repository_artifact_version" '' name)" || return 1
+  case "$pkg_repository_artifact_name" in ''|.|..|*/*) return 1;; esac
+  pkg_repository_artifact_url="$(_pkg_repository_artifact_template_expand "$pkg_repository_artifact_url_template" "$pkg_repository_artifact_version" "$pkg_repository_artifact_name" url)" || return 1
+  _pkg_repository_artifact_url_validate "$pkg_repository_artifact_url" || return 1
+  printf '%s\t%s\n' "$pkg_repository_artifact_name" "$pkg_repository_artifact_url"
+)
+
 pkg_repository_artifact_download_resolve()
 (
   [ "$#" -eq 2 ] || return 2
   _pkg_repository_artifact_download_validate "$1" || return 1
   pkg_repository_artifact_name_template="$(_pkg_repository_artifact_scalar "$1/name-template")" || return 1
   pkg_repository_artifact_url_template="$(_pkg_repository_artifact_scalar "$1/url-template")" || return 1
-  pkg_repository_artifact_name="$(_pkg_repository_artifact_template_expand "$pkg_repository_artifact_name_template" "$2" '' name)" || return 1
-  case "$pkg_repository_artifact_name" in ''|.|..|*/*) return 1;; esac
-  pkg_repository_artifact_url="$(_pkg_repository_artifact_template_expand "$pkg_repository_artifact_url_template" "$2" "$pkg_repository_artifact_name" url)" || return 1
-  _pkg_repository_artifact_url_validate "$pkg_repository_artifact_url" || return 1
-  printf '%s\t%s\n' "$pkg_repository_artifact_name" "$pkg_repository_artifact_url"
+  pkg_repository_artifact_download_template_url \
+    "$pkg_repository_artifact_name_template" \
+    "$pkg_repository_artifact_url_template" \
+    "$2"
 )
 
 _pkg_repository_artifact_size()
