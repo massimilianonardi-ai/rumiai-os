@@ -211,6 +211,13 @@ PROVIDERS (VERSION 2)
           "type": "map-process",
           "collection": "sources",
           "prerequisites": ["prepare"],
+          "inputs": {
+            "config": {"path": "config/${item}.cfg"}
+          },
+          "outputs": {
+            "artifact": {"path": "out/${item}.o"}
+          },
+          "incremental": {},
           "action": {
             "type": "process",
             "command": "tool",
@@ -218,9 +225,36 @@ PROVIDERS (VERSION 2)
           }
         }
 
-    For every resolved collection item, map-process derives one process operation.
-    ${item} is substituted in command, args, cwd and env values of the provider
-    action template. No other executable configuration is evaluated.
+    inputs, outputs and incremental are optional. Without them, map-process retains
+    its original non-incremental behavior.
+
+    For every resolved collection item, map-process derives one ordinary process
+    operation. ${item} is substituted in command, args, cwd and env values of the
+    provider action template, in provider path-input values and in declared output
+    pathnames. Collection-input references and output-input operation/name
+    references remain literal lifecycle references.
+
+    Every derived member receives a trusted private path input named $item whose
+    pathname is the concrete collection item. Project configuration cannot define
+    that private input name. It makes mapped-item content part of ordinary
+    operation identity without duplicating the map relation in mk.json.
+
+    Provider inputs use the same path/collection/output forms as ordinary
+    operation inputs. Provider outputs use the same named-path output form.
+    Provider incremental opt-in uses only:
+
+        "incremental": {}
+
+    The legacy ordinary-operation incremental.inputs compatibility form is not
+    accepted on provider templates. An incremental provider must declare at least
+    one named output.
+
+    Each derived incremental member reuses the existing ordinary-operation
+    fingerprint, output-verification, freshness-record and up-to-date machinery.
+    There is no provider-level aggregate freshness record. Member identity is
+    based on provider identity plus collection-item pathname identity rather than
+    collection enumeration position, so add/remove/reorder of collection
+    membership does not by itself invalidate unchanged reachable members.
 
     A provider may also declare a requirements array. Its derived work cannot run
     until those named requirements are currently satisfied.
@@ -228,7 +262,8 @@ PROVIDERS (VERSION 2)
     The provider name acts as an aggregate operation. Operations/goals may depend
     on it. The aggregate is satisfied after the collection is resolved, provider
     requirements and prerequisites are satisfied, and every derived item operation
-    plus collection after barriers are satisfied.
+    plus collection after barriers are satisfied. An up-to-date derived member
+    satisfies this relation like any other up-to-date operation.
 
 FACILITY REQUIREMENTS (VERSION 2)
     requirements declares named external conditions. The first type is facility:
@@ -335,8 +370,12 @@ OPERATION INPUTS AND INCREMENTAL FRESHNESS (VERSION 2)
     not create or refresh persistent cache state.
 
     This baseline stores freshness metadata only. It does not store or restore
-    artifact bytes, provide shared/remote cache, or define provider-level
-    incremental templates.
+    artifact bytes or provide a shared/remote artifact cache.
+
+    The same per-operation freshness machinery also applies to derived map-process
+    members when their provider template opts into incremental: {}. No aggregate
+    provider cache is introduced, and stale freshness/output cleanup for members
+    that later become unreachable is not implied.
 
 CONDITIONS (VERSION 2)
     An operation when condition is declarative. Supported operators are:
