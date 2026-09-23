@@ -5,7 +5,7 @@ SYNOPSIS
     readpassv <prompt> <verify-prompt> [<mismatch-message>]
 
 DESCRIPTION
-    readpassv invokes the RumiAI readpass command twice, compares the two
+    readpassv invokes the m-owned readpass command twice, compares the two
     captured values exactly and writes the secret to standard output only when
     they match.
 

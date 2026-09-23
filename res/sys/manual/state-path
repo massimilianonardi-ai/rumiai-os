@@ -1,5 +1,5 @@
 NAME
-    state-path - resolve a managed RumiAI state pathname
+    state-path - resolve a managed m state pathname
 
 SYNOPSIS
     state-path <scope> <owner> <identity> <area> [<state-instance>]
@@ -21,7 +21,7 @@ OPERANDS
         sys, ai, or pkg.
 
     <identity>
-        Owner-local state identity using a controlled RumiAI name.
+        Owner-local state identity using a controlled owner-local name.
 
     <area>
         One of: conf, data, home, cache, log, run, tmp.

@@ -259,7 +259,7 @@ OUTPUT MODES
     pager
         This is the default mode.
 
-        gitman invokes every Git action with --paginate and selects the RumiAI
+        gitman invokes every Git action with --paginate and selects the technical m
         pager through GIT_PAGER=pager. It extends any existing LESS value with:
 
             -R -+F -+X
@@ -336,7 +336,7 @@ EXIT STATUS
     127   A required command is unavailable.
 
 DEPENDENCIES
-    gitman requires the RumiAI commands menu, pager, read-key and state-path,
+    gitman requires the m commands menu, pager, read-key and state-path,
     plus an available Git executable. Configuration editing uses VISUAL when
     set, then EDITOR, and otherwise the POSIX vi fallback.
 

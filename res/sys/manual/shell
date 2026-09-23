@@ -5,8 +5,8 @@ SYNOPSIS
     shell [<shell-argument> ...]
 
 DESCRIPTION
-    shell starts the program named by SHELL, integrating it with RumiAI OS
-    managed shell configuration and state.
+    shell starts the program named by SHELL, integrating it with m-managed shell
+    configuration and state.
 
     bash is started with the managed bash rcfile.
     zsh receives managed startup files through a user-state ZDOTDIR.

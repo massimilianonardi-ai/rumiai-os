@@ -117,7 +117,7 @@ state-path <scope> <owner> <identity> <area> [<state-instance>]
 
 Consumers use `state-path` instead of reconstructing the physical state layout. Package `var/<area>` links are the deliberate exception: they remain system-scoped and follow `state/system/current` so newly started package processes observe the selected system profile.
 
-Package launch HOME is resolved from user package state. RumiAI-managed package configuration lives under the reserved `.m/` namespace inside the package configuration area; for example, launcher environment configuration is read from `<package-conf>/.m/env`.
+Package launch HOME is resolved from user package state. `m`-managed package configuration lives under the reserved `.m/` namespace inside the package configuration area; for example, launcher environment configuration is read from `<package-conf>/.m/env`.
 
 ## Product metadata
 

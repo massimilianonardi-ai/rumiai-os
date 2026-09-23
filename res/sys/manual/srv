@@ -121,7 +121,7 @@ HOST USER SUPERVISION
     unit uses /bin/sh as the fixed
     ExecStart executable and carries the exact m bootstrap, srv command, internal
     foreground runner and service identity as separately serialized arguments. This
-    avoids systemd executable-path restrictions for relocatable RumiAI roots
+    avoids systemd executable-path restrictions for relocatable m roots
     containing spaces or metacharacters.
 
     On macOS, srv resolves the calling account's UID and home from host account
