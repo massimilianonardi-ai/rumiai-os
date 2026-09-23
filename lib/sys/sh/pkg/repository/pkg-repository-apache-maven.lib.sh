@@ -194,8 +194,20 @@ _pkg_repository_apache_maven_release_metadata()
   pkg_repository_apache_maven_version=$1
   _pkg_repository_apache_maven_validate_version "$pkg_repository_apache_maven_version" || return 1
 
-  pkg_repository_apache_maven_name="apache-maven-$pkg_repository_apache_maven_version-bin.tar.gz"
-  pkg_repository_apache_maven_url="https://dlcdn.apache.org/maven/maven-4/$pkg_repository_apache_maven_version/binaries/$pkg_repository_apache_maven_name"
+  pkg_repository_apache_maven_download="$(pkg_repository_artifact_download_template_url \
+    'apache-maven-{version}-bin.tar.gz' \
+    'https://dlcdn.apache.org/maven/maven-4/{version}/binaries/{name}' \
+    "$pkg_repository_apache_maven_version")" || return 1
+  pkg_repository_apache_maven_tab="$(printf '\t')"
+  IFS="$pkg_repository_apache_maven_tab" read -r \
+    pkg_repository_apache_maven_name \
+    pkg_repository_apache_maven_url \
+    pkg_repository_apache_maven_extra <<EOF_DOWNLOAD
+$pkg_repository_apache_maven_download
+EOF_DOWNLOAD
+  [ -z "$pkg_repository_apache_maven_extra" ] || return 1
+  [ -n "$pkg_repository_apache_maven_name" ] && [ -n "$pkg_repository_apache_maven_url" ] || return 1
+
   pkg_repository_apache_maven_checksum_url="https://downloads.apache.org/maven/maven-4/$pkg_repository_apache_maven_version/binaries/$pkg_repository_apache_maven_name.sha512"
 
   pkg_repository_apache_maven_metadata="$(pkg_repository_artifact_metadata_checksum_sidecar \
