@@ -208,22 +208,95 @@ extract_7z()
   command -- "$extract_command" x -y "-o$extract_destination" -- "$extract_artifact" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
 }
 
+extract_dmg_diskutil_available()
+{
+  extract_have diskutil || return 1
+  command -- diskutil image attach -help >/dev/null 2>&1
+}
+
+extract_dmg_plist_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+  extract_dmg_plist=$1
+
+  extract_dmg_entity_count="$(command -- plutil -extract system-entities raw -expect array "$extract_dmg_plist" 2>/dev/null)" || return 1
+  case "$extract_dmg_entity_count" in
+    ""|*[!0-9]*) return 1 ;;
+  esac
+  [ "$extract_dmg_entity_count" -gt 0 ] || return 1
+
+  extract_dmg_first_device=
+  extract_dmg_mount=
+  extract_dmg_mount_device=
+  extract_dmg_mount_count=0
+  extract_dmg_entity_index=0
+
+  while [ "$extract_dmg_entity_index" -lt "$extract_dmg_entity_count" ]
+  do
+    extract_dmg_entity_device="$(command -- plutil -extract "system-entities.$extract_dmg_entity_index.dev-entry" raw -expect string "$extract_dmg_plist" 2>/dev/null)" || extract_dmg_entity_device=
+    if [ -z "$extract_dmg_first_device" ] && [ -n "$extract_dmg_entity_device" ]
+    then
+      extract_dmg_first_device=$extract_dmg_entity_device
+    fi
+
+    extract_dmg_entity_mount="$(command -- plutil -extract "system-entities.$extract_dmg_entity_index.mount-point" raw -expect string "$extract_dmg_plist" 2>/dev/null)" || extract_dmg_entity_mount=
+    if [ -n "$extract_dmg_entity_mount" ]
+    then
+      [ -n "$extract_dmg_entity_device" ] || return 1
+      extract_dmg_mount_count=$((extract_dmg_mount_count + 1))
+      extract_dmg_mount=$extract_dmg_entity_mount
+      extract_dmg_mount_device=$extract_dmg_entity_device
+    fi
+
+    extract_dmg_entity_index=$((extract_dmg_entity_index + 1))
+  done
+
+  extract_dmg_device=$extract_dmg_first_device
+  [ "$extract_dmg_mount_count" -eq 1 ] || return 1
+  [ -n "$extract_dmg_mount_device" ] || return 1
+  extract_dmg_device=$extract_dmg_mount_device
+
+  case "$extract_dmg_mount" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+  [ -d "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ] || return 1
+}
+
+extract_dmg_detach()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "$extract_dmg_device" ] || return 1
+
+  case "$extract_dmg_backend" in
+    diskutil)
+      command -- diskutil eject "$extract_dmg_device" >/dev/null
+      ;;
+    hdiutil)
+      command -- hdiutil detach "$extract_dmg_device" >/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
 extract_dmg_cleanup()
 {
   extract_cleanup_status=$?
   trap - 0 HUP INT TERM
 
-  if [ "$extract_dmg_mounted" -eq 1 ]
+  if [ "$extract_dmg_attached" -eq 1 ] && [ -n "$extract_dmg_device" ]
   then
-    if command -- hdiutil detach "$extract_dmg_mount" >/dev/null 2>&1
+    if extract_dmg_detach >/dev/null 2>&1
     then
-      extract_dmg_mounted=0
+      extract_dmg_attached=0
     fi
   fi
 
-  if [ "$extract_dmg_mounted" -eq 0 ] && [ -d "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ]
+  if [ -n "${extract_dmg_work-}" ] && [ -d "$extract_dmg_work" ] && [ ! -L "$extract_dmg_work" ]
   then
-    command -p -- rmdir "$extract_dmg_mount" 2>/dev/null || :
+    command -p -- rm -rf -- "$extract_dmg_work" 2>/dev/null || :
   fi
   if [ -n "${extract_dmg_tmp_root-}" ] && [ -d "$extract_dmg_tmp_root" ] && [ ! -L "$extract_dmg_tmp_root" ]
   then
@@ -243,32 +316,45 @@ extract_dmg_native()
   command -p -- mkdir -p -- "$extract_dmg_tmp_root" || fatal execution execution-failed operation extract reason temporary-state-create-failed format "$extract_format"
   [ -d "$extract_dmg_tmp_root" ] && [ ! -L "$extract_dmg_tmp_root" ] || fatal execution execution-failed operation extract reason temporary-state-invalid format "$extract_format"
 
-  extract_dmg_mount="$extract_dmg_tmp_root/.extract-dmg-$$"
-  [ ! -e "$extract_dmg_mount" ] && [ ! -L "$extract_dmg_mount" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
-  command -p -- mkdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-create-failed format "$extract_format"
+  extract_dmg_work="$extract_dmg_tmp_root/.extract-dmg-$$"
+  [ ! -e "$extract_dmg_work" ] && [ ! -L "$extract_dmg_work" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
+  command -p -- mkdir "$extract_dmg_work" || fatal execution execution-failed operation extract reason temporary-create-failed format "$extract_format"
+  extract_dmg_attach_plist="$extract_dmg_work/attach.plist"
 
-  extract_dmg_mounted=0
+  extract_dmg_attached=0
+  extract_dmg_backend=
+  extract_dmg_device=
+  extract_dmg_mount=
   trap extract_dmg_cleanup 0
   trap 'exit 129' HUP
   trap 'exit 130' INT
   trap 'exit 143' TERM
 
-  command -- hdiutil attach -readonly -nobrowse -mountpoint "$extract_dmg_mount" "$extract_dmg_artifact" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
-  extract_dmg_mounted=1
+  if extract_dmg_diskutil_available
+  then
+    extract_dmg_backend=diskutil
+    command -- diskutil image -plist attach -readOnly -nobrowse "$extract_dmg_artifact" > "$extract_dmg_attach_plist" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  else
+    extract_dmg_backend=hdiutil
+    command -- hdiutil attach -readonly -nobrowse -plist "$extract_dmg_artifact" > "$extract_dmg_attach_plist" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  fi
+  extract_dmg_attached=1
+
+  extract_dmg_plist_resolve "$extract_dmg_attach_plist" || fatal execution execution-failed operation extract reason mount-resolution-failed format "$extract_format"
 
   command -- ditto "$extract_dmg_mount" "$extract_dmg_destination" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
 
-  command -- hdiutil detach "$extract_dmg_mount" >/dev/null || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
-  extract_dmg_mounted=0
+  extract_dmg_detach || fatal execution execution-failed operation extract reason detach-failed format "$extract_format"
+  extract_dmg_attached=0
 
-  command -p -- rmdir "$extract_dmg_mount" || fatal execution execution-failed operation extract reason temporary-cleanup-failed format "$extract_format"
+  command -p -- rm -rf -- "$extract_dmg_work" || fatal execution execution-failed operation extract reason temporary-cleanup-failed format "$extract_format"
   command -p -- rmdir "$extract_dmg_tmp_root" 2>/dev/null || :
   trap - 0 HUP INT TERM
 }
 
 extract_dmg()
 {
-  if extract_have hdiutil && extract_have ditto
+  if extract_have ditto && extract_have plutil && { extract_dmg_diskutil_available || extract_have hdiutil; }
   then
     extract_dmg_native
   else
