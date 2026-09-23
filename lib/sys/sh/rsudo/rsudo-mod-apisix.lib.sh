@@ -196,7 +196,7 @@ rsudo_mod_apisix_keyset()
 {
   if [ -z "$1" ]
   then
-    log_debug "apisix_key_set: empty arg"
+    log debug "apisix_key_set: empty arg"
     return 1
   fi
 

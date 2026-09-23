@@ -134,7 +134,7 @@ rsudo_mod_keycloak_access_token()
 
   if [ -z "$KEYCLOAK_USER_NAME" ] || [ -z "$KEYCLOAK_USER_PASS" ]
   then
-    log_debug "rsudo_mod_keycloak_access_token: empty credentials"
+    log debug "rsudo_mod_keycloak_access_token: empty credentials"
     return 1
   fi
 
@@ -151,7 +151,7 @@ rsudo_mod_keycloak_access_token_set()
 {
   if [ -z "$1" ]
   then
-    log_debug "keycloak_access_token_set: empty arg"
+    log debug "keycloak_access_token_set: empty arg"
     return 1
   fi
 

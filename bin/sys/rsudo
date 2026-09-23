@@ -2,6 +2,6 @@
 
 . "$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
 
-log_debug "RSUDO COMMAND CALLED!"
+log info rsudo command-called
 
 rsudo "$@"

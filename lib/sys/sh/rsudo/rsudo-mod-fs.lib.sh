@@ -34,7 +34,7 @@ rsudo_mod_fs_get()
     exit 1
   fi
 
-  log_info "REMOTE_PATH_TYPE=$REMOTE_PATH_TYPE"
+  log info "REMOTE_PATH_TYPE=$REMOTE_PATH_TYPE"
 
   if [ "$REMOTE_PATH_TYPE" = "L" ]
   then
@@ -48,7 +48,7 @@ rsudo_mod_fs_get()
   then
     rm -rf -- "$LOCAL_PATH" && mkdir -p "$LOCAL_PATH" && cd "$LOCAL_PATH" && rsudo "cd '$REMOTE_PATH' && tar -c -f - ." | tar -x -f -
   else
-    log_error "get: $REMOTE_PATH doesn't exists"
+    log error "get: $REMOTE_PATH doesn't exists"
     exit 1
   fi
 )
@@ -81,7 +81,7 @@ rsudo_mod_fs_put()
   then
     cd "$LOCAL_PATH" && tar -c -f - . | rsudo "rm -rf -- '$REMOTE_PATH' && mkdir -p '$REMOTE_PATH' && cd '$REMOTE_PATH' && tar -x -f -"
   else
-    log_error "put: $LOCAL_PATH doesn't exists"
+    log error "put: $LOCAL_PATH doesn't exists"
     exit 1
   fi
 

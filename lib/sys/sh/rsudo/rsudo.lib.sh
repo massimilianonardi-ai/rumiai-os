@@ -10,10 +10,8 @@
 
 #------------------------------------------------------------------------------
 
-. log.lib.sh
-. arg.lib.sh
-. enc.lib.sh
-. rsudo-env.lib.sh
+. $m_LIB_DIR/sys/sh/enc.lib.sh
+. $m_LIB_DIR/sys/sh/rsudo/rsudo-env.lib.sh
 
 LOG_PROC_NAME="rsudo"
 
@@ -36,7 +34,7 @@ export PS1='$(tput setaf 7)$(tput bold)RSSH$(tput sgr0) $(tput setaf 2)\u$(tput 
 rsudo_core()
 {
   log info "RSUDO >>> START - $RSUDO_USER@$RSUDO_HOST: $@"
-  log_debug "RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && echo "is not null" || echo "is null")"
+  log debug "RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && echo "is not null" || echo "is null")"
 
   if [ -z "$RSUDO_HOST" ] || [ -z "$RSUDO_USER" ] || [ -z "$RSUDO_PASSWORD" ]
   then
@@ -46,14 +44,14 @@ rsudo_core()
   # check args
   if [ "$#" -eq "0" ] || [ -z "$*" ]
   then
-    log_debug "rsudo no args"
+    log debug "rsudo no args"
     if [ -t 0 ]
     then
-      log_debug "tty present, setting interactive session = true and su command"
+      log debug "tty present, setting interactive session = true and su command"
       RSUDO_INTERACTIVE="true"
       set -- su
     else
-      log_debug "pipe present, set command as /bin/sh -s (execute stream commands)"
+      log debug "pipe present, set command as /bin/sh -s (execute stream commands)"
       set -- sh -s
     fi
   else
@@ -78,12 +76,12 @@ rsudo_core()
     fi
   fi
 
-  # log_debug "ARGS - START"
+  # log debug "ARGS - START"
   # for k in "$@"
   # do
-  #   log_debug "$k"
+  #   log debug "$k"
   # done
-  # log_debug "ARGS - END"
+  # log debug "ARGS - END"
 
   # prepare vars for executing
   # export DISPLAY=":0.0"
@@ -100,7 +98,7 @@ rsudo_core()
   if [ "$RSUDO_INTERACTIVE" = "true" ]
   then
     # interactive command
-    log_debug "interactive command"
+    log debug "interactive command"
 
     export RSUDO_TOKEN="$(randstr 255)"
     RSUDO_REMOTE_FIFO="/tmp/$(randstr 32)"
@@ -147,7 +145,7 @@ EOF
     rm -f "$RSUDO_FIFO"
   else
     # non interactive command
-    log_debug "non interactive command"
+    log debug "non interactive command"
 
     (echo "$RSUDO_PASSWORD"; echo "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
     ssh -o 'StrictHostKeyChecking no' -l "$RSUDO_USER" "$RSUDO_HOST" \
@@ -179,7 +177,7 @@ rsudo()
 
         if [ "$1" = "${1#*@}" ]
         then
-          log_fatal "wrong connection string: $1"
+          log fatal "wrong connection string: $1"
           exit 1
         fi
 
@@ -191,7 +189,7 @@ rsudo()
 
         if [ "$1" = "${1%:*}" ]
         then
-          log_fatal "wrong load string: $1"
+          log fatal "wrong load string: $1"
           exit 1
         fi
 
@@ -200,10 +198,10 @@ rsudo()
 
         if [ -z "$ENV_ENCODED_FILE" ]
         then
-          log_warn "env file not provided, searching into current env."
+          log warn "env file not provided, searching into current env."
         elif ! rsudoenv_load "$ENV_ENCODED_FILE"
         then
-          log_warn "env file error! not loaded, searching into current env."
+          log warn "env file error! not loaded, searching into current env."
         fi
 
         eval "RSUDO_HOST=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_HOST\""
@@ -211,7 +209,7 @@ rsudo()
         eval "RSUDO_PASSWORD=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_PASS\""
       ;;
       --user) shift; RSUDO_AS_USER="$1";;
-      *) log_fatal "bad option: '$1'"; exit 1;;
+      *) log fatal "bad option: '$1'"; exit 1;;
     esac
     shift
   done
@@ -221,33 +219,33 @@ rsudo()
   # validate connection args: RSUDO_HOST, RSUDO_USER, RSUDO_PASSWORD.
   if [ -z "$RSUDO_HOST" ]
   then
-    log_fatal "empty RSUDO_HOST"
+    log fatal "empty RSUDO_HOST"
     exit 1
   fi
 
   if [ -z "$RSUDO_USER" ]
   then
-    log_info "empty RSUDO_USER, setting it to '$USER'"
+    log info "empty RSUDO_USER, setting it to '$USER'"
     RSUDO_USER="$USER"
   fi
 
   if [ "$RSUDO_ASKPASS" = "true" ] && [ ! -t 0 ]
   then
-    log_debug "read pass from pipe"
+    log debug "read pass from pipe"
     read -r RSUDO_PASSWORD
   elif [ -z "$RSUDO_PASSWORD" ] && [ -t 0 ]
   then
-    log_debug "read pass from tty"
+    log debug "read pass from tty"
     RSUDO_PASSWORD="$(readpass "[rsudo] Enter password for ${RSUDO_USER}@${RSUDO_HOST}:" < /dev/tty)"
   fi
 
   if [ -z "$RSUDO_PASSWORD" ]
   then
-    log_fatal "empty RSUDO_PASSWORD"
+    log fatal "empty RSUDO_PASSWORD"
     exit 1
   fi
 
-  log_debug "RSUDO_HOST=$RSUDO_HOST | RSUDO_USER=$RSUDO_USER | RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && echo "is not null" || echo "is null")"
+  log debug "RSUDO_HOST=$RSUDO_HOST | RSUDO_USER=$RSUDO_USER | RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && echo "is not null" || echo "is null")"
 
 
 
@@ -261,18 +259,18 @@ rsudo()
     # RSUDO_MODULE_PREFIX="rsudo_mod_${1}"
     RSUDO_MODULE_PREFIX="rsudo_mod_$(echo "$1" | sed 's/-/_/g')"
     shift
-    log_debug "loading module RSUDO_MODULE=$RSUDO_MODULE - RSUDO_MODULE_PREFIX=$RSUDO_MODULE_PREFIX - RSUDO_MODULE_ARGS=$@"
+    log debug "loading module RSUDO_MODULE=$RSUDO_MODULE - RSUDO_MODULE_PREFIX=$RSUDO_MODULE_PREFIX - RSUDO_MODULE_ARGS=$@"
     . "$RSUDO_MODULE"
     if exist_function "${RSUDO_MODULE_PREFIX}"
     then
-      log_debug "delegate to module function: ${RSUDO_MODULE_PREFIX}"
+      log debug "delegate to module function: ${RSUDO_MODULE_PREFIX}"
       "${RSUDO_MODULE_PREFIX}" "$@"
     elif exist_function "${RSUDO_MODULE_PREFIX}"_"$1"
     then
-      log_debug "delegate to module function: ${RSUDO_MODULE_PREFIX}_$1"
+      log debug "delegate to module function: ${RSUDO_MODULE_PREFIX}_$1"
       "${RSUDO_MODULE_PREFIX}"_"$@"
     else
-      log_debug "no module function to delegate to"
+      log debug "no module function to delegate to"
     fi
   else
     rsudo_core "$@"
