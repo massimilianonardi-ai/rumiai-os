@@ -241,6 +241,7 @@ _pkg_integration_validate_definition()
   pkg_integration_have_link=0
   pkg_integration_format_file=
   pkg_integration_component_file=
+  pkg_integration_payload_root_file=
 
   for pkg_integration_entry in \
     "$pkg_integration_range"/* \
@@ -260,6 +261,10 @@ _pkg_integration_validate_definition()
       component)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         pkg_integration_component_file=$pkg_integration_entry
+        ;;
+      payload-root)
+        [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        pkg_integration_payload_root_file=$pkg_integration_entry
         ;;
       facility)
         _pkg_facility_file_validate "$pkg_integration_entry" || return 1
@@ -302,8 +307,13 @@ _pkg_integration_validate_definition()
   if [ "$pkg_integration_format_value" = dmg-pkg ]
   then
     [ -n "$pkg_integration_component_file" ] || return 1
+    if [ -n "$pkg_integration_payload_root_file" ]
+    then
+      _pkg_integration_link_target_read "$pkg_integration_payload_root_file" || return 1
+    fi
   else
     [ -z "$pkg_integration_component_file" ] || return 1
+    [ -z "$pkg_integration_payload_root_file" ] || return 1
   fi
 
   _pkg_integration_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
