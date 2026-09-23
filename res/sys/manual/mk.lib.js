@@ -37,7 +37,7 @@ PUBLIC FUNCTIONS
         profiles are selected only when explicitly declared by the dependency.
         After dependencies succeed, local resolution/execution is iterative:
         currently reachable dynamic context, named external requirements and
-        incremental data dependencies are resolved, verified up-to-date work is
+        operation data dependencies are resolved, verified up-to-date work is
         established when possible, ready work executes, results are recorded and
         resolution is refreshed until the requested goal roots are satisfied or no
         valid refinement is possible.
@@ -77,10 +77,14 @@ ENVIRONMENT
     Facility requirements are gates only. Provider command/environment projection
     remains owned by the normal m/pkg bootstrap and is not reimplemented here.
 
+    Version-2 operations may declare shared path/collection/output inputs without
+    becoming incrementally reusable. Incremental freshness consumes that same input
+    map when enabled; legacy incremental.inputs remains a compatible declaration.
+
     Incremental fingerprints include the complete effective process environment,
     effective operation/action definition, supported executable identity,
-    requirement-provider identities and declared incremental inputs. Supported
-    file identity is content-based; mtime is not used as freshness evidence.
+    requirement-provider identities and resolved operation inputs. Supported file
+    identity is content-based; mtime is not used as freshness evidence.
 
 FILES
     <project-root>/mk.json
