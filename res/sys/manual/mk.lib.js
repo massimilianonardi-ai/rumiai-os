@@ -92,6 +92,14 @@ ENVIRONMENT
     becoming incrementally reusable. Incremental freshness consumes that same input
     map when enabled; legacy incremental.inputs remains a compatible declaration.
 
+    Trusted map-process providers may template the same ordinary inputs and named
+    outputs for each derived member and may opt those members into incremental
+    freshness with incremental: {}. Each member receives a private $item path input
+    bound to its concrete collection item. Provider path inputs and output paths
+    may use ${item} substitution. Derived members use the same per-operation
+    freshness records/up-to-date semantics; no provider aggregate cache record is
+    introduced.
+
     Incremental fingerprints include the complete effective process environment,
     effective operation/action definition, supported executable identity,
     requirement-provider identities and resolved operation inputs. Supported file
@@ -125,3 +133,9 @@ NOTES
     Version-2 provider implementations are trusted runtime behavior. mk.json
     selects a supported provider type and data; it is not an executable module
     loading surface.
+
+    For map-process incremental templates, derived operation identity is based on
+    provider identity plus collection-item pathname identity rather than collection
+    enumeration position. Adding/removing/reordering members therefore does not by
+    itself invalidate unchanged reachable members. Unreachable stale output/cache
+    cleanup is not implied by this freshness model.
