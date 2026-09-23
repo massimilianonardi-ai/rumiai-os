@@ -53,13 +53,21 @@ PUBLIC FUNCTIONS
         resolution is refreshed until the requested goal roots are satisfied or no
         valid refinement is possible.
 
-        Incremental freshness records are non-authoritative user cache state
-        resolved through state-path. A hit requires a matching effective operation
-        fingerprint plus current declared outputs matching the recorded successful
-        output fingerprints. Up-to-date work may satisfy prerequisites,
-        collection barriers and output evidence, but it does not synthesize
-        current execution-result fields; result observation forces actual
-        execution. Failed executions do not create reusable freshness state.
+        Incremental freshness records and local cached copies of supported
+        declared outputs are non-authoritative user cache state resolved through
+        state-path. A current-output hit requires a matching effective operation
+        fingerprint plus declared outputs matching the recorded successful output
+        fingerprints.
+
+        When the fingerprint still matches but current outputs are missing or
+        modified, ordinary execution may restore verified cached output
+        files/directory trees before running the action. Restoration is
+        execution-only; plan resolution remains non-mutating. Invalid/incomplete
+        artifact state is a conservative miss. A successful restore becomes
+        ordinary up-to-date output evidence through the next refinement pass and
+        does not synthesize current execution-result fields, so result observation
+        still forces actual execution. Failed executions do not create reusable
+        freshness state.
 
         Facility requirements are queried through the public pkg requirement
         resolve boundary against the configured system facility default. The
@@ -117,7 +125,8 @@ FILES
 
     state-path user sys mk cache
         Semantic user cache area used for non-authoritative incremental freshness
-        metadata. Private layout below it is an implementation detail.
+        metadata and verified local copies of supported declared output artifacts.
+        Private layout below it is an implementation detail.
 
     lib/sys/js/mk.lib.js
         This library.
@@ -137,5 +146,11 @@ NOTES
     For map-process incremental templates, derived operation identity is based on
     provider identity plus collection-item pathname identity rather than collection
     enumeration position. Adding/removing/reordering members therefore does not by
-    itself invalidate unchanged reachable members. Unreachable stale output/cache
-    cleanup is not implied by this freshness model.
+    itself invalidate unchanged reachable members. Derived members use the same
+    ordinary per-operation local artifact restoration path as configured
+    incremental operations. Unreachable stale output/cache cleanup is not implied
+    by this freshness model.
+
+    Local artifact restoration remains canonical-project-root scoped and does not
+    establish shared/remote or cross-project artifact reuse, eviction/garbage
+    collection, or a public artifact-cache API.
