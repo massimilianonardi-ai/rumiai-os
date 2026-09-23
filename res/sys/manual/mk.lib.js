@@ -76,6 +76,15 @@ PUBLIC FUNCTIONS
         candidate rather than destructively replacing a verified candidate another
         process may be reading.
 
+        Private best-effort structural hygiene runs only for shared-artifact
+        fingerprint namespaces touched by ordinary mk artifact activity. It
+        preserves the selected candidate and may quarantine/reclaim unselected
+        immutable candidates plus abandoned staging/selector residue. Publication
+        and hygiene coordinate with private crash-released POSIX FIFO activity
+        tokens. Reader registration is not required because restoration remains
+        transactional and a disappearing source candidate becomes an ordinary
+        execution miss before project destinations are committed.
+
         Facility requirements are queried through the public pkg requirement
         resolve boundary against the configured system facility default. The
         library does not implement provider selection, package installation or
@@ -159,6 +168,7 @@ NOTES
     incremental operations. Unreachable stale output/cache cleanup is not implied
     by this freshness model.
 
-    Shared-local artifact reuse remains user-local and does not establish
-    remote/network transport, cross-user sharing/trust, eviction/garbage
-    collection, distributed locking, or a public artifact-cache API.
+    Shared-local artifact reuse remains user-local. Structural hygiene is not a
+    retention policy and does not establish remote/network transport, cross-user
+    sharing/trust, TTL/LRU or cache-size policy, whole-fingerprint eviction,
+    distributed locking, global sweep guarantees, or a public artifact-cache API.
