@@ -44,6 +44,12 @@ FUNCTIONS
         Resolve a typed download descriptor and print one tab-separated artifact
         name and HTTPS URL.
 
+    pkg_repository_artifact_download_template_url <name-template> <url-template> <version>
+        Resolve the template-url mechanism directly and print one tab-separated
+        artifact name and HTTPS URL. This public mechanism entrypoint lets a
+        complete repository type reuse the trusted template implementation without
+        requiring a catalog override.
+
     pkg_repository_artifact_metadata_resolve <metadata-dir> <digest-type> <version> <name> <download-url>
         Resolve a typed metadata descriptor and print one tab-separated positive
         byte size and <algorithm>:<hex> digest.
