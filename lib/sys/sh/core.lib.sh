@@ -1,22 +1,33 @@
 
-valididentifier()
+valid_shell_id()
 {
   [ "$#" -eq "0" ] && return 1
 
   while [ "$#" -gt 0 ]
   do
-    case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 2;; esac
+    case "$1" in "" | [0123456789]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 2;; esac
     shift
   done
 }
 
-valididentifierext()
+valid_cli_name()
 {
   [ "$#" -eq "0" ] && return 1
 
   while [ "$#" -gt 0 ]
   do
     case "$1" in "" | [!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-]* | *[_-]) return 2 ;; esac
+    shift
+  done
+}
+
+valid_namespace_name()
+{
+  [ "$#" -eq "0" ] && return 1
+
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in "" | [!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.]* | *[_-.]) return 2 ;; esac
     shift
   done
 }
