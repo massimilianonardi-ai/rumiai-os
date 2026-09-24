@@ -291,3 +291,313 @@ rsudo()
 }
 
 #------------------------------------------------------------------------------
+
+rsudo()
+{
+  while [ "$#" -gt "0" ]
+  do
+    case "$1" in
+      --)
+        break
+      ;;
+
+      --no-preserve-quotes)
+        RSUDO_NO_PRESERVE_QUOTES="true"
+        shift
+      ;;
+
+      --interactive)
+        RSUDO_INTERACTIVE="true"
+        shift
+      ;;
+
+      --askpass)
+        RSUDO_ASKPASS="true"
+        shift
+      ;;
+
+      --connect)
+        [ "$#" -ge "2" ] ||
+        {
+          log fatal execution invalid-arguments operand connect reason missing
+          return 1
+        }
+
+        # Exactly one @.
+        case "$2" in
+          *@*@*)
+            log fatal execution invalid-arguments operand connect value "$2"
+            return 1
+          ;;
+
+          *@*)
+            :
+          ;;
+
+          *)
+            log fatal execution invalid-arguments operand connect value "$2"
+            return 1
+          ;;
+        esac
+
+        RSUDO_USER="${2%%@*}"
+        RSUDO_HOST="${2#*@}"
+
+        [ -n "$RSUDO_HOST" ] ||
+        {
+          log fatal execution invalid-arguments operand connect value "$2"
+          return 1
+        }
+
+        shift 2
+      ;;
+
+      --load)
+        [ "$#" -ge "2" ] ||
+        {
+          log fatal execution invalid-arguments operand load reason missing
+          return 2
+        }
+
+        case "$2" in
+          *:*)
+            :
+          ;;
+
+          *)
+            log fatal execution invalid-arguments operand load value "$2"
+            return 2
+          ;;
+        esac
+
+        # Last ':' is the separator:
+        #   file:name
+        #   path:with:colons:name
+        #   :name
+        ENV_ENCODED_FILE="${2%:*}"
+        ENV_GROUP_NAME="${2##*:}"
+
+        case "$ENV_GROUP_NAME" in
+          "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*)
+            log fatal execution invalid-arguments operand load value "$2"
+            return 2
+          ;;
+        esac
+
+        if [ -z "$ENV_ENCODED_FILE" ]
+        then
+          log warn rsudo env-file-fallback reason not-provided
+        elif ! rsudoenv_load "$ENV_ENCODED_FILE"
+        then
+          log warn rsudo env-file-fallback \
+            reason load-failed \
+            file "$ENV_ENCODED_FILE"
+        fi
+
+        # ENV_GROUP_NAME is validated as an identifier component before eval.
+        eval "RSUDO_HOST=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_HOST-}\""
+        eval "RSUDO_USER=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_USER-}\""
+        eval "RSUDO_PASSWORD=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_PASS-}\""
+
+        shift 2
+      ;;
+
+      --user)
+        [ "$#" -ge "2" ] && [ -n "$2" ] ||
+        {
+          log fatal execution invalid-arguments operand user reason missing
+          return 3
+        }
+
+        RSUDO_AS_USER="$2"
+
+        shift 2
+      ;;
+
+      --*)
+        log fatal execution invalid-arguments option "$1"
+        return 3
+      ;;
+
+      *)
+        break
+      ;;
+    esac
+  done
+
+
+  # Validate connection data.
+
+  [ -n "${RSUDO_HOST-}" ] ||
+  {
+    log fatal execution invalid-arguments field rsudo-host reason empty
+    return 4
+  }
+
+  if [ -z "${RSUDO_USER-}" ]
+  then
+    RSUDO_USER="${USER-}"
+
+    [ -n "$RSUDO_USER" ] ||
+    {
+      log fatal execution invalid-arguments field rsudo-user reason empty
+      return 4
+    }
+
+    log info rsudo user-defaulted user "$RSUDO_USER"
+  fi
+
+
+  # Acquire password when required.
+
+  if [ "${RSUDO_ASKPASS-}" = "true" ] && [ ! -t 0 ]
+  then
+    log debug rsudo password-source source pipe
+
+    if ! IFS= read -r RSUDO_PASSWORD
+    then
+      unset RSUDO_PASSWORD
+
+      log fatal execution execution-failed \
+        operation rsudo-password-read \
+        source pipe
+
+      return 5
+    fi
+
+  elif [ -z "${RSUDO_PASSWORD-}" ] && [ -t 0 ]
+  then
+    log debug rsudo password-source source tty
+
+    if ! RSUDO_PASSWORD="$(
+      readpass \
+        "[rsudo] Enter password for ${RSUDO_USER}@${RSUDO_HOST}:" \
+        < /dev/tty
+    )"
+    then
+      unset RSUDO_PASSWORD
+
+      log fatal execution execution-failed \
+        operation rsudo-password-read \
+        source tty
+
+      return 5
+    fi
+  fi
+
+  [ -n "${RSUDO_PASSWORD-}" ] ||
+  {
+    log fatal execution invalid-arguments \
+      field rsudo-password \
+      reason empty
+
+    return 5
+  }
+
+  log debug rsudo connection-state \
+    host "$RSUDO_HOST" \
+    user "$RSUDO_USER" \
+    password-present true
+
+
+  # Explicit -- always bypasses module dispatch.
+
+  if [ "$#" -gt "0" ] && [ "$1" = "--" ]
+  then
+    shift
+
+    rsudo_core "$@"
+    return "$?"
+  fi
+
+
+  # Resolve an optional rsudo module.
+  #
+  # Invalid module-name syntax does not make the command invalid:
+  # it simply cannot identify a module and is therefore passed to rsudo_core.
+
+  RSUDO_MODULE=""
+
+  if [ "$#" -gt "0" ]
+  then
+    case "$1" in
+      "" | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-]*)
+        :
+      ;;
+
+      *)
+        RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-$1.lib.sh"
+      ;;
+    esac
+  fi
+
+
+  if [ -n "$RSUDO_MODULE" ] &&
+     [ -f "$RSUDO_MODULE" ] &&
+     [ -r "$RSUDO_MODULE" ]
+  then
+    RSUDO_MODULE_NAME="$1"
+
+    RSUDO_MODULE_PREFIX="rsudo_mod_$(
+      printf '%s\n' "$RSUDO_MODULE_NAME" |
+        sed 's/-/_/g'
+    )" || return 6
+
+    shift
+
+    log debug rsudo module-load \
+      module "$RSUDO_MODULE" \
+      prefix "$RSUDO_MODULE_PREFIX" \
+      argc "$#"
+
+    if ! . "$RSUDO_MODULE"
+    then
+      log error execution execution-failed \
+        operation rsudo-module-load \
+        module "$RSUDO_MODULE"
+
+      return 6
+    fi
+
+
+    # Generic module entrypoint:
+    #
+    #   rsudo_mod_<module> "$@"
+
+    if exist_function "$RSUDO_MODULE_PREFIX"
+    then
+      "$RSUDO_MODULE_PREFIX" "$@"
+      return "$?"
+    fi
+
+
+    # Subcommand entrypoint:
+    #
+    #   rsudo_mod_<module>_<subcommand> "$@"
+
+    if [ "$#" -gt "0" ]
+    then
+      RSUDO_MODULE_FUNCTION="${RSUDO_MODULE_PREFIX}_$1"
+
+      if exist_function "$RSUDO_MODULE_FUNCTION"
+      then
+        shift
+
+        "$RSUDO_MODULE_FUNCTION" "$@"
+        return "$?"
+      fi
+    fi
+
+    log debug rsudo module-delegate-missing \
+      module "$RSUDO_MODULE"
+
+    return 6
+  fi
+
+
+  # No module matched: ordinary remote command.
+
+  rsudo_core "$@"
+}
+
+#------------------------------------------------------------------------------
