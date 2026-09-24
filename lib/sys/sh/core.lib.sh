@@ -1,11 +1,29 @@
 
 valididentifier()
 {
+  [ "$#" = "0" ] && return 1
+
   while [ "$#" -gt 0 ]
   do
-    case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 1;; esac
+    case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 2;; esac
     shift
   done
+}
+
+valididentifierext()
+{
+  [ "$#" = "0" ] && return 1
+
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-]*) return 2;; esac
+    shift
+  done
+}
+
+validlib()
+{
+  [ "$#" -eq "1" ] && [ -n "$1" ] && [ -f "$1" ] && [ -r "$1" ] && printf '%s\n' "$m_LIB_DIR/${1}.lib.sh" || return 1
 }
 
 #-------------------------------------------------------------------------------
