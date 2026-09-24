@@ -65,6 +65,7 @@ log()
 
 fatal()
 {
+  case "$1" in exit) EXIT_COMMAND="exit";; return) EXIT_COMMAND="return"; shift;; *) EXIT_COMMAND="exit"; shift;; esac
   case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
 
   log fatal "$@" || log_base_print "$@"
