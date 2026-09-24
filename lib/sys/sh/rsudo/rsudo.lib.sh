@@ -240,7 +240,7 @@ rsudo()
         ENV_ENCODED_FILE="${1%:*}"
         ENV_GROUP_NAME="${1##*:}"
 
-        case "$ENV_GROUP_NAME" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) log fatal execution invalid-arguments operand load value "$1"; return 8 ;; esac
+        valid_shell_identifier "$ENV_GROUP_NAME" || { log fatal execution invalid-arguments operand load value "$1"; return 8; }
 
         if [ -z "$ENV_ENCODED_FILE" ]
         then
@@ -306,11 +306,11 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif [ "$#" -ge "2" ] && valididentifierext "$1" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
+  elif [ "$#" -ge "2" ] && valid_cli_name "$1" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
   then
     log debug rsudo module-load module "$1" args "$*"
 
-    valididentifierext "$2" || { log fatal execution execution-failed operation rsudo-module-load function "$2"; return 15; }
+    valid_cli_name "$2" || { log fatal execution execution-failed operation rsudo-module-load function "$2"; return 15; }
 
     eval 'shift 2; set -- "rsudo_mod_'"$(printf '%s\n' "${1}_${2}" | sed 's/-/_/g')"'" "$@"
 . "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-'"${1}"'.lib.sh" || { log fatal execution execution-failed operation rsudo-module-load module "'"$1"'"; return 16; }
