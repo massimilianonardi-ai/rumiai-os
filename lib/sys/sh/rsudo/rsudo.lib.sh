@@ -338,13 +338,15 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif [ "$#" -ge "2" ] && valididentifierext "${1}_${2}" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
+  elif [ "$#" -ge "2" ] && valididentifierext "$1" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
   then
     log debug rsudo module-load module "$1" args "$*"
 
+    valididentifierext "$2" || { log fatal execution execution-failed operation rsudo-module-load function "$2"; return 15; }
+
     eval 'shift 2; set -- "rsudo_mod_'"$(printf '%s\n' "${1}_${2}" | sed 's/-/_/g')"'" "$@"
-. "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-'"${1}"'.lib.sh" || { log fatal execution execution-failed operation rsudo-module-load module "'"$1"'"; return 15; }
-exist_function "$1"  || { log fatal rsudo module-delegate-missing function "$1"; return 16; }
+. "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-'"${1}"'.lib.sh" || { log fatal execution execution-failed operation rsudo-module-load module "'"$1"'"; return 16; }
+exist_function "$1"  || { log fatal rsudo module-delegate-missing function "$1"; return 17; }
 '
     "$@"
   else
