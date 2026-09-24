@@ -203,7 +203,7 @@ rsudo()
       --connect)
         shift
 
-        [ "$1" = "${1#*@}" ] && log fatal execution invalid-arguments operand connect value "$1"
+        [ "$1" = "${1#*@}" ] && fatal execution invalid-arguments operand connect value "$1"
 
         RSUDO_HOST="${1#*@}"
         RSUDO_USER="${1%@*}"
@@ -237,11 +237,7 @@ rsudo()
 
 
   # validate connection args: RSUDO_HOST, RSUDO_USER, RSUDO_PASSWORD.
-  if [ -z "$RSUDO_HOST" ]
-  then
-    log fatal execution invalid-arguments field rsudo-host reason empty
-    exit 1
-  fi
+  [ -z "$RSUDO_HOST" ] && log fatal execution invalid-arguments field rsudo-host reason empty
 
   if [ -z "$RSUDO_USER" ]
   then
@@ -259,11 +255,7 @@ rsudo()
     RSUDO_PASSWORD="$(readpass "[rsudo] Enter password for ${RSUDO_USER}@${RSUDO_HOST}:" < /dev/tty)"
   fi
 
-  if [ -z "$RSUDO_PASSWORD" ]
-  then
-    log fatal execution invalid-arguments field rsudo-password reason empty
-    exit 1
-  fi
+  [ -z "$RSUDO_PASSWORD" ] && log fatal execution invalid-arguments field rsudo-password reason empty
 
   log debug rsudo connection-state host "$RSUDO_HOST" user "$RSUDO_USER" password-present "$([ -n "$RSUDO_PASSWORD" ] && printf '%s' true || printf '%s' false)"
 
