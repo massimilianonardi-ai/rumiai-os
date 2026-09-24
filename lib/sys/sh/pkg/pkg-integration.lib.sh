@@ -232,6 +232,75 @@ _pkg_integration_facility_projection_validate()
   _pkg_integration_facility_service_validate "$1" "$2"
 }
 
+_pkg_integration_component_file_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -x "$1" ] || return 1
+
+  pkg_integration_component_value="$(command -p -- cat -- "$1")" || return 1
+  case "$pkg_integration_component_value" in
+    ""|.|..|*/*|*'
+'*) return 1 ;;
+    *.pkg) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+_pkg_integration_dmg_overlay_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_integration_overlay_dir=$1
+  [ -d "$pkg_integration_overlay_dir" ] && [ ! -L "$pkg_integration_overlay_dir" ] || return 1
+  _pkg_integration_dir_entries_empty "$pkg_integration_overlay_dir" && return 1
+
+  for pkg_integration_overlay_entry in \
+    "$pkg_integration_overlay_dir"/* \
+    "$pkg_integration_overlay_dir"/.[!.]* \
+    "$pkg_integration_overlay_dir"/..?*
+  do
+    [ -e "$pkg_integration_overlay_entry" ] || [ -L "$pkg_integration_overlay_entry" ] || continue
+    pkg_integration_overlay_name=${pkg_integration_overlay_entry##*/}
+    _pkg_integration_name_valid "$pkg_integration_overlay_name" || return 1
+    [ -d "$pkg_integration_overlay_entry" ] && [ ! -L "$pkg_integration_overlay_entry" ] || return 1
+
+    pkg_integration_overlay_component=
+    pkg_integration_overlay_payload_root=
+    pkg_integration_overlay_target_root=
+
+    for pkg_integration_overlay_field in \
+      "$pkg_integration_overlay_entry"/* \
+      "$pkg_integration_overlay_entry"/.[!.]* \
+      "$pkg_integration_overlay_entry"/..?*
+    do
+      [ -e "$pkg_integration_overlay_field" ] || [ -L "$pkg_integration_overlay_field" ] || continue
+      case "${pkg_integration_overlay_field##*/}" in
+        component)
+          [ -z "$pkg_integration_overlay_component" ] || return 1
+          _pkg_integration_component_file_validate "$pkg_integration_overlay_field" || return 1
+          pkg_integration_overlay_component=$pkg_integration_overlay_field
+          ;;
+        payload-root)
+          [ -z "$pkg_integration_overlay_payload_root" ] || return 1
+          _pkg_integration_link_target_read "$pkg_integration_overlay_field" || return 1
+          pkg_integration_overlay_payload_root=$pkg_integration_overlay_field
+          ;;
+        target-root)
+          [ -z "$pkg_integration_overlay_target_root" ] || return 1
+          _pkg_integration_link_target_read "$pkg_integration_overlay_field" || return 1
+          pkg_integration_overlay_target_root=$pkg_integration_overlay_field
+          ;;
+        *)
+          return 1
+          ;;
+      esac
+    done
+
+    [ -n "$pkg_integration_overlay_component" ] || return 1
+  done
+
+  return 0
+}
+
 _pkg_integration_validate_definition()
 {
   [ "$#" -eq 2 ] || return 2
@@ -242,6 +311,7 @@ _pkg_integration_validate_definition()
   pkg_integration_format_file=
   pkg_integration_component_file=
   pkg_integration_payload_root_file=
+  pkg_integration_overlay_dir=
 
   for pkg_integration_entry in \
     "$pkg_integration_range"/* \
@@ -265,6 +335,10 @@ _pkg_integration_validate_definition()
       payload-root)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         pkg_integration_payload_root_file=$pkg_integration_entry
+        ;;
+      overlay)
+        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        pkg_integration_overlay_dir=$pkg_integration_entry
         ;;
       facility)
         _pkg_facility_file_validate "$pkg_integration_entry" || return 1
@@ -307,13 +381,19 @@ _pkg_integration_validate_definition()
   if [ "$pkg_integration_format_value" = dmg-pkg ]
   then
     [ -n "$pkg_integration_component_file" ] || return 1
+    _pkg_integration_component_file_validate "$pkg_integration_component_file" || return 1
     if [ -n "$pkg_integration_payload_root_file" ]
     then
       _pkg_integration_link_target_read "$pkg_integration_payload_root_file" || return 1
     fi
+    if [ -n "$pkg_integration_overlay_dir" ]
+    then
+      _pkg_integration_dmg_overlay_validate "$pkg_integration_overlay_dir" || return 1
+    fi
   else
     [ -z "$pkg_integration_component_file" ] || return 1
     [ -z "$pkg_integration_payload_root_file" ] || return 1
+    [ -z "$pkg_integration_overlay_dir" ] || return 1
   fi
 
   _pkg_integration_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
