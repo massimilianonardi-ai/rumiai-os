@@ -27,17 +27,20 @@
 # RSUDO_AS_USER
 # RSUDO_INTERACTIVE
 # RSUDO_ASKPASS
+
 rsudo_core()
 {
+  # log message stating rsudo is started and parameters used
   log info "RSUDO >>> START - $RSUDO_USER@$RSUDO_HOST: $@"
   log debug "RSUDO_PASSWORD $([ -n "$RSUDO_PASSWORD" ] && echo "is not null" || echo "is null")"
 
+  # basic env vars check
   if [ -z "$RSUDO_HOST" ] || [ -z "$RSUDO_USER" ] || [ -z "$RSUDO_PASSWORD" ]
   then
     exit 1
   fi
 
-  # check args
+  # check args and eventually manipulate them to a usable form
   if [ "$#" -eq "0" ] || [ -z "$*" ]
   then
     log debug "rsudo no args"
@@ -68,21 +71,13 @@ rsudo_core()
       fi
 
       set -- sh -c "$(quote "$@")"
-      # set -- sh -c "$(quote "$1")"
+      # actually equivalent to because of prior check/set: set -- sh -c "$(quote "$1")"
     fi
   fi
 
-  # log debug "ARGS - START"
-  # for k in "$@"
-  # do
-  #   log debug "$k"
-  # done
-  # log debug "ARGS - END"
-
-  # prepare vars for executing
+  # prepare ipc to rsudo-askpass
   RSUDO_IPC_CHANNEL="$(ipc_create "$RSUDO_RUNTIME_DIR")" || return 1
   RSUDO_IPC_TOKEN="$(randhex 32)" || { ipc_destroy "$RSUDO_IPC_CHANNEL"; return 1; }
-
   (
       set +x
 
@@ -128,8 +123,19 @@ rsudo_core()
   fi
 
   # execute an interactive or non interactive session
-  if [ "$RSUDO_INTERACTIVE" = "true" ]
+  if [ "$RSUDO_INTERACTIVE" != "true" ]
   then
+    # non interactive command
+    log debug "non interactive command"
+
+    # ssh contract is to guarrantee that pipe data is sent correctly and secretly to ssh command, thus piping password is secure
+    (echo "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
+    ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
+    "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
+    sudo -S --prompt='' $SUDO_AS_USER -- "$@"
+
+    EXIT_CODE="$?"
+  else
     # interactive command
     log debug "interactive command"
 
@@ -176,16 +182,6 @@ EOF
 
     # delete redundant with rsudo-askpass to ensure removal even on some interruption
     rm -f "$RSUDO_FIFO"
-  else
-    # non interactive command
-    log debug "non interactive command"
-
-    (echo "$RSUDO_PASSWORD"; echo "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
-    ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
-    "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
-    sudo -S --prompt='' $SUDO_AS_USER -- "$@"
-
-    EXIT_CODE="$?"
   fi
 
   log info "RSUDO <<< ENDED - $RSUDO_USER@$RSUDO_HOST: $@"
