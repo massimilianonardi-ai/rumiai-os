@@ -1,7 +1,7 @@
 
 valididentifier()
 {
-  [ "$#" = "0" ] && return 1
+  [ "$#" -eq "0" ] && return 1
 
   while [ "$#" -gt 0 ]
   do
@@ -12,7 +12,7 @@ valididentifier()
 
 valididentifierext()
 {
-  [ "$#" = "0" ] && return 1
+  [ "$#" -eq "0" ] && return 1
 
   while [ "$#" -gt 0 ]
   do
