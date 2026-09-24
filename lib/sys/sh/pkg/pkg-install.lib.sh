@@ -486,6 +486,7 @@ _pkg_install_one()
   pkg_install_format="$(_pkg_install_scalar "$pkg_install_selected_range/format")" || return 1
   pkg_install_component=
   pkg_install_payload_root=
+  pkg_install_overlay_dir=
   if [ -e "$pkg_install_selected_range/component" ] || [ -L "$pkg_install_selected_range/component" ]
   then
     pkg_install_component="$(_pkg_install_scalar "$pkg_install_selected_range/component")" || return 1
@@ -494,11 +495,17 @@ _pkg_install_one()
   then
     pkg_install_payload_root="$(_pkg_install_scalar "$pkg_install_selected_range/payload-root")" || return 1
   fi
+  if [ -e "$pkg_install_selected_range/overlay" ] || [ -L "$pkg_install_selected_range/overlay" ]
+  then
+    [ -d "$pkg_install_selected_range/overlay" ] && [ ! -L "$pkg_install_selected_range/overlay" ] || return 1
+    pkg_install_overlay_dir=$pkg_install_selected_range/overlay
+  fi
   case "$pkg_install_format" in
     dmg-pkg) [ -n "$pkg_install_component" ] || return 1 ;;
     *)
       [ -z "$pkg_install_component" ] || return 1
       [ -z "$pkg_install_payload_root" ] || return 1
+      [ -z "$pkg_install_overlay_dir" ] || return 1
       ;;
   esac
 
@@ -515,7 +522,10 @@ _pkg_install_one()
 
   if [ "$pkg_install_format" = dmg-pkg ]
   then
-    if [ -n "$pkg_install_payload_root" ]
+    if [ -n "$pkg_install_overlay_dir" ]
+    then
+      pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" "$pkg_install_overlay_dir" || return 1
+    elif [ -n "$pkg_install_payload_root" ]
     then
       pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || return 1
     else
