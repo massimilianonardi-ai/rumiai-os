@@ -249,7 +249,7 @@ rsudo()
   if [ "$RSUDO_ASKPASS" = "true" ] && [ ! -t 0 ]
   then
     log debug rsudo password-source source pipe
-    read -r RSUDO_PASSWORD
+    IFS="" read -r RSUDO_PASSWORD
   elif [ -z "$RSUDO_PASSWORD" ] && [ -t 0 ]
   then
     log debug rsudo password-source source tty
@@ -267,7 +267,7 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" && command -v "$RSUDO_MODULE" > /dev/null
+  elif RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" && [ -f "$RSUDO_MODULE" ] && [ -r "$RSUDO_MODULE" ]
   then
     RSUDO_MODULE_PREFIX="rsudo_mod_$(printf '%s\n' "$1" | sed 's/-/_/g')"
     shift
@@ -283,6 +283,7 @@ rsudo()
       "${RSUDO_MODULE_PREFIX}"_"$@"
     else
       log debug rsudo module-delegate-missing module "$RSUDO_MODULE"
+      return 6
     fi
   else
     rsudo_core "$@"
