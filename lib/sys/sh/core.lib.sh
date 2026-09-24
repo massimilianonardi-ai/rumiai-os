@@ -65,12 +65,11 @@ log()
 
 fatal()
 {
-  case "$1" in exit) EXIT_COMMAND="exit"; shift;; return) EXIT_COMMAND="return"; shift;; *) EXIT_COMMAND="exit";; esac
-  case "$1" in *[!0-9]* | "") EXIT_CODE="1";; "0" | "00" | "000" | ????*) EXIT_CODE="1"; shift;; *) EXIT_CODE="$1"; shift; [ "$EXIT_CODE" -gt "255" ] && EXIT_CODE="1";; esac
+  case "$1" in [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) EXIT_CODE="1"; shift;; *) EXIT_CODE="1";; esac
 
   log fatal "$@" || log_base_print "$@"
 
-  "$EXIT_COMMAND" "$EXIT_CODE"
+  exit "$EXIT_CODE"
 }
 
 #-------------------------------------------------------------------------------
