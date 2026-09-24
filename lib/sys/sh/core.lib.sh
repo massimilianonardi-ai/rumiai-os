@@ -65,7 +65,8 @@ log()
 
 fatal()
 {
-  case "${1-}" in [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) EXIT_CODE="$1"; shift;; *[!0-9]* | "") : ;; *) EXIT_CODE="1"; shift;; esac
+  EXIT_CODE="1"
+  case "${1-}" in [0-9] | [1-9][0-9] | 1[0-9][0-9] | 2[0-4][0-9] | 25[0-5]) EXIT_CODE="$1"; shift;; *[!0-9]* | "") : ;; *) shift;; esac
 
   log fatal "$@" || log_base_print "$@"
 
