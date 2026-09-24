@@ -343,6 +343,32 @@ pathsearch()
 
 #-------------------------------------------------------------------------------
 
+exist_function()
+(
+  [ "$#" -eq "1" ] || return 1
+  case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 2;; esac
+
+  unalias "$1" 2>/dev/null || :
+
+  _exist_function_command="$(command -v "$1" 2>/dev/null)" || return 6
+  case "$_exist_function_command" in */*) return 7 ;; esac
+
+  unset -f "$1" 2>/dev/null || return 8
+  _exist_function_reserved_word="$(command -v "$1" 2>/dev/null)" && return 9
+  [ "$_exist_function_command" = "$_exist_function_reserved_word" ] && return 10
+
+  return 0
+)
+
+#-------------------------------------------------------------------------------
+
+exec_if_exist_function()
+{
+  exist_function "$1" && "$@"
+}
+
+#-------------------------------------------------------------------------------
+
 waituser()
 {
   # detect if launched from gui or active terminal
