@@ -1,4 +1,15 @@
 
+valididentifier()
+{
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in "" | [0-9]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*) return 1;; esac
+    shift
+  done
+}
+
+#-------------------------------------------------------------------------------
+
 log_base_print()
 {
   if [ "$#" -gt "0" ]
