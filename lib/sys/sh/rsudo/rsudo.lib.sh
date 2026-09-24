@@ -298,38 +298,6 @@ rsudo()
   [ -z "${RSUDO_PASSWORD-}" ] && { log fatal execution invalid-arguments field rsudo-password reason empty; return 14; }
 
   log debug rsudo connection-state host "$RSUDO_HOST" user "$RSUDO_USER" password-present true
-  #
-  #
-  #
-  # # determine what has to be called: rsudo_core or a sub-module.
-  # if [ "$1" = "--" ]
-  # then
-  #   shift
-  #   rsudo_core "$@"
-  # elif [ "$#" -gt "0" ] && valididentifierext "$1" && RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" && [ -f "$RSUDO_MODULE" ] && [ -r "$RSUDO_MODULE" ]
-  # then
-  #   log debug rsudo module-load module "$1" args "$*"
-  #   RSUDO_MODULE_PREFIX="rsudo_mod_$(printf '%s\n' "$1" | sed 's/-/_/g')" || return 15
-  #   shift
-  #   . "$RSUDO_MODULE" || { log error execution execution-failed operation rsudo-module-load module "$RSUDO_MODULE"; unset RSUDO_MODULE; return 16; }
-  #   unset RSUDO_MODULE
-  #   if exist_function "$RSUDO_MODULE_PREFIX"
-  #   then
-  #     log debug rsudo module-delegate function "$RSUDO_MODULE_PREFIX"
-  #     set -- "$RSUDO_MODULE_PREFIX" "$@"
-  #   elif valididentifier "$1" && exist_function "${RSUDO_MODULE_PREFIX}_${1}"
-  #   then
-  #     log debug rsudo module-delegate function "${RSUDO_MODULE_PREFIX}_${1}"
-  #     set -- "${RSUDO_MODULE_PREFIX}"_"$@"
-  #   else
-  #     log debug rsudo module-delegate-missing module "$1"
-  #     return 17
-  #   fi
-  #   unset RSUDO_MODULE_PREFIX
-  #   "$@"
-  # else
-  #   rsudo_core "$@"
-  # fi
 
 
 
