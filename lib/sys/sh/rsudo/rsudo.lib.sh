@@ -443,16 +443,17 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif [ "$#" -gt "0" ] && valididentifierext "$1" && . "$(validlib sys/sh/rsudo/rsudo-mod-${1})" || { log error execution execution-failed operation rsudo-module-load module "$1"; return 6; }
+  elif [ "$#" -gt "0" ] && valididentifierext "$1" && RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" && [ -f "$RSUDO_MODULE" ] && [ -r "$RSUDO_MODULE" ]
   then
     log debug rsudo module-load module "$1" args "$*"
     RSUDO_MODULE_PREFIX="rsudo_mod_$(printf '%s\n' "$1" | sed 's/-/_/g')" || return 6
     shift
+    . "$RSUDO_MODULE" || { log error execution execution-failed operation rsudo-module-load module "$RSUDO_MODULE"; return 6; }
     if exist_function "$RSUDO_MODULE_PREFIX"
     then
       log debug rsudo module-delegate function "$RSUDO_MODULE_PREFIX"
       set -- "$RSUDO_MODULE_PREFIX" "$@"
-    elif valididentifierext "$1" exist_function "${RSUDO_MODULE_PREFIX}_${1}"
+    elif valididentifierext "$1" && exist_function "${RSUDO_MODULE_PREFIX}_${1}"
     then
       log debug rsudo module-delegate function "${RSUDO_MODULE_PREFIX}_${1}"
       set -- "${RSUDO_MODULE_PREFIX}"_"$@"
