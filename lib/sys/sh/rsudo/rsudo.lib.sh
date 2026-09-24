@@ -203,7 +203,7 @@ rsudo()
       --connect)
         shift
 
-        [ "$1" = "${1#*@}" ] && fatal execution invalid-arguments operand connect value "$1"
+        [ "$1" = "${1#*@}" ] && { log fatal execution invalid-arguments operand connect value "$1"; return 1; }
 
         RSUDO_HOST="${1#*@}"
         RSUDO_USER="${1%@*}"
@@ -211,7 +211,7 @@ rsudo()
       --load)
         shift
 
-        [ "$1" = "${1%:*}" ] && fatal execution invalid-arguments operand load value "$1"
+        [ "$1" = "${1%:*}" ] && { log fatal execution invalid-arguments operand load value "$1"; return 2; }
 
         ENV_ENCODED_FILE="${1%:*}"
         ENV_GROUP_NAME="${1#*:}"
@@ -224,12 +224,13 @@ rsudo()
           log warn rsudo env-file-fallback reason load-failed file "$ENV_ENCODED_FILE"
         fi
 
+        case "$ENV_GROUP_NAME" in "" | [0-9]* | *[!a-zA-Z0-9_]*) return 2 ;; esac
         eval "RSUDO_HOST=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_HOST\""
         eval "RSUDO_USER=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_USER\""
         eval "RSUDO_PASSWORD=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_PASS\""
       ;;
       --user) shift; RSUDO_AS_USER="$1";;
-      *) fatal execution invalid-arguments option "$1";;
+      *) log fatal execution invalid-arguments option "$1"; return 3;;
     esac
     shift
   done
@@ -237,7 +238,7 @@ rsudo()
 
 
   # validate connection args: RSUDO_HOST, RSUDO_USER, RSUDO_PASSWORD.
-  [ -z "$RSUDO_HOST" ] && fatal execution invalid-arguments field rsudo-host reason empty
+  [ -z "$RSUDO_HOST" ] && { log fatal execution invalid-arguments field rsudo-host reason empty; return 4; }
 
   if [ -z "$RSUDO_USER" ]
   then
@@ -255,7 +256,7 @@ rsudo()
     RSUDO_PASSWORD="$(readpass "[rsudo] Enter password for ${RSUDO_USER}@${RSUDO_HOST}:" < /dev/tty)"
   fi
 
-  [ -z "$RSUDO_PASSWORD" ] && fatal execution invalid-arguments field rsudo-password reason empty
+  [ -z "$RSUDO_PASSWORD" ] && { log fatal execution invalid-arguments field rsudo-password reason empty; return 5; }
 
   log debug rsudo connection-state host "$RSUDO_HOST" user "$RSUDO_USER" password-present "$([ -n "$RSUDO_PASSWORD" ] && printf '%s' true || printf '%s' false)"
 
@@ -266,9 +267,8 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif RSUDO_MODULE="rsudo-mod-${1}.lib.sh" && command -v "$RSUDO_MODULE" > /dev/null
+  elif RSUDO_MODULE="$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" && command -v "$RSUDO_MODULE" > /dev/null
   then
-    # RSUDO_MODULE_PREFIX="rsudo_mod_${1}"
     RSUDO_MODULE_PREFIX="rsudo_mod_$(printf '%s\n' "$1" | sed 's/-/_/g')"
     shift
     log debug rsudo module-load module "$RSUDO_MODULE" prefix "$RSUDO_MODULE_PREFIX" arguments "$*"
