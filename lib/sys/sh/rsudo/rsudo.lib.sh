@@ -338,7 +338,7 @@ rsudo()
   then
     shift
     rsudo_core "$@"
-  elif [ "$#" -ge "2" ] && valididentifierext "$1" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
+  elif [ "$#" -ge "2" ] && valididentifierext "${1}_${2}" && [ -f "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ] && [ -r "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-${1}.lib.sh" ]
   then
     log debug rsudo module-load module "$1" args "$*"
 
