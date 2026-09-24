@@ -129,7 +129,7 @@ rsudo_core()
     log debug rsudo execution-mode mode non-interactive
 
     # ssh contract is to guarrantee that pipe data is sent correctly and secretly to ssh command, thus piping password is secure
-    (echo "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
+    (printf '%s\n' "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
     ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
     "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
     sudo -S --prompt='' $SUDO_AS_USER -- "$@"
@@ -141,27 +141,27 @@ rsudo_core()
 
     export RSUDO_TOKEN="$(randstr 255)"
     RSUDO_REMOTE_FIFO="/tmp/$(randstr 32)"
-    RSUDO_PASSWORD_ENCODED="$(echo "$RSUDO_PASSWORD" | RSUDO_TOKEN="$RSUDO_TOKEN" openssl enc -e -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN" | openssl enc -e -A -base64)"
+    RSUDO_PASSWORD_ENCODED="$(printf '%s\n' "$RSUDO_PASSWORD" | RSUDO_TOKEN="$RSUDO_TOKEN" openssl enc -e -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN" | openssl enc -e -A -base64)"
 
     RSUDO_DAEMON_COMMANDS="$(cat << EOF
 trap "rm -f '$RSUDO_REMOTE_FIFO'" INT QUIT TERM HUP PIPE ABRT TSTP EXIT
 mkfifo "$RSUDO_REMOTE_FIFO"
 chmod 600 "$RSUDO_REMOTE_FIFO"
-echo "READY" > "$RSUDO_REMOTE_FIFO"
+printf '%s\n' "READY" > "$RSUDO_REMOTE_FIFO"
 read RSUDO_TOKEN < "$RSUDO_REMOTE_FIFO"
 if [ "\$RSUDO_TOKEN" = "$RSUDO_TOKEN" ]
 then
-  # echo "$RSUDO_PASSWORD" > "$RSUDO_REMOTE_FIFO"
-  echo "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_REMOTE_FIFO"
+  # printf '%s\n' "$RSUDO_PASSWORD" > "$RSUDO_REMOTE_FIFO"
+  printf '%s\n' "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_REMOTE_FIFO"
 else
-  echo "wrong RSUDO_TOKEN!" > "$RSUDO_REMOTE_FIFO"
+  printf '%s\n' "wrong RSUDO_TOKEN!" > "$RSUDO_REMOTE_FIFO"
 fi
 read RSUDO_ACKNOWLEDGEMENT < "$RSUDO_REMOTE_FIFO"
 rm -f '$RSUDO_REMOTE_FIFO'
 EOF
 )"
 
-    ((echo "$RSUDO_PASSWORD"; echo "$RSUDO_DAEMON_COMMANDS") | RSUDO_INTERACTIVE="" ssh -l "$RSUDO_USER" "$RSUDO_HOST" sh -s) &
+    ((printf '%s\n' "$RSUDO_PASSWORD"; printf '%s\n' "$RSUDO_DAEMON_COMMANDS") | RSUDO_INTERACTIVE="" ssh -l "$RSUDO_USER" "$RSUDO_HOST" sh -s) &
 
     export RSUDO_FIFO="/tmp/$(randstr 32)"
     # delete redundant to ensure removal even on some interruption
@@ -169,14 +169,14 @@ EOF
     mkfifo "$RSUDO_FIFO"
     chmod 600 "$RSUDO_FIFO"
     exec 3<>"$RSUDO_FIFO"
-    # echo "$RSUDO_PASSWORD" > "$RSUDO_FIFO"
-    echo "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_FIFO"
+    # printf '%s\n' "$RSUDO_PASSWORD" > "$RSUDO_FIFO"
+    printf '%s\n' "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_FIFO"
 
     ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
     while [ ! -e "$RSUDO_REMOTE_FIFO" ]\; do true\; done\; \
-    read RSUDO_DAEMON_READY \< "$RSUDO_REMOTE_FIFO"\; echo "$RSUDO_TOKEN" \> "$RSUDO_REMOTE_FIFO"\; read RSUDO_PASSWORD \< "$RSUDO_REMOTE_FIFO"\; echo "OK_ACKNOWLEDGED" \> "$RSUDO_REMOTE_FIFO"\; \
-    'RSUDO_PASSWORD=$(echo "$RSUDO_PASSWORD" | openssl enc -d -A -base64 | RSUDO_TOKEN="'$RSUDO_TOKEN'" openssl enc -d -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN");' \
-    echo '$RSUDO_PASSWORD' \| sudo -S --prompt='' -- true\; sudo $SUDO_AS_USER -- "$@" </dev/tty
+    read RSUDO_DAEMON_READY \< "$RSUDO_REMOTE_FIFO"\; printf "'%s\n'" "$RSUDO_TOKEN" \> "$RSUDO_REMOTE_FIFO"\; read RSUDO_PASSWORD \< "$RSUDO_REMOTE_FIFO"\; printf "'%s\n'" "OK_ACKNOWLEDGED" \> "$RSUDO_REMOTE_FIFO"\; \
+    'RSUDO_PASSWORD=$(printf "%s\n" "$RSUDO_PASSWORD" | openssl enc -d -A -base64 | RSUDO_TOKEN="'$RSUDO_TOKEN'" openssl enc -d -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN");' \
+    printf "'%s\n'" '"$RSUDO_PASSWORD"' \| sudo -S --prompt='' -- true\; sudo $SUDO_AS_USER -- "$@" </dev/tty
 
     EXIT_CODE="$?"
 
@@ -286,7 +286,7 @@ rsudo()
   elif RSUDO_MODULE="rsudo-mod-${1}.lib.sh" && command -v "$RSUDO_MODULE" > /dev/null
   then
     # RSUDO_MODULE_PREFIX="rsudo_mod_${1}"
-    RSUDO_MODULE_PREFIX="rsudo_mod_$(echo "$1" | sed 's/-/_/g')"
+    RSUDO_MODULE_PREFIX="rsudo_mod_$(printf '%s\n' "$1" | sed 's/-/_/g')"
     shift
     log debug rsudo module-load module "$RSUDO_MODULE" prefix "$RSUDO_MODULE_PREFIX" arguments "$*"
     . "$RSUDO_MODULE"
