@@ -194,7 +194,6 @@ EOF
 # replaces "rsudo command" with "rsudo function" to allow safe use of env (without exporting) in recursive calls
 rsudo()
 {
-# (
   while [ "$#" -gt "0" ] && [ "$1" != "--" ] && [ "$1" != "${1#--}" ]
   do
     case "$1" in
@@ -204,11 +203,7 @@ rsudo()
       --connect)
         shift
 
-        if [ "$1" = "${1#*@}" ]
-        then
-          log fatal execution invalid-arguments operand connect value "$1"
-          exit 1
-        fi
+        [ "$1" = "${1#*@}" ] && log fatal execution invalid-arguments operand connect value "$1"
 
         RSUDO_HOST="${1#*@}"
         RSUDO_USER="${1%@*}"
@@ -216,11 +211,7 @@ rsudo()
       --load)
         shift
 
-        if [ "$1" = "${1%:*}" ]
-        then
-          log fatal execution invalid-arguments operand load value "$1"
-          exit 1
-        fi
+        [ "$1" = "${1%:*}" ] && fatal execution invalid-arguments operand load value "$1"
 
         ENV_ENCODED_FILE="${1%:*}"
         ENV_GROUP_NAME="${1#*:}"
@@ -238,7 +229,7 @@ rsudo()
         eval "RSUDO_PASSWORD=\"\$RSUDO_ENV_${ENV_GROUP_NAME}_PASS\""
       ;;
       --user) shift; RSUDO_AS_USER="$1";;
-      *) log fatal execution invalid-arguments option "$1"; exit 1;;
+      *) fatal execution invalid-arguments option "$1";;
     esac
     shift
   done
@@ -304,7 +295,6 @@ rsudo()
   else
     rsudo_core "$@"
   fi
-# )
 }
 
 #------------------------------------------------------------------------------
