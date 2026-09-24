@@ -1,5 +1,5 @@
 
-valid_shell_id()
+valid_shell_identifier()
 {
   [ "$#" -eq "0" ] && return 1
 
