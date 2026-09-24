@@ -70,7 +70,7 @@ fatal()
 
   log fatal "$@" || log_base_print "$@"
 
-  exit "$EXIT_CODE"
+  "$EXIT_COMMAND" "$EXIT_CODE"
 }
 
 #-------------------------------------------------------------------------------
