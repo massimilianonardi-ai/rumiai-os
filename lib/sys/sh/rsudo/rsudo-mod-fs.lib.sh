@@ -21,8 +21,8 @@ rsudo_mod_fs_delete()
 rsudo_mod_fs_get()
 (
   # Transfer errors from either side of the tar stream must fail the operation.
-  # Disable pathname expansion because controlled preflight output is later
-  # intentionally split with set --.
+  # Disable pathname expansion in this function so an accidental unquoted token
+  # cannot turn external pathname data into a filesystem glob.
   set -o pipefail
   set -f
 
