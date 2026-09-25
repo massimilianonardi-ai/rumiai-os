@@ -41,13 +41,94 @@ rsudo_mod_fs_get()
   esac
   [ -n "$REMOTE_NAME" ] || exit 1
 
-  # Staging lives beside the requested local destination. Therefore promotion
-  # uses rename/mv inside the same parent filesystem instead of copying the data
-  # again after a potentially multi-terabyte transfer.
+  # Staging lives beside the requested local destination. Determine its parent
+  # now so both the space preflight and the later promotion address the same
+  # destination filesystem.
   case "$LOCAL_PATH" in
     */*) LOCAL_PARENT="${LOCAL_PATH%/*}"; [ -n "$LOCAL_PARENT" ] || LOCAL_PARENT="/";;
     *) LOCAL_PARENT=".";;
   esac
+
+  # Estimate the allocated size of the remote source before transferring it.
+  # pipefail makes a remote du failure visible even though awk is the final
+  # parser in the pipeline.
+  REMOTE_SIZE_KB="$(
+    rsudo -- sh -c '
+      set -o pipefail
+
+      path="$1"
+      [ -e "$path" ] || [ -L "$path" ] || exit 1
+
+      du -sk "$path" | awk "NR == 1 { print \\$1; exit }"
+    ' sh "$REMOTE_PATH"
+  )" || {
+    log error rsudo-fs remote-preflight-failed operation get path "$REMOTE_PATH"
+    exit 1
+  }
+  valid_integer "$REMOTE_SIZE_KB" || exit 1
+
+  # LOCAL_PARENT may not exist yet. df therefore probes the nearest existing
+  # ancestor; descendants created later will initially belong to that filesystem.
+  LOCAL_PROBE="$LOCAL_PARENT"
+  while [ ! -d "$LOCAL_PROBE" ]
+  do
+    case "$LOCAL_PROBE" in
+      */*) LOCAL_PROBE="${LOCAL_PROBE%/*}"; [ -n "$LOCAL_PROBE" ] || LOCAL_PROBE="/";;
+      *) LOCAL_PROBE=".";;
+    esac
+  done
+
+  LOCAL_FREE_KB="$(df -Pk "$LOCAL_PROBE" | awk 'NR == 2 { print $4; exit }')" || exit 1
+
+  if [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ]
+  then
+    LOCAL_EXISTS=1
+    LOCAL_OLD_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1; exit }')" || exit 1
+  else
+    LOCAL_EXISTS=0
+    LOCAL_OLD_SIZE_KB=0
+  fi
+
+  valid_integer "$LOCAL_EXISTS" "$LOCAL_FREE_KB" "$LOCAL_OLD_SIZE_KB" || exit 1
+  case "$LOCAL_EXISTS" in 0 | 1) :;; *) exit 1;; esac
+
+  # Apply the same space policy as put:
+  #   ok      enough free space to keep the old destination while staging new
+  #   delete  staging does not fit, but explicit deletion of the old local
+  #           destination would make the estimate fit
+  #   full    even reclaiming the old local destination would not make it fit
+  #
+  # The estimate is intentionally conservative and not an allocation guarantee:
+  # sparse files, quotas and filesystem allocation rules may still differ.
+  SPACE_STATE="$(
+    awk -v free="$LOCAL_FREE_KB" -v old="$LOCAL_OLD_SIZE_KB" -v required="$REMOTE_SIZE_KB" '
+      BEGIN {
+        if (free >= required) print "ok"
+        else if (free + old >= required) print "delete"
+        else print "full"
+      }
+    '
+  )" || exit 1
+
+  case "$SPACE_STATE" in
+    ok)
+      ;;
+    delete)
+      log error rsudo-fs insufficient-space operation get mode staged required-kb "$REMOTE_SIZE_KB" free-kb "$LOCAL_FREE_KB" existing-kb "$LOCAL_OLD_SIZE_KB" destructive-fit true
+      log error rsudo-fs explicit-delete-required operation get path "$LOCAL_PATH"
+      exit 1
+      ;;
+    full)
+      log error rsudo-fs insufficient-space operation get mode any required-kb "$REMOTE_SIZE_KB" free-kb "$LOCAL_FREE_KB" existing-kb "$LOCAL_OLD_SIZE_KB" destructive-fit false
+      exit 1
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+
+  # Space preflight succeeded. Create the destination parent only now so a
+  # rejected transfer does not leave newly-created directory structure behind.
   mkdir -p -- "$LOCAL_PARENT" || exit 1
 
   TRANSFER_ID="$(date -u '+%Y%m%dT%H%M%SZ').$$" || exit 1
@@ -61,7 +142,7 @@ rsudo_mod_fs_get()
   [ ! -e "$LOCAL_ORIG" ] && [ ! -L "$LOCAL_ORIG" ] || exit 1
   [ ! -e "$LOCAL_EXTRACT" ] && [ ! -L "$LOCAL_EXTRACT" ] || exit 1
 
-  if [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ]
+  if [ "$LOCAL_EXISTS" -eq 1 ]
   then
     LOCAL_COPY_PATH="$LOCAL_STAGE"
   else
@@ -141,7 +222,6 @@ rsudo_mod_fs_get()
 
   exit 1
 )
-
 #------------------------------------------------------------------------------
 
 rsudo_mod_fs_put()
