@@ -49,22 +49,45 @@ FUNCTIONS
 
         Streams one remote filesystem object to local_path.
 
-        If local_path does not exist, the transferred object is placed there
-        directly after successful extraction.
+        Before transferring, get estimates:
 
-        If local_path already exists, the new object is built at a sibling
-        staging pathname in the same parent filesystem. Only after the transfer
-        succeeds is the old object renamed aside and the staged object promoted.
-        If promotion fails, the implementation attempts to restore the original
-        pathname before returning failure.
+            remote source allocated size
+            free space on the local destination filesystem
+            allocated size of an existing local destination
+
+        If local_path does not exist, get proceeds only when the currently free
+        local destination-filesystem space is sufficient for the estimated
+        incoming object.
+
+        If local_path already exists, the existing object is kept intact while
+        the new object is transferred to a sibling staging pathname. The
+        operation proceeds only when the currently free local destination-
+        filesystem space is sufficient for the estimated incoming object while
+        the old object remains present.
+
+        If staging does not fit but deleting the old local destination would
+        make the estimate fit, get fails and reports that condition. It never
+        performs an implicit destructive fallback. The caller must explicitly
+        remove the local destination and then retry get.
+
+        If even reclaiming the existing local destination would not make the
+        estimated transfer fit, get fails as insufficient space.
+
+        Space checks are preflight estimates, not absolute allocation guarantees.
+        Sparse files, quotas, filesystem allocation behavior and other runtime
+        conditions can still cause a transfer to fail.
+
+        Only after the transfer succeeds is the old object renamed aside and the
+        staged object promoted. If promotion fails, the implementation attempts
+        to restore the original pathname before returning failure.
 
         A cleanup failure after successful promotion is reported as failure even
         though the new local destination is already committed.
 
         Return status:
             0       transfer and required replacement cleanup succeeded
-            nonzero invalid invocation, transfer, promotion, rollback or cleanup
-                    failed
+            nonzero invalid invocation, insufficient space, transfer, promotion,
+                    rollback or cleanup failed
 
     rsudo_mod_fs_put local_path remote_path [owner_group] [permissions]
 
@@ -143,8 +166,8 @@ DEPENDENCIES
     Current transfer operation requires compatible tar implementations locally
     and remotely.
 
-    put also uses awk, du and df for large-size parsing and destination-space
-    preflight.
+    get and put also use awk, du and df for large-size parsing and destination-
+    space preflight.
 
 SEE ALSO
     rsudo.lib.sh
