@@ -208,7 +208,6 @@ DEPENDENCIES
         rand.lib.sh
         enc.lib.sh
         ipc.lib.sh
-        rsudo-env.lib.sh
 
     It also relies on m-integrated facilities used by the current implementation,
     including logging, quoting, password input and identifier/function
