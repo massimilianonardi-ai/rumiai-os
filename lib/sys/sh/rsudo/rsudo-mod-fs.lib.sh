@@ -279,6 +279,101 @@ rsudo_mod_fs_get()
   fi
 )
 
+rsudo_mod_fs_get()
+(
+  set -o pipefail
+  set -f
+
+  [ "$#" -eq 2 ] || exit 1
+  [ -n "$1" ] && [ -n "$2" ] || exit 1
+
+  REMOTE_PATH="$1"
+  LOCAL_PATH="$2"
+
+  REMOTE_NAME="${REMOTE_PATH##*/}"
+  [ -n "$REMOTE_NAME" ] || exit 1
+
+  case "$LOCAL_PATH" in
+    */*) LOCAL_PARENT="${LOCAL_PATH%/*}"; [ -n "$LOCAL_PARENT" ] || LOCAL_PARENT="/";;
+    *) LOCAL_PARENT=".";;
+  esac
+
+  mkdir -p -- "$LOCAL_PARENT" || exit 1
+
+  TRANSFER_ID="$(date -u '+%Y%m%d-%H%M%S').$$" || exit 1
+
+  LOCAL_STAGE="${LOCAL_PATH}.${TRANSFER_ID}"
+  LOCAL_ORIG="${LOCAL_STAGE}.orig"
+  LOCAL_EXTRACT="${LOCAL_STAGE}.extract"
+
+  [ ! -e "$LOCAL_STAGE" ] && [ ! -L "$LOCAL_STAGE" ] || exit 1
+  [ ! -e "$LOCAL_ORIG" ] && [ ! -L "$LOCAL_ORIG" ] || exit 1
+  [ ! -e "$LOCAL_EXTRACT" ] && [ ! -L "$LOCAL_EXTRACT" ] || exit 1
+
+  if [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ]
+  then
+    LOCAL_COPY_PATH="$LOCAL_STAGE"
+  else
+    LOCAL_COPY_PATH="$LOCAL_PATH"
+  fi
+
+  mkdir -- "$LOCAL_EXTRACT" || exit 1
+
+  if ! rsudo -- sh -c '
+    set -f
+
+    path="$1"
+
+    [ -e "$path" ] || [ -L "$path" ] || exit 1
+
+    case "$path" in
+      */*) parent="${path%/*}"; name="${path##*/}"; [ -n "$parent" ] || parent="/";;
+      *) parent="."; name="$path";;
+    esac
+
+    [ -n "$name" ] || exit 1
+
+    cd "$parent" || exit 1
+    tar -cf - "./$name"
+  ' sh "$REMOTE_PATH" |
+  (
+    cd "$LOCAL_EXTRACT" || exit 1
+    tar -xf -
+  )
+  then
+    rm -rf -- "$LOCAL_EXTRACT"
+    log error rsudo-fs transfer-failed operation get path "$REMOTE_PATH"
+    exit 1
+  fi
+
+  mv -- "$LOCAL_EXTRACT/$REMOTE_NAME" "$LOCAL_COPY_PATH" || exit 1
+  rmdir -- "$LOCAL_EXTRACT" || exit 1
+
+  [ "$LOCAL_COPY_PATH" = "$LOCAL_PATH" ] && exit 0
+
+  mv -- "$LOCAL_PATH" "$LOCAL_ORIG" || { rm -rf -- "$LOCAL_STAGE"; exit 1; }
+
+  if mv -- "$LOCAL_STAGE" "$LOCAL_PATH"
+  then
+    rm -rf -- "$LOCAL_ORIG" || {
+      log error rsudo-fs cleanup-failed operation get state committed path "$LOCAL_ORIG"
+      exit 1
+    }
+
+    exit 0
+  fi
+
+  if mv -- "$LOCAL_ORIG" "$LOCAL_PATH"
+  then
+    rm -rf -- "$LOCAL_STAGE"
+    log error rsudo-fs replacement-failed operation get rollback succeeded
+  else
+    log error rsudo-fs rollback-failed operation get original "$LOCAL_ORIG" staging "$LOCAL_STAGE"
+  fi
+
+  exit 1
+)
+
 #------------------------------------------------------------------------------
 
 rsudo_mod_fs_put()
@@ -740,6 +835,237 @@ rsudo_mod_fs_put()
       exit 1
       ;;
 
+  esac
+)
+
+rsudo_mod_fs_put()
+(
+  set -o pipefail
+  set -f
+
+  [ "$#" -ge 2 ] && [ "$#" -le 4 ] || exit 1
+  [ -n "$1" ] && [ -n "$2" ] || exit 1
+
+  LOCAL_PATH="$1"
+  REMOTE_PATH="$2"
+  REMOTE_OWNER_GROUP="${3-}"
+  REMOTE_PERMISSIONS="${4-}"
+
+  [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ] || {
+    log error rsudo-fs source-invalid operation put path "$LOCAL_PATH"
+    exit 1
+  }
+
+  LOCAL_NAME="${LOCAL_PATH##*/}"
+  [ -n "$LOCAL_NAME" ] || exit 1
+
+  case "$LOCAL_PATH" in
+    */*) LOCAL_PARENT="${LOCAL_PATH%/*}"; [ -n "$LOCAL_PARENT" ] || LOCAL_PARENT="/";;
+    *) LOCAL_PARENT=".";;
+  esac
+
+  LOCAL_SIZE="$(du -sk "$LOCAL_PATH")" || exit 1
+  set -- $LOCAL_SIZE
+
+  LOCAL_SIZE_KB="$1"
+  valid_integer "$LOCAL_SIZE_KB" || exit 1
+
+  REMOTE_INFO="$(
+    rsudo -- sh -c '
+      set -o pipefail
+      set -f
+
+      path="$1"
+
+      case "$path" in
+        */*) parent="${path%/*}"; [ -n "$parent" ] || parent="/";;
+        *) parent=".";;
+      esac
+
+      probe="$parent"
+
+      while [ ! -d "$probe" ]
+      do
+        case "$probe" in
+          */*) probe="${probe%/*}"; [ -n "$probe" ] || probe="/";;
+          *) probe=".";;
+        esac
+      done
+
+      if [ -e "$path" ] || [ -L "$path" ]
+      then
+        exists=1
+
+        old="$(du -sk "$path")" || exit 1
+        set -- $old
+        old="$1"
+      else
+        exists=0
+        old=0
+      fi
+
+      free="$(df -Pk "$probe" | tail -n 1)" || exit 1
+      set -- $free
+      [ "$#" -ge 4 ] || exit 1
+      free="$4"
+
+      id="$(date -u "+%Y%m%d-%H%M%S").$$" || exit 1
+
+      stage="${path}.${id}"
+      orig="${stage}.orig"
+      extract="${stage}.extract"
+
+      [ ! -e "$stage" ] && [ ! -L "$stage" ] || exit 1
+      [ ! -e "$orig" ] && [ ! -L "$orig" ] || exit 1
+      [ ! -e "$extract" ] && [ ! -L "$extract" ] || exit 1
+
+      printf "%s %s %s %s\n" "$id" "$exists" "$free" "$old"
+    ' sh "$REMOTE_PATH"
+  )" || {
+    log error rsudo-fs remote-preflight-failed operation put path "$REMOTE_PATH"
+    exit 1
+  }
+
+  set -- $REMOTE_INFO
+  [ "$#" -eq 4 ] || exit 1
+
+  TRANSFER_ID="$1"
+  REMOTE_EXISTS="$2"
+  REMOTE_FREE_KB="$3"
+  REMOTE_OLD_SIZE_KB="$4"
+
+  valid_integer "$REMOTE_EXISTS" "$REMOTE_FREE_KB" "$REMOTE_OLD_SIZE_KB" || exit 1
+
+  case "$REMOTE_EXISTS" in 0 | 1) :;; *) exit 1;; esac
+  case "$TRANSFER_ID" in "" | *[!0123456789.-]*) exit 1;; esac
+
+  REMOTE_STAGE="${REMOTE_PATH}.${TRANSFER_ID}"
+  REMOTE_ORIG="${REMOTE_STAGE}.orig"
+  REMOTE_EXTRACT="${REMOTE_STAGE}.extract"
+
+  SPACE_STATE="$(
+    awk -v free="$REMOTE_FREE_KB" -v old="$REMOTE_OLD_SIZE_KB" -v required="$LOCAL_SIZE_KB" \
+      'BEGIN { if (free >= required) print "ok"; else if (free + old >= required) print "delete"; else print "full" }'
+  )" || exit 1
+
+  case "$SPACE_STATE" in
+    ok)
+      ;;
+    delete)
+      log error rsudo-fs insufficient-space operation put mode staged required-kb "$LOCAL_SIZE_KB" free-kb "$REMOTE_FREE_KB" existing-kb "$REMOTE_OLD_SIZE_KB" destructive-fit true
+      log error rsudo-fs explicit-delete-required operation put path "$REMOTE_PATH"
+      exit 1
+      ;;
+    full)
+      log error rsudo-fs insufficient-space operation put mode any required-kb "$LOCAL_SIZE_KB" free-kb "$REMOTE_FREE_KB" existing-kb "$REMOTE_OLD_SIZE_KB" destructive-fit false
+      exit 1
+      ;;
+    *)
+      exit 1
+      ;;
+  esac
+
+  if [ "$REMOTE_EXISTS" -eq 1 ]
+  then
+    REMOTE_COPY_PATH="$REMOTE_STAGE"
+  else
+    REMOTE_COPY_PATH="$REMOTE_PATH"
+  fi
+
+  if ! (
+    cd "$LOCAL_PARENT" || exit 1
+    tar -cf - "./$LOCAL_NAME"
+  ) |
+  rsudo -- sh -c '
+    set -f
+
+    target="$1"
+    extract="$2"
+    name="$3"
+
+    case "$target" in
+      */*) parent="${target%/*}"; [ -n "$parent" ] || parent="/";;
+      *) parent=".";;
+    esac
+
+    mkdir -p -- "$parent" || exit 1
+
+    [ ! -e "$target" ] && [ ! -L "$target" ] || exit 1
+    [ ! -e "$extract" ] && [ ! -L "$extract" ] || exit 1
+
+    mkdir -- "$extract" || exit 1
+
+    (
+      cd "$extract" || exit 1
+      tar -xf -
+    ) || exit 1
+
+    mv -- "$extract/$name" "$target" || exit 1
+    rmdir -- "$extract" 2>/dev/null || :
+  ' sh "$REMOTE_COPY_PATH" "$REMOTE_EXTRACT" "$LOCAL_NAME"
+  then
+    rsudo -- rm -rf -- "$REMOTE_COPY_PATH" "$REMOTE_EXTRACT" 2>/dev/null || :
+    log error rsudo-fs transfer-failed operation put path "$REMOTE_PATH"
+    exit 1
+  fi
+
+  if [ -n "$REMOTE_OWNER_GROUP" ] &&
+     ! rsudo -- chown -R -- "$REMOTE_OWNER_GROUP" "$REMOTE_COPY_PATH"
+  then
+    rsudo -- rm -rf -- "$REMOTE_COPY_PATH" 2>/dev/null || :
+    exit 1
+  fi
+
+  if [ -n "$REMOTE_PERMISSIONS" ] &&
+     ! rsudo -- chmod -R -- "$REMOTE_PERMISSIONS" "$REMOTE_COPY_PATH"
+  then
+    rsudo -- rm -rf -- "$REMOTE_COPY_PATH" 2>/dev/null || :
+    exit 1
+  fi
+
+  [ "$REMOTE_EXISTS" -eq 1 ] || exit 0
+
+  rsudo -- sh -c '
+    path="$1"
+    stage="$2"
+    orig="$3"
+
+    [ -e "$stage" ] || [ -L "$stage" ] || exit 6
+    [ ! -e "$orig" ] && [ ! -L "$orig" ] || exit 5
+
+    mv -- "$path" "$orig" || exit 1
+
+    if ! mv -- "$stage" "$path"
+    then
+      mv -- "$orig" "$path" || exit 3
+      exit 2
+    fi
+
+    rm -rf -- "$orig" || exit 4
+  ' sh "$REMOTE_PATH" "$REMOTE_STAGE" "$REMOTE_ORIG"
+
+  COMMIT_STATUS="$?"
+
+  case "$COMMIT_STATUS" in
+    0)
+      ;;
+    1 | 2)
+      rsudo -- rm -rf -- "$REMOTE_STAGE" 2>/dev/null || :
+      log error rsudo-fs replacement-failed operation put rollback succeeded
+      exit 1
+      ;;
+    3)
+      log error rsudo-fs rollback-failed operation put original "$REMOTE_ORIG" staging "$REMOTE_STAGE"
+      exit 1
+      ;;
+    4)
+      log error rsudo-fs cleanup-failed operation put state committed path "$REMOTE_ORIG"
+      exit 1
+      ;;
+    *)
+      log error rsudo-fs replacement-failed operation put status "$COMMIT_STATUS"
+      exit 1
+      ;;
   esac
 )
 
