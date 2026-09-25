@@ -29,16 +29,15 @@
 # RSUDO_ASKPASS
 
 rsudo_core()
-{
+(
+  set +x
+
   # log message stating rsudo is started and parameters used
   log info rsudo start user "$RSUDO_USER" host "$RSUDO_HOST" command "$*"
   log debug rsudo password-state present "$([ -n "$RSUDO_PASSWORD" ] && printf '%s' true || printf '%s' false)"
 
   # basic env vars check
-  if [ -z "$RSUDO_HOST" ] || [ -z "$RSUDO_USER" ] || [ -z "$RSUDO_PASSWORD" ]
-  then
-    exit 1
-  fi
+  [ -n "$RSUDO_HOST" ] && [ -n "$RSUDO_USER" ] && [ -n "$RSUDO_PASSWORD" ] || exit 1
 
   # check args and eventually manipulate them to a usable form
   if [ "$#" -eq "0" ] || [ -z "$*" ]
@@ -56,138 +55,161 @@ rsudo_core()
   else
     if [ "$RSUDO_INTERACTIVE" = "true" ] && [ ! -t 0 ]
     then
-      RSUDO_PIPE_COMMANDS="$(cat)"
-      if [ -n "$RSUDO_PIPE_COMMANDS" ]
-      then
-        set -- "${RSUDO_PIPE_COMMANDS}" "$@"
-      fi
+      RSUDO_PIPE_COMMANDS="$(cat)" || exit 2
+      [ -n "$RSUDO_PIPE_COMMANDS" ] && set -- "${RSUDO_PIPE_COMMANDS}" "$@"
     fi
 
     if [ "$RSUDO_NO_PRESERVE_QUOTES" != "true" ]
     then
-      if [ "$#" -gt "1" ]
-      then
-        set -- "$(quote "$@")"
-      fi
-
-      set -- sh -c "$(quote "$@")"
-      # actually equivalent to because of prior check/set: set -- sh -c "$(quote "$1")"
+      [ "$#" -gt "1" ] && set -- "$(quote "$@")"
+      set -- sh -c "$(quote "$1")"
     fi
   fi
 
-  # prepare ipc to rsudo-askpass
-  RSUDO_IPC_CHANNEL="$(ipc_create "$RSUDO_RUNTIME_DIR")" || return 1
-  RSUDO_IPC_TOKEN="$(randhex 32)" || { ipc_destroy "$RSUDO_IPC_CHANNEL"; return 1; }
-  (
-      set +x
 
-      ipc_open "$RSUDO_IPC_CHANNEL" a 3 4 || exit 20
 
-      _token="$(ipc_read 3)" || {
-          ipc_close 3 4
-          exit 21
-      }
-
-      [ "$_token" = "$RSUDO_IPC_TOKEN" ] || {
-          ipc_close 3 4
-          exit 22
-      }
-
-      ipc_write 4 "$RSUDO_PASSWORD" || {
-          ipc_close 3 4
-          exit 23
-      }
-
-      _ack="$(ipc_read 3)" || {
-          ipc_close 3 4
-          exit 24
-      }
-
-      [ "$_ack" = "ok" ] || {
-          ipc_close 3 4
-          exit 25
-      }
-
-      ipc_close 3 4
-  ) &
-  RSUDO_IPC_PID="$!"
-
-  # export DISPLAY=":0.0"
+  # prepare ipc broker to rsudo-askpass. state owned only by this rsudo_core invocation
   export SSH_ASKPASS="$m_BIN_SYS_DIR/rsudo-askpass"
   export SSH_ASKPASS_REQUIRE="force"
 
-  # check if impersonating another user
-  if [ -n "$RSUDO_AS_USER" ]
-  then
-    SUDO_AS_USER="--user=\"$RSUDO_AS_USER\""
-  fi
+  RSUDO_SSH_IPC_1=""
+  RSUDO_SSH_IPC_2=""
+  RSUDO_DAEMON_PID=""
+
+  # prepare cleanup
+  _rsudo_core_cleanup()
+  {
+    if [ -n "$RSUDO_DAEMON_PID" ]
+    then
+      kill "$RSUDO_DAEMON_PID" 2>/dev/null || :
+      wait "$RSUDO_DAEMON_PID" 2>/dev/null || :
+      RSUDO_DAEMON_PID=""
+    fi
+
+    ipc_once_clear RSUDO_SSH_IPC_1 2>/dev/null || :
+    ipc_once_clear RSUDO_SSH_IPC_2 2>/dev/null || :
+  }
+
+  _rsudo_core_terminate()
+  {
+    signal=$1
+
+    trap - 0 "$signal"
+    _rsudo_core_cleanup
+
+    kill -s "$signal" "$$"
+  }
+
+  trap '_rsudo_core_cleanup' 0
+
+  trap '_rsudo_core_terminate HUP'  HUP
+  trap '_rsudo_core_terminate INT'  INT
+  trap '_rsudo_core_terminate QUIT' QUIT
+  trap '_rsudo_core_terminate TERM' TERM
+
 
   # execute an interactive or non interactive session
   if [ "$RSUDO_INTERACTIVE" != "true" ]
   then
+    # -------------------------------------------------------------------------
     # non interactive command
     log debug rsudo execution-mode mode non-interactive
 
-    # ssh contract is to guarrantee that pipe data is sent correctly and secretly to ssh command, thus piping password is secure
-    (printf '%s\n' "$RSUDO_PASSWORD"; [ ! -t 0 ] && cat) | \
-    ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
-    "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
-    sudo -S --prompt='' $SUDO_AS_USER -- "$@"
+    ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
 
-    EXIT_CODE="$?"
+    (printf '%s\n' "$RSUDO_PASSWORD"; if [ ! -t 0 ]; then cat; fi) | \
+    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
+    "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
+    sudo -S --prompt=''${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@"
+
+    RSUDO_STATUS="$?"
+
+    ipc_once_clear RSUDO_SSH_IPC_1
   else
+    # -------------------------------------------------------------------------
     # interactive command
     log debug rsudo execution-mode mode interactive
 
-    export RSUDO_TOKEN="$(randstr 255)"
-    RSUDO_REMOTE_FIFO="/tmp/$(randstr 32)"
-    RSUDO_PASSWORD_ENCODED="$(printf '%s\n' "$RSUDO_PASSWORD" | RSUDO_TOKEN="$RSUDO_TOKEN" openssl enc -e -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN" | openssl enc -e -A -base64)"
+    RSUDO_REMOTE_TOKEN="$(randhex 16)" || exit 1
 
-    RSUDO_DAEMON_COMMANDS="$(cat << EOF
-trap "rm -f '$RSUDO_REMOTE_FIFO'" INT QUIT TERM HUP PIPE ABRT TSTP EXIT
-mkfifo "$RSUDO_REMOTE_FIFO"
-chmod 600 "$RSUDO_REMOTE_FIFO"
-printf '%s\n' "READY" > "$RSUDO_REMOTE_FIFO"
-read RSUDO_TOKEN < "$RSUDO_REMOTE_FIFO"
-if [ "\$RSUDO_TOKEN" = "$RSUDO_TOKEN" ]
-then
-  # printf '%s\n' "$RSUDO_PASSWORD" > "$RSUDO_REMOTE_FIFO"
-  printf '%s\n' "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_REMOTE_FIFO"
-else
-  printf '%s\n' "wrong RSUDO_TOKEN!" > "$RSUDO_REMOTE_FIFO"
-fi
-read RSUDO_ACKNOWLEDGEMENT < "$RSUDO_REMOTE_FIFO"
-rm -f '$RSUDO_REMOTE_FIFO'
+    # setup commands for 1st ssh
+    RSUDO_REMOTE_DAEMON="$(cat <<EOF
+umask 077
+RSUDO_DIR="\${TMPDIR:-/tmp}/rsudo.$RSUDO_REMOTE_TOKEN"
+RSUDO_FIFO="\$RSUDO_DIR/password"
+
+cleanup()
+{
+  rm -f "\$RSUDO_FIFO" 2>/dev/null || :
+  rmdir "\$RSUDO_DIR" 2>/dev/null || :
+}
+
+trap cleanup 0 HUP INT QUIT TERM
+
+mkdir "\$RSUDO_DIR" || exit 1
+mkfifo "\$RSUDO_FIFO" || exit 1
+
+IFS= read -r RSUDO_PASSWORD || exit 1
+
+printf '%s\n' "\$RSUDO_PASSWORD" > "\$RSUDO_FIFO" || exit 1
+
+unset RSUDO_PASSWORD
 EOF
-)"
+)" || exit 1
 
-    ((printf '%s\n' "$RSUDO_PASSWORD"; printf '%s\n' "$RSUDO_DAEMON_COMMANDS") | RSUDO_INTERACTIVE="" ssh -l "$RSUDO_USER" "$RSUDO_HOST" sh -s) &
+    ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
 
-    export RSUDO_FIFO="/tmp/$(randstr 32)"
-    # delete redundant to ensure removal even on some interruption
-    trap "rm -f '$RSUDO_FIFO'" INT QUIT TERM HUP PIPE ABRT TSTP EXIT
-    mkfifo "$RSUDO_FIFO"
-    chmod 600 "$RSUDO_FIFO"
-    exec 3<>"$RSUDO_FIFO"
-    # printf '%s\n' "$RSUDO_PASSWORD" > "$RSUDO_FIFO"
-    printf '%s\n' "$RSUDO_PASSWORD_ENCODED" > "$RSUDO_FIFO"
+    # launch 1st ssh (daemon password broker)
+    (printf '%s\n' "$RSUDO_PASSWORD" | m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" "$RSUDO_REMOTE_DAEMON") &
 
-    ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
-    while [ ! -e "$RSUDO_REMOTE_FIFO" ]\; do true\; done\; \
-    read RSUDO_DAEMON_READY \< "$RSUDO_REMOTE_FIFO"\; printf "'%s\n'" "$RSUDO_TOKEN" \> "$RSUDO_REMOTE_FIFO"\; read RSUDO_PASSWORD \< "$RSUDO_REMOTE_FIFO"\; printf "'%s\n'" "OK_ACKNOWLEDGED" \> "$RSUDO_REMOTE_FIFO"\; \
-    'RSUDO_PASSWORD=$(printf "%s\n" "$RSUDO_PASSWORD" | openssl enc -d -A -base64 | RSUDO_TOKEN="'$RSUDO_TOKEN'" openssl enc -d -aes-256-cbc -pbkdf2 -pass "env:RSUDO_TOKEN");' \
-    printf "'%s\n'" '"$RSUDO_PASSWORD"' \| sudo -S --prompt='' -- true\; sudo $SUDO_AS_USER -- "$@" </dev/tty
+    RSUDO_DAEMON_PID="$!"
 
-    EXIT_CODE="$?"
+    # setup commands for 2nd ssh
+    RSUDO_REMOTE_INTERACTIVE="$(cat <<EOF
+RSUDO_DIR="\${TMPDIR:-/tmp}/rsudo.$RSUDO_REMOTE_TOKEN"
+RSUDO_FIFO="\$RSUDO_DIR/password"
 
-    # delete redundant with rsudo-askpass to ensure removal even on some interruption
-    rm -f "$RSUDO_FIFO"
+RSUDO_WAIT=0
+while [ ! -p "\$RSUDO_FIFO" ]
+do
+  RSUDO_WAIT="\$((RSUDO_WAIT + 1))"
+  [ "\$RSUDO_WAIT" -lt 60 ] || exit 1
+  sleep 1
+done
+
+IFS= read -r RSUDO_PASSWORD < "\$RSUDO_FIFO" || exit 1
+
+printf '%s\n' "\$RSUDO_PASSWORD" | sudo -S --prompt='' -v || exit 1
+
+unset RSUDO_PASSWORD
+EOF
+)" || exit 1
+
+    # launch 2nd ssh (reads password from daemon broker, then interactive session)
+    ipc_once_set RSUDO_SSH_IPC_2 "$RSUDO_PASSWORD" || exit 1
+
+    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_2" ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
+    "$RSUDO_REMOTE_INTERACTIVE" sudo${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@" </dev/tty
+
+    RSUDO_STATUS="$?"
+
+    ipc_once_clear RSUDO_SSH_IPC_2
+
+    wait "$RSUDO_DAEMON_PID" 2>/dev/null
+    RSUDO_DAEMON_STATUS="$?"
+    RSUDO_DAEMON_PID=""
+
+    ipc_once_clear RSUDO_SSH_IPC_1
+
+    if [ "$RSUDO_STATUS" -eq 0 ] && [ "$RSUDO_DAEMON_STATUS" -ne 0 ]
+    then
+      RSUDO_STATUS="$RSUDO_DAEMON_STATUS"
+    fi
   fi
 
   log info rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$EXIT_CODE" command "$*"
-
-  return "$EXIT_CODE"
-}
+  exit "$RSUDO_STATUS"
+)
 
 #------------------------------------------------------------------------------
 

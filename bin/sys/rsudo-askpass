@@ -4,26 +4,8 @@
 
 set +x
 
-[ -n "$RSUDO_IPC_CHANNEL" ] || exit 1
-[ -n "$RSUDO_IPC_TOKEN" ] || exit 1
+[ -n "${m_RSUDO_ASKPASS_ID-}" ] || exit 1
 
-ipc_open "$RSUDO_IPC_CHANNEL" b 3 4 || exit 1
+ipc_once_get "$m_RSUDO_ASKPASS_ID" || exit 1
 
-ipc_write 4 "$RSUDO_IPC_TOKEN" || {
-    ipc_close 3 4
-    exit 1
-}
-
-RSUDO_PASSWORD="$(ipc_read 3)" || {
-    ipc_close 3 4
-    exit 1
-}
-
-ipc_write 4 "ok" || {
-    ipc_close 3 4
-    exit 1
-}
-
-ipc_close 3 4
-
-printf '%s\n' "$RSUDO_PASSWORD"
+printf '\n'
