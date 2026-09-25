@@ -335,3 +335,227 @@ ipc_destroy()
 )
 
 #-------------------------------------------------------------------------------
+
+#-------------------------------------------------------------------------------
+
+# ipc_once_clear result_variable
+# revokes an unread one-shot value or reaps an already consumed one
+ipc_once_clear()
+{
+  [ "$#" -eq "1" ] || return 2
+
+  _ipc_once_clear_var="$1"
+
+  valid_shell_identifier "$_ipc_once_clear_var" || {
+    unset _ipc_once_clear_var
+    return 1
+  }
+
+  case "$_ipc_once_clear_var" in
+    _ipc_*)
+      unset _ipc_once_clear_var
+      return 1
+    ;;
+  esac
+
+  eval "_ipc_once_clear_id=\${${_ipc_once_clear_var}-}"
+
+  if [ -z "$_ipc_once_clear_id" ]
+  then
+    unset "$_ipc_once_clear_var"
+    unset _ipc_once_clear_var _ipc_once_clear_id
+    return 0
+  fi
+
+  case "$_ipc_once_clear_id" in
+    *:/*) ;;
+    *)
+      unset _ipc_once_clear_var _ipc_once_clear_id
+      return 1
+    ;;
+  esac
+
+  _ipc_once_clear_pid="${_ipc_once_clear_id%%:*}"
+  _ipc_once_clear_channel="${_ipc_once_clear_id#*:}"
+
+  _ipc_pid_valid "$_ipc_once_clear_pid" || {
+    unset \
+      _ipc_once_clear_var \
+      _ipc_once_clear_id \
+      _ipc_once_clear_pid \
+      _ipc_once_clear_channel
+    return 1
+  }
+
+  _ipc_channel_valid "$_ipc_once_clear_channel" || {
+    unset \
+      _ipc_once_clear_var \
+      _ipc_once_clear_id \
+      _ipc_once_clear_pid \
+      _ipc_once_clear_channel
+    return 1
+  }
+
+  ipc_cancel "$_ipc_once_clear_pid" || {
+    unset \
+      _ipc_once_clear_var \
+      _ipc_once_clear_id \
+      _ipc_once_clear_pid \
+      _ipc_once_clear_channel
+    return 1
+  }
+
+  if ! ipc_destroy "$_ipc_once_clear_channel"
+  then
+    unset \
+      _ipc_once_clear_var \
+      _ipc_once_clear_id \
+      _ipc_once_clear_pid \
+      _ipc_once_clear_channel
+    return 1
+  fi
+
+  unset "$_ipc_once_clear_var"
+
+  unset \
+    _ipc_once_clear_var \
+    _ipc_once_clear_id \
+    _ipc_once_clear_pid \
+    _ipc_once_clear_channel
+
+  return 0
+}
+
+#-------------------------------------------------------------------------------
+
+# ipc_once_set result_variable value [base_dir]
+# replaces result_variable with an opaque id for a private one-shot value
+ipc_once_set()
+{
+  [ "$#" -ge "2" ] && [ "$#" -le "3" ] || return 2
+
+  _ipc_once_set_var="$1"
+
+  valid_shell_identifier "$_ipc_once_set_var" || {
+    unset _ipc_once_set_var
+    return 1
+  }
+
+  case "$_ipc_once_set_var" in
+    _ipc_*)
+      unset _ipc_once_set_var
+      return 1
+    ;;
+  esac
+
+  _ipc_once_set_value="$2"
+  _ipc_once_set_base="${3-}"
+
+  case "$_ipc_once_set_value" in
+    *'
+'*)
+      unset _ipc_once_set_var _ipc_once_set_value _ipc_once_set_base
+      return 1
+    ;;
+  esac
+
+  ipc_once_clear "$_ipc_once_set_var" || {
+    unset _ipc_once_set_var _ipc_once_set_value _ipc_once_set_base
+    return 1
+  }
+
+  _ipc_once_set_channel="$(ipc_create "$_ipc_once_set_base")" || {
+    unset _ipc_once_set_var _ipc_once_set_value _ipc_once_set_base
+    return 1
+  }
+
+  (
+    set +x
+
+    ipc_open "$_ipc_once_set_channel" a 3 4 || exit 20
+
+    ipc_write 4 "$_ipc_once_set_value" || {
+      ipc_close 3 4
+      exit 21
+    }
+
+    unset _ipc_once_set_value
+
+    ipc_close 3 4 || exit 22
+  ) &
+
+  _ipc_once_set_pid="$!"
+
+  _ipc_pid_valid "$_ipc_once_set_pid" || {
+    ipc_destroy "$_ipc_once_set_channel" 2>/dev/null || :
+    unset \
+      _ipc_once_set_var \
+      _ipc_once_set_value \
+      _ipc_once_set_base \
+      _ipc_once_set_channel \
+      _ipc_once_set_pid
+    return 1
+  }
+
+  _ipc_once_set_id="${_ipc_once_set_pid}:${_ipc_once_set_channel}"
+
+  if ! eval "${_ipc_once_set_var}=\$_ipc_once_set_id"
+  then
+    ipc_cancel "$_ipc_once_set_pid"
+    ipc_destroy "$_ipc_once_set_channel" 2>/dev/null || :
+
+    unset \
+      _ipc_once_set_var \
+      _ipc_once_set_value \
+      _ipc_once_set_base \
+      _ipc_once_set_channel \
+      _ipc_once_set_pid \
+      _ipc_once_set_id
+
+    return 1
+  fi
+
+  unset \
+    _ipc_once_set_var \
+    _ipc_once_set_value \
+    _ipc_once_set_base \
+    _ipc_once_set_channel \
+    _ipc_once_set_pid \
+    _ipc_once_set_id
+
+  return 0
+}
+
+#-------------------------------------------------------------------------------
+
+# ipc_once_get id
+# consumes one one-shot value and writes it to stdout
+ipc_once_get()
+(
+  set +x
+
+  [ "$#" -eq "1" ] || return 2
+
+  _ipc_once_get_id="$1"
+
+  case "$_ipc_once_get_id" in
+    *:/*) ;;
+    *) return 1 ;;
+  esac
+
+  _ipc_once_get_pid="${_ipc_once_get_id%%:*}"
+  _ipc_once_get_channel="${_ipc_once_get_id#*:}"
+
+  _ipc_pid_valid "$_ipc_once_get_pid" || return 1
+  _ipc_channel_valid "$_ipc_once_get_channel" || return 1
+
+  ipc_open "$_ipc_once_get_channel" b 3 4 || return 1
+
+  if ! ipc_read 3
+  then
+    ipc_close 3 4
+    return 1
+  fi
+
+  ipc_close 3 4 || return 1
+)
