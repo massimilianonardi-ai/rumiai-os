@@ -9,7 +9,7 @@ DESCRIPTION
         . "$m_LIB_DIR/sys/sh/ipc.lib.sh"
 
     The library creates a private local duplex channel from two named pipes and
-    exposes eight public functions:
+    exposes eleven public functions:
 
         ipc_create
         ipc_open
@@ -19,6 +19,9 @@ DESCRIPTION
         ipc_sync
         ipc_cancel
         ipc_destroy
+        ipc_once_set
+        ipc_once_get
+        ipc_once_clear
 
     Each channel has two endpoints named a and b. Endpoint a writes to the
     a-to-b FIFO and reads from b-to-a. Endpoint b uses the opposite directions.
@@ -185,6 +188,89 @@ FUNCTIONS
                 failure
             2   invalid number of arguments
 
+    ipc_once_set result_variable value [base_dir]
+
+        Creates a private one-shot value channel and assigns its opaque identity
+        to the shell variable named by result_variable.
+
+        result_variable must satisfy valid_shell_identifier and must not use the
+        library-private _ipc_ prefix.
+
+        value is one record and therefore must not contain a newline. An empty
+        string is valid. base_dir follows the same rules and defaulting behavior
+        as ipc_create.
+
+        The function starts one asynchronous producer child owned by the
+        calling shell. The child retains its private copy of value until a
+        consumer successfully rendezvous with ipc_once_get or until the owner
+        revokes it with ipc_once_clear.
+
+        If result_variable already contains a valid one-shot identity created
+        by an earlier ipc_once_set in the same shell, that value is revoked and
+        reaped before the replacement is created. Therefore one result variable
+        represents at most one currently authorized one-shot value.
+
+        The assigned identity is opaque. Callers pass it unchanged to
+        ipc_once_get and keep the result variable itself for later
+        ipc_once_clear. Callers must not parse or synthesize the identity.
+
+        The shell that calls ipc_once_set remains responsible for eventually
+        calling ipc_once_clear on result_variable, including after successful
+        consumption, so that the producer child is reaped.
+
+        Return status:
+            0   previous value, if any, revoked and new one-shot value created
+            1   invalid/reserved result variable, invalid value/base directory,
+                previous-value cleanup failure, channel/producer creation
+                failure, or result assignment failure
+            2   invalid number of arguments
+
+    ipc_once_get id
+
+        Consumes the one-shot value identified by id and writes the value to
+        standard output without a trailing record delimiter.
+
+        The first successful rendezvous consumes the underlying channel. The
+        channel pathnames and directory are removed by the normal ipc_open
+        endpoint-a lifecycle, so the same id cannot successfully deliver the
+        value a second time.
+
+        ipc_once_get may run in a different descendant process from the shell
+        that created the value. It does not reap the producer child; producer
+        ownership remains with the ipc_once_set caller, which must later call
+        ipc_once_clear on the original result variable.
+
+        id is an opaque identity returned by ipc_once_set. Invalid, revoked,
+        already-consumed or otherwise unavailable identities fail.
+
+        Return status:
+            0   one value consumed and written to standard output
+            1   invalid/unavailable identity, rendezvous/read/close failure
+            2   invalid number of arguments
+
+    ipc_once_clear result_variable
+
+        Revokes and clears the one-shot value represented by result_variable.
+
+        result_variable follows the same identifier rules as ipc_once_set. An
+        unset or empty result variable is treated as already clear and succeeds.
+
+        For an unread value, ipc_once_clear stops and reaps the producer child
+        before destroying the unused channel. For an already-consumed value,
+        it reaps the producer if necessary and accepts the already-removed
+        channel as successfully destroyed. On success it unsets result_variable.
+
+        Because ipc_cancel operates on a child of the current shell,
+        ipc_once_clear must be called by the same shell that called the matching
+        ipc_once_set. A consumer that only receives the opaque id uses
+        ipc_once_get and does not call ipc_once_clear.
+
+        Return status:
+            0   value revoked/reaped and result variable unset, or already clear
+            1   invalid/reserved result variable, malformed stored identity,
+                cancellation/reap failure, or channel cleanup failure
+            2   invalid number of arguments
+
 DEPENDENCIES
     ipc.lib.sh sources:
 
@@ -192,6 +278,10 @@ DEPENDENCIES
 
     ipc_create therefore transitively requires the random-generation dependency
     documented by rand.lib.sh, currently OpenSSL for randhex.
+
+    ipc_once_set and ipc_once_clear use valid_shell_identifier from core.lib.sh.
+    As documented above, ipc.lib.sh is intended to be sourced from an
+    m-integrated shell environment where the core library is already loaded.
 
     The implementation also uses POSIX shell facilities and standard utilities
     including mkdir, mkfifo, chmod, ls, rm and rmdir.
@@ -220,6 +310,20 @@ CONCURRENCY
     Running both ipc_open calls sequentially in one process does not work:
     the first call blocks waiting for the peer.
 
+    One-shot values add a higher-level lifecycle on top of the same channels:
+
+        ipc_once_set secret_slot "value" || exit 1
+        secret_id=$secret_slot
+
+        value="$(ipc_once_get "$secret_id")" || exit 1
+
+        # Reap the producer and clear the owning slot after consumption.
+        ipc_once_clear secret_slot || exit 1
+
+    Reusing the same result variable with ipc_once_set revokes an unread prior
+    value before creating its replacement. Distinct result variables create
+    distinct one-shot channels and may coexist independently.
+
 SECURITY
     Channel directories are private to the creating user through mode 0700 and
     FIFO paths use mode 0600.
@@ -233,6 +337,16 @@ SECURITY
 
     ipc_cancel can only validate PID syntax portably. Child ownership is a
     mandatory caller obligation as described in its function contract.
+
+    A one-shot value exists in the memory of its producer child until it is
+    consumed or revoked. Its channel uses the same private 0700 directory and
+    0600 FIFO permissions as ordinary IPC channels. Successful consumption
+    removes the channel pathname before the value can be obtained again.
+
+    The opaque identity returned by ipc_once_set is the locator needed by a
+    consumer to attempt ipc_once_get within the operating-system permission
+    boundary. Callers should expose that identity only to processes that are
+    intended to consume the value.
 
 SEE ALSO
     manual
