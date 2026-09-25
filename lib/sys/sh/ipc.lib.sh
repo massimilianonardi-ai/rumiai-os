@@ -336,8 +336,6 @@ ipc_destroy()
 
 #-------------------------------------------------------------------------------
 
-#-------------------------------------------------------------------------------
-
 # ipc_once_clear result_variable
 # revokes an unread one-shot value or reaps an already consumed one
 ipc_once_clear()
