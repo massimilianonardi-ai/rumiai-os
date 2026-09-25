@@ -279,7 +279,7 @@ rsudo()
         unset RSUDO_ENCODED_FILE RSUDO_CREDENTIALS_GROUP_NAME
       ;;
 
-      --*) log fatal execution invalid-arguments option "$1"; return 9;;
+      --*) log fatal execution invalid-arguments option "$1"; return 8;;
       *) break;;
     esac
     shift
@@ -288,12 +288,12 @@ rsudo()
 
 
   # validate connection args: RSUDO_HOST, RSUDO_USER, RSUDO_PASSWORD.
-  [ -z "${RSUDO_HOST-}" ] && { log fatal execution invalid-arguments field rsudo-host reason empty; return 10; }
+  [ -z "${RSUDO_HOST-}" ] && { log fatal execution invalid-arguments field rsudo-host reason empty; return 9; }
 
   if [ -z "${RSUDO_USER-}" ]
   then
     RSUDO_USER="${USER-}"
-    [ -z "$RSUDO_USER" ] && { log fatal execution invalid-arguments field rsudo-user reason empty; return 11; }
+    [ -z "$RSUDO_USER" ] && { log fatal execution invalid-arguments field rsudo-user reason empty; return 10; }
     log info rsudo user-defaulted user "$RSUDO_USER"
   fi
 
@@ -305,7 +305,7 @@ rsudo()
     then
       unset RSUDO_PASSWORD
       log fatal execution execution-failed operation rsudo-password-read source pipe
-      return 12
+      return 11
     fi
   elif [ -z "${RSUDO_PASSWORD-}" ] && [ -t 0 ]
   then
@@ -314,11 +314,11 @@ rsudo()
     then
       unset RSUDO_PASSWORD
       log fatal execution execution-failed operation rsudo-password-read source tty
-      return 13
+      return 12
     fi
   fi
 
-  [ -z "${RSUDO_PASSWORD-}" ] && { log fatal execution invalid-arguments field rsudo-password reason empty; return 14; }
+  [ -z "${RSUDO_PASSWORD-}" ] && { log fatal execution invalid-arguments field rsudo-password reason empty; return 13; }
 
   log debug rsudo connection-state host "$RSUDO_HOST" user "$RSUDO_USER" password-present true
 
@@ -333,11 +333,11 @@ rsudo()
   then
     log debug rsudo module-load module "$1" args "$*"
 
-    valid_cli_name "$2" || { log fatal execution execution-failed operation rsudo-module-load function "$2"; return 15; }
+    valid_cli_name "$2" || { log fatal execution execution-failed operation rsudo-module-load function "$2"; return 14; }
 
     eval 'shift 2; set -- "rsudo_mod_'"$(printf '%s\n' "${1}_${2}" | sed 's/-/_/g')"'" "$@"
-. "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-'"${1}"'.lib.sh" || { log fatal execution execution-failed operation rsudo-module-load module "'"$1"'"; return 16; }
-exist_function "$1"  || { log fatal rsudo module-delegate-missing function "$1"; return 17; }
+. "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-'"${1}"'.lib.sh" || { log fatal execution execution-failed operation rsudo-module-load module "'"$1"'"; return 15; }
+exist_function "$1"  || { log fatal rsudo module-delegate-missing function "$1"; return 16; }
 '
     "$@"
   else
