@@ -1,4 +1,15 @@
 
+valid_integer()
+{
+  [ "$#" -eq "0" ] && return 1
+
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in "" | *[!0123456789]*) return 2;; esac
+    shift
+  done
+}
+
 valid_shell_identifier()
 {
   [ "$#" -eq "0" ] && return 1
