@@ -37,8 +37,10 @@ rsudo_mod_db_pg_putdb()
   fi
 
   TRANSFER_ID="$(date -u '+%Y%m%dT%H%M%SZ').$$" || exit 1
-  STAGE_DB="${REMOTE_DB}__rsudo_new_${TRANSFER_ID}"
-  OLD_DB="${REMOTE_DB}__rsudo_old_${TRANSFER_ID}"
+  # Keep internal names short: PostgreSQL identifiers are limited in length,
+  # while the requested database name may already be close to that limit.
+  STAGE_DB="rsudo_new_${TRANSFER_ID}"
+  OLD_DB="rsudo_old_${TRANSFER_ID}"
 
   # Build the replacement database without disturbing the active one.
   rsudo --user "postgres" createdb -- "$STAGE_DB" || exit 1
@@ -252,6 +254,26 @@ SQL
 
 [ -n "$exists" ] || exit 0
 
+original_limit="$(
+  psql_base --set target="$target" <<SQL
+SELECT datconnlimit
+FROM pg_database
+WHERE datname = :'target';
+SQL
+)" || exit 1
+
+limit_digits="${original_limit#-}"
+case "$limit_digits" in
+  "" | *[!0-9]*) exit 1;;
+esac
+
+restore_limit()
+{
+  psql_base --set target="$target" --set limit="$original_limit" <<SQL
+ALTER DATABASE :"target" CONNECTION LIMIT :limit;
+SQL
+}
+
 version="$(
   psql_base <<SQL
 SHOW server_version_num;
@@ -283,7 +305,10 @@ SELECT $pid_column
 FROM pg_stat_activity
 WHERE datname = :'target';
 SQL
-  )" || exit 1
+  )" || {
+    restore_limit
+    exit 1
+  }
 
   [ -z "$pids" ] && break
 
@@ -305,11 +330,22 @@ SELECT $pid_column
 FROM pg_stat_activity
 WHERE datname = :'target';
 SQL
-)" || exit 1
+)" || {
+  restore_limit
+  exit 1
+}
 
-[ -z "$remaining" ] || exit 1
+if [ -n "$remaining" ]
+then
+  restore_limit
+  exit 1
+fi
 
-dropdb -- "$target"
+if ! dropdb -- "$target"
+then
+  restore_limit
+  exit 1
+fi
 RSUDO_REMOTE
 )" || exit 1
 
