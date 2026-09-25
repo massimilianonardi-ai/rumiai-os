@@ -12,7 +12,6 @@
 . "$m_LIB_DIR/sys/sh/rand.lib.sh"
 . "$m_LIB_DIR/sys/sh/enc.lib.sh"
 . "$m_LIB_DIR/sys/sh/ipc.lib.sh"
-. "$m_LIB_DIR/sys/sh/rsudo/rsudo-env.lib.sh"
 
 #------------------------------------------------------------------------------
 
@@ -267,7 +266,7 @@ rsudo()
         if [ -z "$ENV_ENCODED_FILE" ]
         then
           log warn rsudo env-file-fallback reason not-provided
-        elif ! rsudoenv_load "$ENV_ENCODED_FILE"
+        elif ! encoded_file_eval "$ENV_ENCODED_FILE"
         then
           log warn rsudo env-file-fallback reason load-failed file "$ENV_ENCODED_FILE"
         fi
