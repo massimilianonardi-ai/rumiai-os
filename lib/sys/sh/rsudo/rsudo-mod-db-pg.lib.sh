@@ -1,4 +1,3 @@
-
 #------------------------------------------------------------------------------
 
 rsudo_mod_db_pg_psql()
@@ -17,80 +16,82 @@ rsudo_mod_db_pg_getdb()
 
 rsudo_mod_db_pg_putdb()
 (
-  if [ -z "$1" ]
-  then
-    exit 1
-  fi
+  # Usage:
+  #   putdb REMOTE_DB LOCAL_PATH
+  #   ... | putdb REMOTE_DB
+  #
+  # Validate the complete local side before touching the remote database.
+  [ "$#" -ge 1 ] && [ "$#" -le 2 ] || exit 1
+  [ -n "$1" ] || exit 1
 
   REMOTE_DB="$1"
-  LOCAL_PATH="$2"
+  LOCAL_PATH="${2-}"
 
-  if [ -z "$LOCAL_PATH" ] && [ -t 0 ]
+  if [ -n "$LOCAL_PATH" ]
   then
+    [ -r "$LOCAL_PATH" ] || exit 1
+  elif [ -t 0 ]
+  then
+    # No path and no piped stdin means there is nothing to restore.
     exit 1
   fi
 
-  rsudo_mod_db_pg_resetdb "$REMOTE_DB"
+  # Do not attempt the restore unless the destructive reset completed.
+  rsudo_mod_db_pg_resetdb "$REMOTE_DB" || exit 1
 
-
-  if [ -z "$LOCAL_PATH" ]
+  # psql normally continues after SQL errors and can therefore finish with a
+  # successful process status even though part of the restore failed.
+  # ON_ERROR_STOP makes the restore fail on the first SQL error.
+  if [ -n "$LOCAL_PATH" ]
   then
-    rsudo --user "postgres" psql "$REMOTE_DB"
+    rsudo --user "postgres" psql --set ON_ERROR_STOP=1 "$REMOTE_DB" < "$LOCAL_PATH"
   else
-    cat "$LOCAL_PATH" | rsudo --user "postgres" psql "$REMOTE_DB"
+    rsudo --user "postgres" psql --set ON_ERROR_STOP=1 "$REMOTE_DB"
   fi
 )
 
 #------------------------------------------------------------------------------
 
 rsudo_mod_db_pg_createdb()
-{
-  if [ -z "$1" ]
-  then
-    exit 1
-  fi
+(
+  [ "$#" -eq 1 ] || exit 1
+  [ -n "$1" ] || exit 1
 
-  rsudo --user "postgres" createdb "$1"
-}
+  rsudo --user "postgres" createdb -- "$1"
+)
 
 #------------------------------------------------------------------------------
 
 rsudo_mod_db_pg_dropdb()
-{
-  if [ -z "$1" ]
-  then
-    exit 1
-  fi
+(
+  [ "$#" -eq 1 ] || exit 1
+  [ -n "$1" ] || exit 1
 
-  rsudo --user "postgres" psql "$1" \
-  -c "ALTER DATABASE $1 WITH CONNECTION LIMIT 0;" \
-  -c "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = '$1' AND pid <> pg_backend_pid();"
-
-  rsudo --user "postgres" dropdb "$1"
-}
+  # Let PostgreSQL handle connection termination instead of interpolating the
+  # database name into SQL. Keeping the name as a separate argv value avoids
+  # both shell-code construction and SQL identifier/string quoting problems.
+  rsudo --user "postgres" dropdb --force -- "$1"
+)
 
 #------------------------------------------------------------------------------
 
-# drop existing one if exists, then recreate
+# Drop the database if it exists, then recreate it.
 rsudo_mod_db_pg_resetdb()
-{
-  if [ -z "$1" ]
-  then
-    exit 1
-  fi
+(
+  [ "$#" -eq 1 ] || exit 1
+  [ -n "$1" ] || exit 1
 
-  rsudo --user "postgres" psql "$1" \
-  -c "ALTER DATABASE $1 WITH CONNECTION LIMIT 0;" \
-  -c "SELECT pg_terminate_backend (pid) FROM pg_stat_activity WHERE datname = '$1' AND pid <> pg_backend_pid();"
-
-  rsudo --user "postgres" "dropdb '$1'; createdb '$1'"
-}
+  # --if-exists gives reset its intended create-or-recreate semantics.
+  # The second step is reached only if dropdb completed successfully.
+  rsudo --user "postgres" dropdb --if-exists --force -- "$1" || exit 1
+  rsudo --user "postgres" createdb -- "$1"
+)
 
 #------------------------------------------------------------------------------
 
 rsudo_mod_db_pg_postgis_create_string()
 {
-  echo "CREATE EXTENSION postgis; CREATE EXTENSION postgis_topology;"
+  printf '%s\n' "CREATE EXTENSION IF NOT EXISTS postgis; CREATE EXTENSION IF NOT EXISTS postgis_topology;"
 }
 
 #------------------------------------------------------------------------------
