@@ -258,23 +258,25 @@ rsudo()
         #   file:name
         #   path:with:colons:name
         #   :name
-        ENV_ENCODED_FILE="${1%:*}"
-        ENV_GROUP_NAME="${1##*:}"
+        RSUDO_ENCODED_FILE="${1%:*}"
+        RSUDO_CREDENTIALS_GROUP_NAME="${1##*:}"
 
-        valid_shell_identifier "$ENV_GROUP_NAME" || { log fatal execution invalid-arguments operand load value "$1"; return 8; }
-
-        if [ -z "$ENV_ENCODED_FILE" ]
+        if [ -z "$RSUDO_ENCODED_FILE" ]
         then
           log warn rsudo env-file-fallback reason not-provided
-        elif ! encoded_file_eval "$ENV_ENCODED_FILE"
+        elif ! encoded_file_eval "$RSUDO_ENCODED_FILE"
         then
-          log warn rsudo env-file-fallback reason load-failed file "$ENV_ENCODED_FILE"
+          log warn rsudo env-file-fallback reason load-failed file "$RSUDO_ENCODED_FILE"
         fi
 
-        # ENV_GROUP_NAME is validated as an identifier component before eval.
-        eval "RSUDO_HOST=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_HOST-}\""
-        eval "RSUDO_USER=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_USER-}\""
-        eval "RSUDO_PASSWORD=\"\${RSUDO_ENV_${ENV_GROUP_NAME}_PASS-}\""
+        if valid_shell_identifier "$RSUDO_CREDENTIALS_GROUP_NAME"
+        then
+          eval "RSUDO_HOST=\"\${RSUDO_CREDENTIALS_GROUP_${RSUDO_CREDENTIALS_GROUP_NAME}_HOST-}\""
+          eval "RSUDO_USER=\"\${RSUDO_CREDENTIALS_GROUP_${RSUDO_CREDENTIALS_GROUP_NAME}_USER-}\""
+          eval "RSUDO_PASSWORD=\"\${RSUDO_CREDENTIALS_GROUP_${RSUDO_CREDENTIALS_GROUP_NAME}_PASS-}\""
+        fi
+
+        unset RSUDO_ENCODED_FILE RSUDO_CREDENTIALS_GROUP_NAME
       ;;
 
       --*) log fatal execution invalid-arguments option "$1"; return 9;;
