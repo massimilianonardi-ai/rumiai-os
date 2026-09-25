@@ -5,7 +5,7 @@ SYNOPSIS
     . "$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
 
     rsudo [--interactive] [--askpass] [--connect user@host]
-          [--load file:name] [--user sudo_as_user]
+          [--load file:group] [--user sudo_as_user]
           [--no-preserve-quotes] [submodule] [--] [args...]
 
     rsudo_core [args...]
@@ -59,16 +59,15 @@ FUNCTIONS
             5   --connect has an empty host
             6   missing --load operand
             7   --load operand contains no :
-            8   invalid --load group identifier
-            9   unknown rsudo option
-            10  empty RSUDO_HOST after option/load processing
-            11  no usable RSUDO_USER and no USER fallback
-            12  --askpass password read from stdin failed
-            13  password read from TTY failed
-            14  RSUDO_PASSWORD is empty after acquisition
-            15  invalid delegated submodule function name
-            16  rsudo submodule load failed
-            17  delegated submodule function is unavailable
+            8   unknown rsudo option
+            9   empty RSUDO_HOST after option/load processing
+            10  no usable RSUDO_USER and no USER fallback
+            11  --askpass password read from stdin failed
+            12  password read from TTY failed
+            13  RSUDO_PASSWORD is empty after acquisition
+            14  invalid delegated submodule function name
+            15  rsudo submodule load failed
+            16  delegated submodule function is unavailable
 
     rsudo_core [args...]
 
@@ -120,13 +119,37 @@ OPTIONS
         Set RSUDO_USER and RSUDO_HOST from one connection operand. An empty user
         is allowed and falls back to USER; the host must be non-empty.
 
-    --load file:name
-        Load encoded rsudo environment data from file when provided, then resolve
-        RSUDO_ENV_<name>_HOST, RSUDO_ENV_<name>_USER and
-        RSUDO_ENV_<name>_PASS.
+    --load file:group
+        Split the operand at its final ':'.
 
-        An empty file component, as in :name, skips file loading and resolves the
-        named group from the current environment.
+        file and group are independent; either one or both may be empty.
+
+        file:group
+            Load/evaluate file, then select credentials from group.
+
+        file:
+            Load/evaluate file, but do not select or replace credentials from a
+            group.
+
+        :group
+            Do not load a file. Select credentials from a group already present
+            in the current shell state.
+
+        :
+            Do not load a file and do not select a group. Existing connection
+            state is left unchanged.
+
+        A non-empty group selects:
+
+            RSUDO_CREDENTIALS_GROUP_<group>_HOST
+            RSUDO_CREDENTIALS_GROUP_<group>_USER
+            RSUDO_CREDENTIALS_GROUP_<group>_PASS
+
+        A non-empty file may define one or more credential groups and other
+        authenticated shell state. Loading the file does not by itself select a
+        group.
+
+        The ':' separator is mandatory.
 
     --user sudo_as_user
         Execute the remote target as sudo_as_user, subject to the remote sudo
@@ -165,10 +188,10 @@ ENVIRONMENT
     RSUDO_NO_PRESERVE_QUOTES
         The literal value true disables normal command normalization.
 
-    RSUDO_ENV_<name>_HOST
-    RSUDO_ENV_<name>_USER
-    RSUDO_ENV_<name>_PASS
-        Named connection groups used by --load.
+    RSUDO_CREDENTIALS_GROUP_<group>_HOST
+    RSUDO_CREDENTIALS_GROUP_<group>_USER
+    RSUDO_CREDENTIALS_GROUP_<group>_PASS
+        Named credential groups selectable by --load.
 
 INPUT AND OUTPUT
     Non-interactive mode forwards the caller's intended target stdin to the
