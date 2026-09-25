@@ -59,7 +59,7 @@ rsudo_mod_fs_get()
       path="$1"
       [ -e "$path" ] || [ -L "$path" ] || exit 1
 
-      du -sk "$path" | awk "NR == 1 { print \\$1; exit }"
+      du -sk "$path" | awk "NR == 1 { print \$1; exit }"
     ' sh "$REMOTE_PATH"
   )" || {
     log error rsudo-fs remote-preflight-failed operation get path "$REMOTE_PATH"
