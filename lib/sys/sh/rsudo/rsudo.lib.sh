@@ -1,4 +1,3 @@
-#!/bin/sh
 
 # rsudo [--interactive] [--askpass] [--connect user@host] [--load file:name] [--user sudo_as_user] [submodule] [--] [args]
 #
@@ -12,6 +11,7 @@
 
 . "$m_LIB_DIR/sys/sh/rand.lib.sh"
 . "$m_LIB_DIR/sys/sh/enc.lib.sh"
+. "$m_LIB_DIR/sys/sh/ipc.lib.sh"
 . "$m_LIB_DIR/sys/sh/rsudo/rsudo-env.lib.sh"
 
 #------------------------------------------------------------------------------
