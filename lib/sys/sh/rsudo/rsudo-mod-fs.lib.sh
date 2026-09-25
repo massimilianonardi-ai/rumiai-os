@@ -1,6 +1,3 @@
-#!/bin/sh
-
-. log.lib.sh
 
 #------------------------------------------------------------------------------
 
@@ -17,7 +14,6 @@ rsudo_mod_fs_delete()
 #------------------------------------------------------------------------------
 
 rsudo_mod_fs_get()
-{
 (
   if [ -z "$1" ] || [ -z "$2" ]
   then
@@ -52,12 +48,10 @@ rsudo_mod_fs_get()
     exit 1
   fi
 )
-}
 
 #------------------------------------------------------------------------------
 
 rsudo_mod_fs_put()
-{
 (
   if [ -z "$1" ] || [ -z "$2" ]
   then
@@ -93,6 +87,5 @@ rsudo_mod_fs_put()
   if [ -n "$REMOTE_OWNER_GROUP" ]; then rsudo chown -R "$REMOTE_OWNER_GROUP" "$REMOTE_PATH"; fi && \
   if [ -n "$REMOTE_PERMISSIONS" ]; then rsudo chmod -R "$REMOTE_PERMISSIONS" "$REMOTE_PATH"; fi
 )
-}
 
 #------------------------------------------------------------------------------

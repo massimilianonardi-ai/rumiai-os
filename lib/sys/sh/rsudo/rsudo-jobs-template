@@ -1,4 +1,3 @@
-#!/bin/sh
 
 . rsudo.lib.sh
 . realpaths.lib.sh
