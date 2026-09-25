@@ -20,7 +20,7 @@ rsudo_mod_db_pg_getdb()
 # ALLOW_CONNECTIONS. Older releases already have pg_database.datallowconn,
 # therefore use the catalog value directly instead of emulating offline state
 # with CONNECTION LIMIT.
-rsudo_mod_db_pg__allowconnections()
+_rsudo_mod_db_pg_allowconnections()
 (
   [ "$#" -eq 2 ] || exit 1
   [ -n "$1" ] || exit 1
@@ -81,7 +81,7 @@ rsudo_mod_db_pg_offlinedb()
 
   # datallowconn=false is the persistent offline state. Set it before killing
   # existing sessions so they cannot reconnect while the database is drained.
-  rsudo_mod_db_pg__allowconnections "$REMOTE_DB" false || exit 1
+  _rsudo_mod_db_pg_allowconnections "$REMOTE_DB" false || exit 1
 
   REMOTE_SCRIPT="$(cat <<'RSUDO_REMOTE'
 target="$1"
@@ -158,7 +158,7 @@ rsudo_mod_db_pg_onlinedb()
   [ "$#" -eq 1 ] || exit 1
   [ -n "$1" ] || exit 1
 
-  rsudo_mod_db_pg__allowconnections "$1" true
+  _rsudo_mod_db_pg_allowconnections "$1" true
 )
 
 #------------------------------------------------------------------------------
