@@ -26,7 +26,7 @@ DESCRIPTION
 
     The default dispatcher supplied by this library returns status 2, so a
     library reference that is not present in the generated injected set fails
-    deterministically rather than falling back to a remote RumiAI filesystem.
+    deterministically rather than falling back to a remote m library tree.
 
 FUNCTIONS
     loadlib <library-reference>
@@ -59,6 +59,3 @@ CALLER OBLIGATIONS
     The complete embedded library set, including transitive and dynamically
     selected candidates, is the responsibility of the caller constructing the
     injection stream.
-
-SEE ALSO
-    manual core.lib.sh
