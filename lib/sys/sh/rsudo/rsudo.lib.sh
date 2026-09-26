@@ -215,13 +215,15 @@ EOF
 # replaces "rsudo command" with "rsudo function" to allow safe use of env (without exporting) in recursive calls
 rsudo()
 {
+  RSUDO_NO_PRESERVE_QUOTES=""
+
   while [ "$#" -gt "0" ]
   do
     case "$1" in
       --) break;;
-      --no-preserve-quotes) RSUDO_NO_PRESERVE_QUOTES="true";;
-      --interactive) RSUDO_INTERACTIVE="true";;
-      --askpass) RSUDO_ASKPASS="true";;
+      -n | --no-preserve-quotes) RSUDO_NO_PRESERVE_QUOTES="true";;
+      -i | --interactive) RSUDO_INTERACTIVE="true";;
+      -A | --askpass) RSUDO_ASKPASS="true";;
 
       --user)
         shift
