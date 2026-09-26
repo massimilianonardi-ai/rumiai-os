@@ -6,7 +6,7 @@ DESCRIPTION
 
     Source it from an m-integrated shell environment:
 
-        . "$m_LIB_DIR/sys/sh/rand.lib.sh"
+        loadsyslib "rand"
 
     The library exposes four public functions:
 

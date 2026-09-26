@@ -7,7 +7,7 @@ DESCRIPTION
 
     Source it from an m-integrated shell environment:
 
-        . "$m_LIB_DIR/sys/sh/osarch.lib.sh"
+        loadsyslib "osarch"
 
     The library exposes no public callable functions.
 

@@ -2,7 +2,7 @@ NAME
     loadlib-inject.lib.sh - in-memory loadlib backend for source injection
 
 SYNOPSIS
-    . "$m_LIB_DIR/sys/sh/loadlib-inject.lib.sh"
+    loadsyslib "loadlib-inject"
 
     loadlib <library-reference>
 

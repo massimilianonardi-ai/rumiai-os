@@ -2,7 +2,7 @@ NAME
     rsudo-mod-fs.lib.sh - privileged remote filesystem transfer module
 
 SYNOPSIS
-    . "$m_LIB_DIR/sys/sh/rsudo/rsudo-mod-fs.lib.sh"
+    loadsyslib "rsudo/rsudo-mod-fs"
 
     rsudo_mod_fs_rm operand...
     rsudo_mod_fs_delete operand...

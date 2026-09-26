@@ -8,7 +8,7 @@ DESCRIPTION
 
     Source it from an m-integrated shell environment:
 
-        . "$m_LIB_DIR/sys/sh/enc.lib.sh"
+        loadsyslib "enc"
 
     The library exposes six public functions:
 

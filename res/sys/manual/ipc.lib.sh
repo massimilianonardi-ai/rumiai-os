@@ -6,7 +6,7 @@ DESCRIPTION
 
     Source it from an m-integrated shell environment:
 
-        . "$m_LIB_DIR/sys/sh/ipc.lib.sh"
+        loadsyslib "ipc"
 
     The library creates a private local duplex channel from two named pipes and
     exposes eleven public functions:

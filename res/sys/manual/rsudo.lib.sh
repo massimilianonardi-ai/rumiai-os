@@ -2,7 +2,7 @@ NAME
     rsudo.lib.sh - remote sudo execution library
 
 SYNOPSIS
-    . "$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
+    loadsyslib "rsudo/rsudo"
 
     rsudo [--interactive] [--askpass] [--connect user@host]
           [--load file:group] [--user sudo_as_user]
