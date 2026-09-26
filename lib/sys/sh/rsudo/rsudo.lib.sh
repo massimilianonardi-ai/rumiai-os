@@ -216,14 +216,17 @@ EOF
 rsudo()
 {
   RSUDO_NO_PRESERVE_QUOTES=""
+  RSUDO_INTERACTIVE=""
+  RSUDO_ASKPASS=""
+  RSUDO_AS_USER=""
 
   while [ "$#" -gt "0" ]
   do
     case "$1" in
       --) break;;
-      -n | --no-preserve-quotes) RSUDO_NO_PRESERVE_QUOTES="true";;
-      -i | --interactive) RSUDO_INTERACTIVE="true";;
-      -A | --askpass) RSUDO_ASKPASS="true";;
+      --no-preserve-quotes) RSUDO_NO_PRESERVE_QUOTES="true";;
+      --interactive) RSUDO_INTERACTIVE="true";;
+      --askpass) RSUDO_ASKPASS="true";;
 
       --user)
         shift
