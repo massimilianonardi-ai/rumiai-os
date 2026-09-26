@@ -33,11 +33,6 @@ DESCRIPTION
     timestamps rather than by interpreting tag text as semantic or numeric
     versions.
 
-    GitHub API requests are anonymous by default. When GITHUB_TOKEN is non-empty,
-    the adapter sends it as a Bearer token only to api.github.com release API
-    requests. The token is optional; artifact download URLs retain their normal
-    upstream authentication behavior.
-
 FUNCTIONS
     pkg_repository_list_versions <repository-dir>
         Print available non-draft, non-prerelease GitHub release tags in
@@ -58,11 +53,6 @@ FUNCTIONS
         the GitHub asset. With metadata override, digest requirements are owned
         by the selected typed metadata handler while the canonical descriptor
         format remains unchanged.
-
-ENVIRONMENT
-    GITHUB_TOKEN
-        Optional GitHub API bearer token used for release API requests. An empty
-        or unset value preserves anonymous access.
 
 STATUS
     Public functions return 0 on success, 1 when repository/upstream/range data
