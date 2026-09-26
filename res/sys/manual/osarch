@@ -51,8 +51,6 @@ DESCRIPTION
 
     Existing non-symlink objects at selector paths are not overwritten.
 
-    osarch-set and osarch-update remain compatibility commands for the previous
-    command surface.
 
 OUTPUT
     Bare osarch writes:
