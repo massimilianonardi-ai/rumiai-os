@@ -378,23 +378,34 @@ _pkg_integration_validate_definition()
     *'
 '*) return 1 ;;
   esac
-  if [ "$pkg_integration_format_value" = dmg-pkg ]
-  then
-    [ -n "$pkg_integration_component_file" ] || return 1
-    _pkg_integration_component_file_validate "$pkg_integration_component_file" || return 1
-    if [ -n "$pkg_integration_payload_root_file" ]
-    then
-      _pkg_integration_link_target_read "$pkg_integration_payload_root_file" || return 1
-    fi
-    if [ -n "$pkg_integration_overlay_dir" ]
-    then
-      _pkg_integration_dmg_overlay_validate "$pkg_integration_overlay_dir" || return 1
-    fi
-  else
-    [ -z "$pkg_integration_component_file" ] || return 1
-    [ -z "$pkg_integration_payload_root_file" ] || return 1
-    [ -z "$pkg_integration_overlay_dir" ] || return 1
-  fi
+  case "$pkg_integration_format_value" in
+    flat-pkg)
+      [ -n "$pkg_integration_component_file" ] || return 1
+      _pkg_integration_component_file_validate "$pkg_integration_component_file" || return 1
+      if [ -n "$pkg_integration_payload_root_file" ]
+      then
+        _pkg_integration_link_target_read "$pkg_integration_payload_root_file" || return 1
+      fi
+      [ -z "$pkg_integration_overlay_dir" ] || return 1
+      ;;
+    dmg-pkg)
+      [ -n "$pkg_integration_component_file" ] || return 1
+      _pkg_integration_component_file_validate "$pkg_integration_component_file" || return 1
+      if [ -n "$pkg_integration_payload_root_file" ]
+      then
+        _pkg_integration_link_target_read "$pkg_integration_payload_root_file" || return 1
+      fi
+      if [ -n "$pkg_integration_overlay_dir" ]
+      then
+        _pkg_integration_dmg_overlay_validate "$pkg_integration_overlay_dir" || return 1
+      fi
+      ;;
+    *)
+      [ -z "$pkg_integration_component_file" ] || return 1
+      [ -z "$pkg_integration_payload_root_file" ] || return 1
+      [ -z "$pkg_integration_overlay_dir" ] || return 1
+      ;;
+  esac
 
   _pkg_integration_facility_projection_validate "$pkg_integration_range" "$pkg_integration_root" || return 1
 

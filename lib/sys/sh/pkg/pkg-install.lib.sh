@@ -501,7 +501,13 @@ _pkg_install_one()
     pkg_install_overlay_dir=$pkg_install_selected_range/overlay
   fi
   case "$pkg_install_format" in
-    dmg-pkg) [ -n "$pkg_install_component" ] || return 1 ;;
+    flat-pkg)
+      [ -n "$pkg_install_component" ] || return 1
+      [ -z "$pkg_install_overlay_dir" ] || return 1
+      ;;
+    dmg-pkg)
+      [ -n "$pkg_install_component" ] || return 1
+      ;;
     *)
       [ -z "$pkg_install_component" ] || return 1
       [ -z "$pkg_install_payload_root" ] || return 1
@@ -520,8 +526,8 @@ _pkg_install_one()
   fi
   pkg_install_artifact="$(_pkg_install_scalar "$pkg_install_artifact_file")" || return 1
 
-  if [ "$pkg_install_format" = dmg-pkg ]
-  then
+  case "$pkg_install_format" in
+    flat-pkg|dmg-pkg)
     if [ -n "$pkg_install_overlay_dir" ]
     then
       pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" "$pkg_install_overlay_dir" || return 1
@@ -531,9 +537,11 @@ _pkg_install_one()
     else
       pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || return 1
     fi
-  else
-    pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
-  fi
+    ;;
+    *)
+      pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
+      ;;
+  esac
 
   if ! pkg_facility_provider_validate "$pkg_install_catalog" "$pkg_install_selected_range" "$pkg_install_extract_dir"
   then
