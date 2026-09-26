@@ -42,6 +42,13 @@ FUNCTIONS
         RSUDO_PASSWORD, by --connect, by --load, or by password acquisition as
         described under OPTIONS and ENVIRONMENT.
 
+        Invocation modes are local to each rsudo call. At function entry rsudo
+        clears any pre-existing target-user, interactive, askpass and
+        no-preserve-quotes mode state, then enables those modes only from the
+        options present in the current invocation. Recursive calls made by an
+        rsudo submodule therefore reuse connection/credential state but do not
+        inherit those invocation modes from the outer rsudo call.
+
         A literal -- ends rsudo option/submodule interpretation and forces the
         remaining operands to normal remote execution.
 
@@ -176,17 +183,18 @@ ENVIRONMENT
         step.
 
     RSUDO_AS_USER
-        Optional sudo target user.
+        Optional direct rsudo_core caller state selecting the sudo target user.
+        rsudo clears any ambient value before parsing its own --user option.
 
     RSUDO_INTERACTIVE
-        The literal value true selects interactive execution.
-
-    RSUDO_ASKPASS
-        The literal value true causes rsudo to read the password from stdin when
-        stdin is not a TTY.
+        Optional direct rsudo_core caller state. The literal value true selects
+        interactive execution. rsudo clears any ambient value before parsing its
+        own --interactive option.
 
     RSUDO_NO_PRESERVE_QUOTES
-        The literal value true disables normal command normalization.
+        Optional direct rsudo_core caller state. The literal value true disables
+        normal command normalization. rsudo clears any ambient value before
+        parsing its own --no-preserve-quotes option.
 
     RSUDO_CREDENTIALS_GROUP_<group>_HOST
     RSUDO_CREDENTIALS_GROUP_<group>_USER
@@ -252,4 +260,3 @@ SEE ALSO
     rsudo
     rsudo-askpass
     ipc.lib.sh
-    rsudo-env.lib.sh

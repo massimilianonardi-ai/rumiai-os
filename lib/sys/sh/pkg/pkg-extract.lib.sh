@@ -395,6 +395,61 @@ _pkg_extract_dmg_pkg_overlay_materialize()
   [ "$pkg_extract_dmg_overlay_count" -gt 0 ]
 }
 
+_pkg_extract_flat_pkg()
+(
+  [ "$#" -eq 4 ] || return 2
+  pkg_extract_flat_pkg_artifact=$1
+  pkg_extract_flat_pkg_staging=$2
+  pkg_extract_flat_pkg_component=$3
+  pkg_extract_flat_pkg_payload_root=$4
+
+  _pkg_extract_component_valid "$pkg_extract_flat_pkg_component" || return 1
+  command -v pkgutil >/dev/null 2>&1 || return 1
+
+  pkg_extract_flat_pkg_parent=${pkg_extract_flat_pkg_staging%/*}
+  [ "$pkg_extract_flat_pkg_parent" != "$pkg_extract_flat_pkg_staging" ] || return 1
+  pkg_extract_flat_pkg_counter=0
+  while :
+  do
+    pkg_extract_flat_pkg_work="$pkg_extract_flat_pkg_parent/m-pkg-flat-$-$pkg_extract_flat_pkg_counter"
+    if command -p -- mkdir "$pkg_extract_flat_pkg_work" 2>/dev/null
+    then
+      break
+    fi
+    pkg_extract_flat_pkg_counter=$((pkg_extract_flat_pkg_counter + 1))
+    [ "$pkg_extract_flat_pkg_counter" -lt 1000 ] || return 1
+  done
+  trap 'command -p -- rm -rf -- "$pkg_extract_flat_pkg_work" 2>/dev/null || :' 0 HUP INT TERM
+
+  pkg_extract_flat_pkg_expanded="$pkg_extract_flat_pkg_work/expanded"
+  command -- pkgutil --expand-full "$pkg_extract_flat_pkg_artifact" "$pkg_extract_flat_pkg_expanded" || return 1
+
+  pkg_extract_flat_pkg_component_dir="$pkg_extract_flat_pkg_expanded/$pkg_extract_flat_pkg_component"
+  [ -d "$pkg_extract_flat_pkg_component_dir" ] && [ ! -L "$pkg_extract_flat_pkg_component_dir" ] || return 1
+
+  pkg_extract_flat_pkg_payload="$pkg_extract_flat_pkg_component_dir/Payload"
+  [ -d "$pkg_extract_flat_pkg_payload" ] && [ ! -L "$pkg_extract_flat_pkg_payload" ] || return 1
+
+  pkg_extract_flat_pkg_selected=$pkg_extract_flat_pkg_payload
+  if [ -n "$pkg_extract_flat_pkg_payload_root" ]
+  then
+    _pkg_extract_relative_path_valid "$pkg_extract_flat_pkg_payload_root" || return 1
+    readpathce pkg_extract_flat_pkg_base "$pkg_extract_flat_pkg_payload" || return 1
+    pkg_extract_flat_pkg_candidate="$pkg_extract_flat_pkg_payload/$pkg_extract_flat_pkg_payload_root"
+    [ -d "$pkg_extract_flat_pkg_candidate" ] && [ ! -L "$pkg_extract_flat_pkg_candidate" ] || return 1
+    readpathce pkg_extract_flat_pkg_selected "$pkg_extract_flat_pkg_candidate" || return 1
+    case "$pkg_extract_flat_pkg_selected" in
+      "$pkg_extract_flat_pkg_base"/*) : ;;
+      *) return 1 ;;
+    esac
+  fi
+
+  _pkg_extract_move_contents "$pkg_extract_flat_pkg_selected" "$pkg_extract_flat_pkg_staging" || return 1
+
+  command -p -- rm -rf -- "$pkg_extract_flat_pkg_work" || return 1
+  trap - 0 HUP INT TERM
+)
+
 _pkg_extract_dmg_pkg()
 (
   [ "$#" -eq 5 ] || return 2
@@ -481,6 +536,15 @@ pkg_extract()
   [ -f "$pkg_extract_artifact" ] && [ -d "$pkg_extract_staging" ] || return 1
 
   case "$pkg_extract_format" in
+    flat-pkg)
+      [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
+      if [ "$#" -eq 5 ]
+      then
+        _pkg_extract_relative_path_valid "$pkg_extract_payload_root" || return 2
+      fi
+      _pkg_extract_flat_pkg "$pkg_extract_artifact" "$pkg_extract_staging" "$pkg_extract_component" "$pkg_extract_payload_root"
+      pkg_extract_status=$?
+      ;;
     dmg-pkg)
       [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || [ "$#" -eq 6 ] || return 2
       if [ -n "$pkg_extract_payload_root" ]

@@ -1,0 +1,47 @@
+NAME
+    rsudo-askpass - internal SSH askpass bridge used by rsudo
+
+SYNOPSIS
+    rsudo-askpass [prompt...]
+
+DESCRIPTION
+    rsudo-askpass is the m-owned helper used by rsudo when SSH requests a
+    password through SSH_ASKPASS.
+
+    The command retrieves one password value from the one-shot IPC object named
+    by m_RSUDO_ASKPASS_ID and writes that value to standard output followed by a
+    newline. Prompt operands supplied by SSH are ignored.
+
+    This is a technical helper for rsudo authentication, not the interface for
+    selecting rsudo password acquisition. Use rsudo --askpass for the rsudo
+    command mode that consumes a password record from its own standard input.
+
+ENVIRONMENT
+    m_RSUDO_ASKPASS_ID
+        Required one-shot IPC identifier containing the password value to
+        retrieve.
+
+OUTPUT
+    On success, standard output carries the retrieved password followed by a
+    newline because SSH_ASKPASS consumes the helper's standard output as
+    authentication data.
+
+EXIT STATUS
+    0   Password retrieval and output succeeded.
+    1   m_RSUDO_ASKPASS_ID is absent or the one-shot IPC value cannot be
+        retrieved.
+
+    An output failure may also produce a non-zero status.
+
+SECURITY
+    Standard output deliberately contains authentication data for SSH. Do not
+    invoke or redirect rsudo-askpass as an ordinary user-facing password display
+    command.
+
+    The one-shot IPC lifecycle is owned by the rsudo operation that created the
+    identifier.
+
+SEE ALSO
+    rsudo
+    rsudo.lib.sh
+    ipc.lib.sh
