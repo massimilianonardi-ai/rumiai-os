@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/pkg/pkg-local.lib.sh"
+loadsyslib "pkg/pkg-local"
 
 _pkg_uninstall_error()
 {

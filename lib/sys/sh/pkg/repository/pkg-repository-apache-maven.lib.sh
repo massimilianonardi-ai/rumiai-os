@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-artifact.lib.sh"
+loadsyslib "pkg/repository/pkg-repository-artifact"
 
 _pkg_repository_apache_maven_scalar()
 {

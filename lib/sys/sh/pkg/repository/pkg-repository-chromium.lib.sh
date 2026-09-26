@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/json.lib.sh"
+loadsyslib "json"
 
 _pkg_repository_chromium_scalar()
 {

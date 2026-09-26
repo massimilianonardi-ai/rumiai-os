@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/pkg/pkg-local.lib.sh"
+loadsyslib "pkg/pkg-local"
 
 pkg_versions()
 (

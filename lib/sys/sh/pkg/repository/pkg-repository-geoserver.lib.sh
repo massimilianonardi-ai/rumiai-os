@@ -1,5 +1,5 @@
-. "$m_LIB_DIR/sys/sh/json.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-artifact.lib.sh"
+loadsyslib "json"
+loadsyslib "pkg/repository/pkg-repository-artifact"
 
 _pkg_repository_geoserver_scalar()
 {

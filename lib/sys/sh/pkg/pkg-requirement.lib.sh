@@ -1,5 +1,5 @@
-. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-dependency.lib.sh"
+loadsyslib "pkg/facility/pkg-facility"
+loadsyslib "pkg/facility/pkg-dependency"
 
 pkg_requirement()
 (
