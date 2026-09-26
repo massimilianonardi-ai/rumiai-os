@@ -43,9 +43,18 @@ valid_namespace_name()
   done
 }
 
-validlib()
+loadsyslib()
 {
-  [ "$#" -eq "1" ] && [ -n "$1" ] && [ -f "$1" ] && [ -r "$1" ] && printf '%s\n' "$m_LIB_DIR/${1}.lib.sh" || return 1
+  loadlib "sys/sh/$@"
+}
+
+loadlib()
+{
+  [ "$#" -ge 1 ] || return 1
+
+  [ -f "$m_LIB_DIR/${1}.lib.sh" ] && [ -r "$m_LIB_DIR/${1}.lib.sh" ] || return 2
+
+  eval 'shift; . "$m_LIB_DIR/'"${1}"'.lib.sh"'
 }
 
 #-------------------------------------------------------------------------------
