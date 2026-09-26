@@ -87,9 +87,9 @@
 #   2  invalid API usage or menu/provider/terminal failure
 #   signal-derived statuses are propagated by the session
 
-. "$m_LIB_DIR/sys/sh/array.lib.sh"
-. "$m_LIB_DIR/sys/sh/map.lib.sh"
-. "$m_LIB_DIR/sys/sh/term.lib.sh"
+loadsyslib "array"
+loadsyslib "map"
+loadsyslib "term"
 
 #-------------------------------------------------------------------------------
 

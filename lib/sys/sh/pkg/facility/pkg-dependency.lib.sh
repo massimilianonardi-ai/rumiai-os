@@ -1,4 +1,4 @@
-. "$m_LIB_DIR/sys/sh/pkg/pkg-provider.lib.sh"
+loadsyslib "pkg/pkg-provider"
 
 _pkg_dependency_constraint_parse()
 {
@@ -275,7 +275,7 @@ _pkg_dependency_consumer_osarch_resolve()
   then
     if [ -z "${m_OSARCH-}" ]
     then
-      . "$m_LIB_DIR/sys/sh/osarch.lib.sh" || return 1
+      loadsyslib "osarch" || return 1
     fi
     pkg_dependency_effective_osarch=$m_OSARCH
   fi

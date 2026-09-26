@@ -1,6 +1,6 @@
-. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-cmd.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-env.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/facility/pkg-facility-service.lib.sh"
+loadsyslib "pkg/facility/pkg-facility-cmd"
+loadsyslib "pkg/facility/pkg-facility-env"
+loadsyslib "pkg/facility/pkg-facility-service"
 
 _pkg_facility_name_valid()
 {

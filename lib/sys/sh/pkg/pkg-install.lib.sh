@@ -1,6 +1,6 @@
-. "$m_LIB_DIR/sys/sh/pkg/pkg-download.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/pkg-extract.lib.sh"
-. "$m_LIB_DIR/sys/sh/pkg/pkg-integration.lib.sh"
+loadsyslib "pkg/pkg-download"
+loadsyslib "pkg/pkg-extract"
+loadsyslib "pkg/pkg-integration"
 
 _pkg_install_error()
 {

@@ -6,8 +6,8 @@ case $- in *v*) set +v;; esac
 LC_ALL=C
 export LC_ALL
 
-. "$m_LIB_DIR/sys/sh/array.lib.sh"
-. "$m_LIB_DIR/sys/sh/term.lib.sh"
+loadsyslib "array"
+loadsyslib "term"
 
 vsed_error=
 vsed_screen=0
