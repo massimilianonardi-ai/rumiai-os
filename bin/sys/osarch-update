@@ -1,5 +1,0 @@
-#!/usr/bin/env m
-
-[ "$#" -eq 0 ] || fatal execution invalid-arguments
-
-"$m_BIN_SYS_DIR/osarch" update
