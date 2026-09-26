@@ -180,7 +180,7 @@ IFS= read -r RSUDO_PASSWORD < "\$RSUDO_FIFO" || exit 1
 
 printf '%s\n' "\$RSUDO_PASSWORD" | sudo -S --prompt='' -v || exit 1
 
-unset RSUDO_PASSWORD
+unset RSUDO_PASSWORD;
 EOF
 )" || exit 1
 
