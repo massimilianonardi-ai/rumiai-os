@@ -167,7 +167,9 @@ then
 
   m_COMMAND_HEADER=''
   IFS= read -r m_COMMAND_HEADER < "$m_COMMAND_BIN" || :
-  if [ "$m_COMMAND_HEADER" = '#!/usr/bin/env m' ]
+  if [ "$m_COMMAND_HEADER" = '#!/usr/bin/env m' ] ||
+     [ "$m_COMMAND_BIN" = "$m_ROOT/rumiai-os" ] ||
+     [ "$m_COMMAND_BIN" = "$m_ROOT/rumiai-os-sh" ]
   then
     unset m_COMMAND_HEADER
     shift

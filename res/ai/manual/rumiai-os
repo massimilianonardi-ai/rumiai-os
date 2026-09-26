@@ -5,12 +5,12 @@ SYNOPSIS
     rumiai-os [<shell-argument> ...]
 
 DESCRIPTION
-    rumiai-os is a branded root entrypoint. In the current revision it resolves
-    to the shared rumiai-os-sh implementation.
+    rumiai-os is the current shell-oriented branded root entrypoint.
 
-    The entrypoint bootstraps through m, prepends the branded ai platform and
-    generic command directories to PATH, and starts the managed shell facility.
-    Arguments are forwarded to that shell.
+    When invoked outside an initialized m runtime it resolves its installation
+    root and re-enters through the technical m bootstrap. Inside m it prepends
+    the branded ai-osarch and ai command directories to PATH and starts the
+    managed shell facility. Arguments are forwarded to that shell.
 
     This current shell-oriented entrypoint does not define the eventual RumiAI
     graphical interface architecture.
