@@ -112,16 +112,37 @@ export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
 export -- m_LOG_LEVEL
 
 #-------------------------------------------------------------------------------
+# LIBRARY LOADER
+#-------------------------------------------------------------------------------
+
+loadsyslib()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  loadlib "sys/sh/$1"
+}
+
+loadlib()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  set -- "$m_LIB_DIR/${1}.lib.sh"
+  [ -f "$1" ] && [ -r "$1" ] || return 2
+
+  . "$1"
+}
+
+#-------------------------------------------------------------------------------
 # LOAD CORE LIB
 #-------------------------------------------------------------------------------
 
-. "$m_LIB_DIR/sys/sh/core.lib.sh"
+loadsyslib "core"
 
 #-------------------------------------------------------------------------------
 # FACILITY DEFAULT ENVIRONMENT
 #-------------------------------------------------------------------------------
 
-. "$m_LIB_DIR/sys/sh/pkg/pkg-provider.lib.sh"
+loadsyslib "pkg/pkg-provider"
 
 if ! pkg_provider_global_environment_apply
 then

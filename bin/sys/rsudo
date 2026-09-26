@@ -1,6 +1,6 @@
 #!/usr/bin/env m
 
-. "$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
+loadsyslib "rsudo/rsudo"
 
 log info rsudo command-called
 

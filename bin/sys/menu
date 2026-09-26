@@ -1,6 +1,6 @@
 #!/usr/bin/env m
 
-. "$m_LIB_DIR/sys/sh/menu.lib.sh"
+loadsyslib "menu"
 
 menu_command_fail()
 {

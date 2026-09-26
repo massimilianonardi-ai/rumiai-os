@@ -1,6 +1,6 @@
 #!/usr/bin/env m
 
-. "$m_LIB_DIR/sys/sh/array.lib.sh"
+loadsyslib "array"
 
 gitman_display_safe()
 {

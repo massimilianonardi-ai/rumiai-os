@@ -43,25 +43,6 @@ valid_namespace_name()
   done
 }
 
-loadsyslib()
-{
-  [ "$#" -ge 1 ] || return 1
-
-  loadlib "sys/sh/$@"
-}
-
-loadlib()
-{
-  [ "$#" -ge 1 ] || return 1
-
-  set -- "$m_LIB_DIR/${1}.lib.sh"
-  [ -f "$1" ] && [ -r "$1" ] || return 2
-
-  . "$1"
-}
-
-#-------------------------------------------------------------------------------
-
 log_base_print()
 {
   if [ "$#" -gt "0" ]

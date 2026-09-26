@@ -180,7 +180,7 @@ case "$1" in
   update)
     [ "$#" -eq 1 ] || fatal execution invalid-arguments
 
-    . "$m_LIB_DIR/sys/sh/osarch.lib.sh"
+    loadsyslib "osarch"
     osarch_valid "$m_OSARCH" || fatal system osarch-update-failure osarch "$m_OSARCH"
 
     osarch_apply "$m_OSARCH" || fatal execution execution-failed operation osarch-update
