@@ -17,11 +17,6 @@ loadlib_inject_stream()
     [ -r "$_loadlib_inject_stream_command" ] ||
     return 2
 
-  _loadlib_inject_stream_backend="$m_LIB_DIR/sys/sh/loadlib-inject.lib.sh"
-  [ -f "$_loadlib_inject_stream_backend" ] &&
-    [ -r "$_loadlib_inject_stream_backend" ] ||
-    return 2
-
   _loadlib_inject_stream_refs=
   _loadlib_inject_stream_count=0
   _loadlib_inject_stream_core=0
@@ -65,8 +60,6 @@ loadsyslib()
 }
 EOF_LOADSYS
 
-  cat "$_loadlib_inject_stream_backend" || exit 3
-
   eval "set -- $_loadlib_inject_stream_refs"
 
   _loadlib_inject_stream_index=0
@@ -80,7 +73,7 @@ EOF_LOADSYS
     printf '\n}\n' || exit 3
   done
 
-  printf '\n_loadlib_inject_dispatch()\n{\n' || exit 3
+  printf '\nloadlib()\n{\n' || exit 3
   printf '  [ "$#" -eq 1 ] || return 1\n' || exit 3
   printf '  case "$1" in\n' || exit 3
 
