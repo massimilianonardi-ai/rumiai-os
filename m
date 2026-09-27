@@ -112,42 +112,10 @@ export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
 export -- m_LOG_LEVEL
 
 #-------------------------------------------------------------------------------
-# LIBRARY LOADER
-#-------------------------------------------------------------------------------
-
-loadsyslib()
-{
-  [ "$#" -eq 1 ] || return 1
-
-  loadlib "sys/sh/$1"
-}
-
-loadlib()
-{
-  [ "$#" -eq 1 ] || return 1
-
-  set -- "$m_LIB_DIR/${1}.lib.sh"
-  [ -f "$1" ] && [ -r "$1" ] || return 2
-
-  . "$1"
-}
-
-#-------------------------------------------------------------------------------
 # LOAD CORE LIB
 #-------------------------------------------------------------------------------
 
-loadsyslib "core"
-
-#-------------------------------------------------------------------------------
-# FACILITY DEFAULT ENVIRONMENT
-#-------------------------------------------------------------------------------
-
-loadsyslib "pkg/pkg-provider"
-
-if ! pkg_provider_global_environment_apply
-then
-  printf -- '%s\n' 'bootstrap provider environment error' >&2
-fi
+. "$m_LIB_DIR/sys/sh/core.lib.sh"
 
 #-------------------------------------------------------------------------------
 # EXECUTE
