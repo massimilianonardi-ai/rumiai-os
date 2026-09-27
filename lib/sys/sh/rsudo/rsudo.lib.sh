@@ -223,7 +223,8 @@ EOF
     fi
   fi
 
-  log info rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$RSUDO_STATUS" command "$*"
+  log info rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$RSUDO_STATUS" argn "$#"
+  log trace rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$RSUDO_STATUS" command "$*"
   exit "$RSUDO_STATUS"
 )
 
