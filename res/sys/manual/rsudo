@@ -116,6 +116,18 @@ INPUT AND OUTPUT
     Interactive execution uses a remote terminal path suitable for TTY-requiring
     commands.
 
+    With --interactive and non-TTY standard input, the remaining input after any
+    --askpass password record is consumed locally as shell source for the remote
+    privileged operation. A non-empty source stream is executed under remote sudo
+    in the same interactive shell environment as the requested command.
+
+    When command operands are present, their invocation follows the injected
+    source. Normal mode preserves their argument meaning; --no-preserve-quotes
+    applies its alternate command-passing behavior to that appended invocation.
+
+    With no command operands, a non-empty source stream is the complete remote
+    shell program. The source stream is not forwarded as ordinary target stdin.
+
 EXIT STATUS
     When remote execution is reached, rsudo propagates the resulting operation
     status.

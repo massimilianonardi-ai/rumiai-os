@@ -39,7 +39,30 @@ rsudo_core()
   [ -n "$RSUDO_HOST" ] && [ -n "$RSUDO_USER" ] && [ -n "$RSUDO_PASSWORD" ] || exit 1
 
   # check args and eventually manipulate them to a usable form
-  if [ "$#" -eq "0" ] || [ -z "$*" ]
+  RSUDO_PIPE_SOURCE=""
+
+  if [ "$RSUDO_INTERACTIVE" = "true" ] && [ ! -t 0 ]
+  then
+    RSUDO_PIPE_SOURCE="$(cat && printf x)" || exit 2
+    RSUDO_PIPE_SOURCE="${RSUDO_PIPE_SOURCE%x}"
+  fi
+
+  if [ -n "$RSUDO_PIPE_SOURCE" ]
+  then
+    if [ "$#" -gt "0" ]
+    then
+      if [ "$RSUDO_NO_PRESERVE_QUOTES" = "true" ]
+      then
+        RSUDO_PIPE_SOURCE="${RSUDO_PIPE_SOURCE}
+$*"
+      else
+        RSUDO_PIPE_SOURCE="${RSUDO_PIPE_SOURCE}
+$(quote "$@")"
+      fi
+    fi
+
+    set -- sh -c "$(quote "$RSUDO_PIPE_SOURCE")"
+  elif [ "$#" -eq "0" ] || [ -z "$*" ]
   then
     log debug rsudo no-arguments
     if [ -t 0 ]
@@ -51,19 +74,13 @@ rsudo_core()
       log debug rsudo default-command mode non-interactive command "sh -s" reason stdin-not-tty
       set -- sh -s
     fi
-  else
-    if [ "$RSUDO_INTERACTIVE" = "true" ] && [ ! -t 0 ]
-    then
-      RSUDO_PIPE_COMMANDS="$(cat)" || exit 2
-      [ -n "$RSUDO_PIPE_COMMANDS" ] && set -- "${RSUDO_PIPE_COMMANDS}" "$@"
-    fi
-
-    if [ "$RSUDO_NO_PRESERVE_QUOTES" != "true" ]
-    then
-      [ "$#" -gt "1" ] && set -- "$(quote "$@")"
-      set -- sh -c "$(quote "$1")"
-    fi
+  elif [ "$RSUDO_NO_PRESERVE_QUOTES" != "true" ]
+  then
+    [ "$#" -gt "1" ] && set -- "$(quote "$@")"
+    set -- sh -c "$(quote "$1")"
   fi
+
+  unset RSUDO_PIPE_SOURCE
 
 
 
