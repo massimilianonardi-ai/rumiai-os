@@ -108,11 +108,21 @@ FUNCTIONS
         In interactive mode, the target is executed through a remote terminal
         path suitable for commands that require a TTY.
 
+        When interactive mode receives non-TTY standard input, the remaining
+        input after password acquisition is consumed locally as shell source for
+        the privileged remote program. If command operands are present, their
+        invocation is appended after that source in the same shell environment.
+        With no command operands, non-empty source is the complete program.
+
+        The source stream is not ordinary target stdin. Normal quote-preserving
+        mode preserves appended command argument meaning; no-preserve-quotes uses
+        its alternate command-passing behavior for that appended invocation.
+
         Return status:
             final remote execution status
                 propagated when the operation reaches the remote target
             1   missing required connection state or local setup failed
-            2   failed to collect piped interactive command input
+            2   failed to collect piped interactive source input
 
 OPTIONS
     --interactive
@@ -212,6 +222,11 @@ INPUT AND OUTPUT
 
     Interactive mode uses the terminal for the remote interactive operation.
 
+    In interactive mode, non-TTY standard input is reserved for source injection
+    after any --askpass password record. Non-empty injected source executes under
+    remote sudo and may establish shell state used by command operands that follow
+    it. It is not forwarded as ordinary target stdin.
+
     Password data is authentication data and is not ordinary command output.
 
 REMOTE PRIVILEGE CASES
@@ -234,7 +249,7 @@ CLEANUP AND TERMINATION
     continuing or successful operation.
 
 DEPENDENCIES
-    rsudo.lib.sh sources:
+    rsudo.lib.sh loads:
 
         rand.lib.sh
         enc.lib.sh
