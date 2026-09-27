@@ -13,9 +13,10 @@ FUNCTIONS
         facility dependencies, materialize the managed concrete and its
         command/environment/facility/state metadata, validate and materialize
         declarative facility command/environment projections plus service
-        realization metadata, and index declared facilities. PATH is rejected as
-        facility-env metadata because command-path exposure is owned by facility-cmd
-        publication.
+        realization metadata, and index declared facilities. A facility command may
+        project either a useful-root executable or a validated ordinary package
+        command of the same concrete provider. PATH is rejected as facility-env
+        metadata because command-path exposure is owned by facility-cmd publication.
 
         pkg_integrate does not acquire or derive pkg-catalog context. The normal
         pkg-install path performs exact-snapshot provider conformance before calling

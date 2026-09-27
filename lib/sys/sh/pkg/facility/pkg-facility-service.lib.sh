@@ -89,27 +89,10 @@ _pkg_facility_service_realization_validate()
   _pkg_facility_service_realization_start_read "$pkg_facility_service_realization" || return 1
 
   pkg_facility_service_command=$pkg_facility_service_scalar
-  _pkg_facility_cmd_name_valid "$pkg_facility_service_command" || return 1
-
-  pkg_facility_service_command_file="$pkg_facility_service_definition/cmd/$pkg_facility_service_command"
-  [ -f "$pkg_facility_service_command_file" ] && \
-  [ ! -L "$pkg_facility_service_command_file" ] && \
-  [ -r "$pkg_facility_service_command_file" ] && \
-  [ ! -x "$pkg_facility_service_command_file" ] || return 1
-
-  pkg_facility_service_link="$pkg_facility_service_definition/link/$pkg_facility_service_command"
-  _pkg_facility_cmd_target_read "$pkg_facility_service_link" || return 1
-
-  readpathce pkg_facility_service_root_resolved "$pkg_facility_service_root" || return 1
-  [ -e "$pkg_facility_service_root/$pkg_facility_cmd_target" ] || \
-  [ -L "$pkg_facility_service_root/$pkg_facility_cmd_target" ] || return 1
-  readpathce pkg_facility_service_target_resolved "$pkg_facility_service_root/$pkg_facility_cmd_target" || return 1
-  case "$pkg_facility_service_target_resolved" in
-    "$pkg_facility_service_root_resolved"/*) : ;;
-    *) return 1 ;;
-  esac
-
-  [ -f "$pkg_facility_service_target_resolved" ] && [ -x "$pkg_facility_service_target_resolved" ]
+  _pkg_facility_cmd_package_command_validate \
+    "$pkg_facility_service_definition" \
+    "$pkg_facility_service_command" \
+    "$pkg_facility_service_root"
 }
 
 _pkg_facility_service_provider_validate()

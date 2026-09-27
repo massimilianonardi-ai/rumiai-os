@@ -150,7 +150,10 @@ _pkg_integration_facility_cmd_validate()
     pkg_integration_projection_facility=${pkg_integration_facility_dir##*/}
     _pkg_facility_name_valid "$pkg_integration_projection_facility" || return 1
     _pkg_integration_facility_declared "$pkg_integration_projection_range" "$pkg_integration_projection_facility" || return 1
-    _pkg_facility_cmd_realization_validate "$pkg_integration_facility_dir" "$pkg_integration_projection_root" || return 1
+    _pkg_facility_cmd_realization_validate \
+      "$pkg_integration_facility_dir" \
+      "$pkg_integration_projection_range" \
+      "$pkg_integration_projection_root" || return 1
   done
 
   for pkg_integration_hidden in "$pkg_integration_projection_dir"/.[!.]* "$pkg_integration_projection_dir"/..?*
@@ -492,8 +495,21 @@ _pkg_integration_materialize_facility_projection()
       do
         [ -f "$pkg_integration_descriptor" ] || continue
         pkg_integration_projection_command=${pkg_integration_descriptor##*/}
-        _pkg_integration_link_target_read "$pkg_integration_descriptor" || return 1
-        command -p -- ln -s "../../root/$pkg_integration_link_target" "$pkg_integration_concrete/facility-cmd/$pkg_integration_projection_facility/$pkg_integration_projection_command" || return 1
+        _pkg_facility_cmd_realization_read "$pkg_integration_descriptor" || return 1
+        case "$pkg_facility_cmd_realization_type" in
+          root)
+            pkg_integration_projection_target="../../root/$pkg_facility_cmd_realization_value"
+            ;;
+          package-command)
+            pkg_integration_projection_target="../../cmd/$pkg_facility_cmd_realization_value"
+            ;;
+          *)
+            return 1
+            ;;
+        esac
+        command -p -- ln -s \
+          "$pkg_integration_projection_target" \
+          "$pkg_integration_concrete/facility-cmd/$pkg_integration_projection_facility/$pkg_integration_projection_command" || return 1
       done
     done
   fi

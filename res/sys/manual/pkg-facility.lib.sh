@@ -30,7 +30,9 @@ FUNCTIONS
         Validate every facility declared by one provider definition against the
         exact contract under <catalog-root>/facility and validate the provider's
         facility-cmd/facility-env/facility-service realization against that
-        contract and useful root.
+        contract and useful root. A facility-cmd realization may delegate to a
+        validated ordinary command of the same provider definition; such delegation
+        remains bound to that exact provider concrete.
         provider-definition-dir must resolve beneath the same <catalog-root>/pkg
         tree, mechanically preserving the same-snapshot conformance boundary.
 

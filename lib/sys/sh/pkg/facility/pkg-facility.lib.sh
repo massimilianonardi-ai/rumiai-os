@@ -342,6 +342,7 @@ _pkg_facility_provider_part_validate()
       _pkg_facility_cmd_provider_validate \
         "$pkg_facility_provider_contract_part" \
         "$pkg_facility_provider_definition/facility-cmd/$pkg_facility_provider_name" \
+        "$pkg_facility_provider_definition" \
         "$pkg_facility_provider_root"
       ;;
     env)

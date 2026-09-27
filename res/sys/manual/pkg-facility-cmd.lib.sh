@@ -3,10 +3,15 @@ NAME
 
 DESCRIPTION
     pkg-facility-cmd.lib.sh implements the trusted internal validation semantics for
-    the cmd typed facility part. It validates realization structure and executable
-    targets contained by the provider useful root, and composes that validation with
-    exact contract membership for provider conformance. Package integration reuses
-    the same internal realization validation without acquiring catalog context.
+    the cmd typed facility part. A provider command realization may name either an
+    executable contained by the provider useful root or one validated ordinary
+    package command of the same provider through the
+    package-command<TAB><command> descriptor form. Same-provider package-command
+    delegation validates the package command definition/link against that provider's
+    useful root and never authorizes unrelated PATH resolution. Exact contract
+    membership is then composed with realization validation for provider
+    conformance. Package integration reuses the same internal realization
+    validation without acquiring catalog context.
 
     The library performs no command publication or provider selection.
 
