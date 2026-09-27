@@ -15,9 +15,12 @@ DESCRIPTION
     dependencies, or compute transitive closure.
 
     core must be included explicitly in the supplied library-reference list.
-    The generated program installs the ordinary loadsyslib specialization, the
-    in-memory loadlib backend from loadlib-inject.lib.sh, one wrapper for every
-    selected library, and a dispatcher containing exactly those references.
+    The generated program installs the ordinary loadsyslib specialization, one
+    wrapper for every selected library, and an in-memory loadlib implementation
+    whose case dispatches directly to exactly those generated wrappers.
+
+    A library reference that is not embedded returns status 2 from the generated
+    loadlib implementation rather than falling back to a remote m library tree.
 
     The generated program then loads core, sets the command positional
     parameters from command-arg..., and appends command-source unchanged.
@@ -52,8 +55,7 @@ RETURN STATUS
     0   Stream generated successfully.
     1   Invalid invocation, missing -- separator, no library references, or core
         was not explicitly selected.
-    2   command-source, loadlib-inject.lib.sh, or a selected library is not a
-        readable regular file.
+    2   command-source or a selected library is not a readable regular file.
     3   Quoting or output generation failed.
 
 CALLER OBLIGATIONS
@@ -67,5 +69,4 @@ CALLER OBLIGATIONS
     the core quote function.
 
 SEE ALSO
-    loadlib-inject.lib.sh
     rsudo
