@@ -6,6 +6,8 @@ loadsyslib "loadlib-inject-stream"
 
 rsudo_mod_exec_inject()
 (
+  set -o pipefail
+  
   { loadlib_inject_stream "$@"; if [ ! -t 0 ]; then cat; fi; } | rsudo
 )
 
