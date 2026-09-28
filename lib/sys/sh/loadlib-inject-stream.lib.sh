@@ -5,6 +5,8 @@
 #
 # The caller supplies the complete embedded library set explicitly.
 # No dependency parsing or transitive-closure discovery is performed.
+# Non-TTY standard input, when present, is appended as shell source after the
+# selected libraries and optional command source.
 
 loadlib_inject_stream()
 (
@@ -105,5 +107,11 @@ loadlib_inject_stream()
     fi
 
     cat "$_loadlib_inject_stream_command" || exit 3
+  fi
+
+  if [ ! -t 0 ]
+  then
+    printf '\n' || exit 3
+    cat || exit 3
   fi
 )

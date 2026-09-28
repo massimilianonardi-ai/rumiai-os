@@ -14,12 +14,12 @@ DESCRIPTION
     RSUDO_USER and RSUDO_PASSWORD, through --connect and --load, or through the
     documented password-acquisition paths.
 
-    rsudo invocation modes are not inherited from ambient shell state. Every
-    invocation starts with target-user, interactive, askpass and
-    no-preserve-quotes modes disabled, then enables them only from options in
-    that invocation. This rule also applies when an rsudo submodule calls rsudo
-    recursively: connection/credential state is reusable, invocation modes are
-    not.
+    Connection/credential state, sudo target-user state and interactive mode may
+    remain active in the current shell and are inherited by recursive rsudo
+    calls. --user and --interactive update those reusable values.
+
+    Askpass and no-preserve-quotes are invocation-local: every rsudo call clears
+    those two modes before parsing its own options.
 
     A literal -- ends rsudo option and submodule interpretation and sends the
     remaining operands to normal remote execution.
@@ -77,9 +77,11 @@ RECURSIVE CALLS
     Submodules execute in the current shell and may call rsudo again.
 
     Recursive rsudo calls reuse current connection/credential state such as
-    RSUDO_HOST, RSUDO_USER and RSUDO_PASSWORD. They begin with default invocation
-    modes and therefore do not implicitly inherit --user, --interactive,
-    --askpass or --no-preserve-quotes from the outer call.
+    RSUDO_HOST, RSUDO_USER and RSUDO_PASSWORD. They also inherit current
+    RSUDO_AS_USER and RSUDO_INTERACTIVE state.
+
+    RSUDO_ASKPASS and RSUDO_NO_PRESERVE_QUOTES are cleared at each rsudo call
+    and therefore are not inherited implicitly.
 
 ENVIRONMENT
     RSUDO_HOST
@@ -101,11 +103,29 @@ ENVIRONMENT
     USER
         Fallback login user when RSUDO_USER is empty.
 
-    RSUDO_AS_USER, RSUDO_INTERACTIVE, RSUDO_ASKPASS and
-    RSUDO_NO_PRESERVE_QUOTES are not ambient configuration inputs to the rsudo
-    command. rsudo clears those mode variables before processing each command
-    invocation. Direct callers of the public rsudo_core library function have a
-    separate lower-level caller-state contract documented by rsudo.lib.sh.
+    RSUDO_AS_USER and RSUDO_INTERACTIVE are reusable rsudo caller state and may
+    be inherited by recursive calls. RSUDO_ASKPASS and
+    RSUDO_NO_PRESERVE_QUOTES are invocation-local and are cleared before each
+    rsudo invocation parses its options.
+
+EXEC INJECT SUBMODULE
+    rsudo exec inject [library-reference...] [-- command-source [command-arg...]]
+
+    The exec inject operation generates an in-memory library/source program
+    through loadlib_inject_stream and pipes that complete generated source into a
+    recursive rsudo call.
+
+    Selected libraries are explicit and follow the loadlib_inject_stream
+    contract. An optional command-source and its arguments follow --.
+
+    When input remains after outer password acquisition, non-TTY standard input
+    is appended by loadlib_inject_stream as shell source after the injected
+    libraries and optional command-source. It is therefore source code, not
+    runtime stdin for command-source.
+
+    The recursive rsudo call inherits current target-user and interactive state.
+    Pipeline failure propagation uses the POSIX pipefail option so a generator or
+    transport failure produces a non-zero module result.
 
 INPUT AND OUTPUT
     Non-interactive execution preserves the target's intended standard input.

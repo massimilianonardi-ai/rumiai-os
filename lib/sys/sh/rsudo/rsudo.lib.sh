@@ -234,9 +234,7 @@ EOF
 rsudo()
 {
   RSUDO_NO_PRESERVE_QUOTES=""
-  # RSUDO_INTERACTIVE=""
   RSUDO_ASKPASS=""
-  # RSUDO_AS_USER=""
 
   while [ "$#" -gt "0" ]
   do

@@ -42,12 +42,15 @@ FUNCTIONS
         RSUDO_PASSWORD, by --connect, by --load, or by password acquisition as
         described under OPTIONS and ENVIRONMENT.
 
-        Invocation modes are local to each rsudo call. At function entry rsudo
-        clears any pre-existing target-user, interactive, askpass and
-        no-preserve-quotes mode state, then enables those modes only from the
-        options present in the current invocation. Recursive calls made by an
-        rsudo submodule therefore reuse connection/credential state but do not
-        inherit those invocation modes from the outer rsudo call.
+        Target-user and interactive state are reusable rsudo caller state.
+        Existing RSUDO_AS_USER and RSUDO_INTERACTIVE values remain active unless
+        the current invocation changes them through --user or --interactive.
+        This allows submodules and recursive rsudo calls to preserve the selected
+        privilege target and interactive transport mode.
+
+        Askpass and no-preserve-quotes remain invocation-local. At function entry
+        rsudo clears RSUDO_ASKPASS and RSUDO_NO_PRESERVE_QUOTES, then enables
+        them only from options in the current invocation.
 
         A literal -- ends rsudo option/submodule interpretation and forces the
         remaining operands to normal remote execution.
@@ -193,13 +196,14 @@ ENVIRONMENT
         step.
 
     RSUDO_AS_USER
-        Optional direct rsudo_core caller state selecting the sudo target user.
-        rsudo clears any ambient value before parsing its own --user option.
+        Optional reusable rsudo/rsudo_core caller state selecting the sudo target
+        user. A current --user option replaces the existing value. Recursive
+        rsudo calls inherit the current value.
 
     RSUDO_INTERACTIVE
-        Optional direct rsudo_core caller state. The literal value true selects
-        interactive execution. rsudo clears any ambient value before parsing its
-        own --interactive option.
+        Optional reusable rsudo/rsudo_core caller state. The literal value true
+        selects interactive execution. --interactive sets it to true and
+        recursive rsudo calls inherit the current value.
 
     RSUDO_NO_PRESERVE_QUOTES
         Optional direct rsudo_core caller state. The literal value true disables

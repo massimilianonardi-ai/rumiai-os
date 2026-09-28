@@ -23,13 +23,20 @@ DESCRIPTION
     A library reference that is not embedded returns status 2 from the generated
     loadlib implementation rather than falling back to a remote m library tree.
 
-    When -- is absent, generation stops after the selected libraries have been
-    loaded. No command body is appended and the generated program does not alter
-    the receiving shell's positional parameters.
+    When -- is absent, no command body is appended and the generated program
+    does not alter positional parameters merely as a consequence of command
+    setup.
 
     When -- is present, it must be followed by one readable command-source.
     After loading the selected libraries, the generated program reconstructs the
     supplied command positional parameters and appends command-source unchanged.
+
+    Independently of command mode, when standard input is not a TTY the
+    generator appends that input as POSIX shell source after the selected
+    libraries and any command-source. A separating newline is emitted before
+    the input source so it cannot merge with a command-source that lacks a final
+    newline. The input is source to be generated, not runtime stdin for the
+    generated command.
 
 FUNCTIONS
     loadlib_inject_stream [library-reference...] [-- command-source [command-arg...]]
@@ -54,8 +61,13 @@ FUNCTIONS
         by command-source. Their shell-string identity, including whitespace and
         empty operands, is preserved through the existing quote primitive.
 
-        All supplied library and command-source inputs are validated before
+        All supplied library and command-source path inputs are validated before
         source emission begins.
+
+        When standard input is not a TTY, it is copied after all generated
+        library and optional command source. The copied text executes later in
+        the same shell environment and therefore can use injected functions and
+        observe shell state left by the preceding command source.
 
 OUTPUT
     Successful execution writes exactly one generated POSIX-sh program to
@@ -64,9 +76,10 @@ OUTPUT
     With no selected libraries, the program still contains an in-memory loadlib
     whose unknown-reference result is status 2.
 
-    With no -- separator, the output contains only the in-memory library loading
-    environment and the requested library loads. With --, the command setup and
-    command-source follow that environment.
+    With no -- separator, the output contains the in-memory library loading
+    environment and requested library loads, followed by non-TTY stdin source
+    when supplied. With --, command setup and command-source are inserted before
+    that optional stdin source.
 
     The output contains no dependency-discovery metadata and requires no remote
     m library tree for the embedded libraries.
@@ -75,7 +88,7 @@ RETURN STATUS
     0   Stream generated successfully.
     1   Invalid invocation, empty library reference, or -- without command-source.
     2   command-source or a selected library is not a readable regular file.
-    3   Quoting or output generation failed.
+    3   Quoting, input copying or output generation failed.
 
 CALLER OBLIGATIONS
     The caller must explicitly embed every library that may be loaded while the
@@ -85,8 +98,12 @@ CALLER OBLIGATIONS
     Selected libraries are loaded in caller-supplied order. The caller owns any
     ordering and repeated-sourcing consequences.
 
+    Standard input accepted by this generator is shell source to append to the
+    generated program. It is not preserved as runtime stdin for command-source.
+
     This generator does not execute or transport the generated program. A
-    transport such as rsudo --interactive may consume it through standard input.
+    transport such as rsudo may consume its generated output through standard
+    input.
 
     The generator itself runs inside the normal m runtime and relies on
     m_LIB_DIR and quote.
