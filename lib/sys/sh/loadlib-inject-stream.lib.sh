@@ -1,25 +1,18 @@
 # Generator for explicit in-memory system-library injection streams.
 #
 # Public function:
-#   loadlib_inject_stream COMMAND_SOURCE LIBRARY_REFERENCE... -- [COMMAND_ARG...]
+#   loadlib_inject_stream [LIBRARY_REFERENCE...] [-- COMMAND_SOURCE [COMMAND_ARG...]]
 #
-# The caller supplies the complete embedded library set, including base.
+# The caller supplies the complete embedded library set explicitly.
 # No dependency parsing or transitive-closure discovery is performed.
 
 loadlib_inject_stream()
 (
-  [ "$#" -ge 3 ] || return 1
-
-  _loadlib_inject_stream_command=$1
-  shift
-
-  [ -f "$_loadlib_inject_stream_command" ] &&
-    [ -r "$_loadlib_inject_stream_command" ] ||
-    return 2
-
   _loadlib_inject_stream_refs=
   _loadlib_inject_stream_count=0
-  _loadlib_inject_stream_base=0
+  _loadlib_inject_stream_command=
+  _loadlib_inject_stream_args=
+  _loadlib_inject_stream_has_command=0
 
   while [ "$#" -gt 0 ] && [ "$1" != "--" ]
   do
@@ -38,18 +31,27 @@ loadlib_inject_stream()
       _loadlib_inject_stream_refs=$_loadlib_inject_stream_quoted_ref
     fi
 
-    [ "$1" = "base" ] && _loadlib_inject_stream_base=1
     _loadlib_inject_stream_count=$((_loadlib_inject_stream_count + 1))
     shift
   done
 
-  [ "$#" -gt 0 ] && [ "$1" = "--" ] || return 1
-  shift
+  if [ "$#" -gt 0 ]
+  then
+    [ "$1" = "--" ] || return 1
+    shift
 
-  [ "$_loadlib_inject_stream_count" -gt 0 ] || return 1
-  [ "$_loadlib_inject_stream_base" -eq 1 ] || return 1
+    [ "$#" -gt 0 ] || return 1
 
-  _loadlib_inject_stream_args="$(quote "$@")" || return 3
+    _loadlib_inject_stream_command=$1
+    shift
+
+    [ -f "$_loadlib_inject_stream_command" ] &&
+      [ -r "$_loadlib_inject_stream_command" ] ||
+      return 2
+
+    _loadlib_inject_stream_args="$(quote "$@")" || return 3
+    _loadlib_inject_stream_has_command=1
+  fi
 
   eval "set -- $_loadlib_inject_stream_refs"
 
@@ -81,16 +83,27 @@ loadlib_inject_stream()
 
   printf '    *) return 2 ;;\n' || exit 3
   printf '  esac\n' || exit 3
-  printf '}\n\n' || exit 3
+  printf '}\n' || exit 3
 
-  printf 'loadlib "sys/sh/base" || exit "$?"\n\n' || exit 3
-
-  if [ -n "$_loadlib_inject_stream_args" ]
+  if [ "$_loadlib_inject_stream_count" -gt 0 ]
   then
-    printf 'set -- %s\n\n' "$_loadlib_inject_stream_args" || exit 3
-  else
-    printf 'set --\n\n' || exit 3
+    printf '\n' || exit 3
+    for _loadlib_inject_stream_ref
+    do
+      _loadlib_inject_stream_case="$(quote "sys/sh/$_loadlib_inject_stream_ref")" || exit 3
+      printf 'loadlib %s || exit "$?"\n' "$_loadlib_inject_stream_case" || exit 3
+    done
   fi
 
-  cat "$_loadlib_inject_stream_command" || exit 3
+  if [ "$_loadlib_inject_stream_has_command" -eq 1 ]
+  then
+    if [ -n "$_loadlib_inject_stream_args" ]
+    then
+      printf '\nset -- %s\n\n' "$_loadlib_inject_stream_args" || exit 3
+    else
+      printf '\nset --\n\n' || exit 3
+    fi
+
+    cat "$_loadlib_inject_stream_command" || exit 3
+  fi
 )
