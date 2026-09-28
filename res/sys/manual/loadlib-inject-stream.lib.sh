@@ -14,16 +14,23 @@ DESCRIPTION
     explicitly. The generator does not parse the command or libraries, discover
     dependencies, or compute transitive closure.
 
-    core must be included explicitly in the supplied library-reference list.
-    The generated program installs the ordinary loadsyslib specialization, one
-    wrapper for every selected library, and an in-memory loadlib implementation
-    whose case dispatches directly to exactly those generated wrappers.
+    base must be included explicitly in the supplied library-reference list.
+    The generated program installs one wrapper for every selected library and an
+    in-memory loadlib implementation whose case dispatches directly to exactly
+    those generated wrappers.
+
+    The generated program then loads the embedded base library through that
+    in-memory loadlib. base establishes the common runtime, including loadsyslib,
+    without replacing the injected loadlib implementation. core.lib.sh is the
+    normal filesystem-loader bootstrap adapter and is not the injected runtime
+    foundation.
 
     A library reference that is not embedded returns status 2 from the generated
     loadlib implementation rather than falling back to a remote m library tree.
 
-    The generated program then loads core, sets the command positional
-    parameters from command-arg..., and appends command-source unchanged.
+    After base has established the common runtime, the generated program sets
+    the command positional parameters from command-arg... and appends
+    command-source unchanged.
 
 FUNCTIONS
     loadlib_inject_stream command-source library-reference... -- [command-arg...]
@@ -33,7 +40,7 @@ FUNCTIONS
         command body to append to the generated program.
 
         Every library-reference is relative to lib/sys/sh and omits the final
-        .lib.sh suffix. The complete set is caller-owned; core is mandatory.
+        .lib.sh suffix. The complete set is caller-owned; base is mandatory.
 
         -- terminates the library-reference list. Remaining operands are the
         positional parameters that the generated command body receives. Their
@@ -53,7 +60,7 @@ OUTPUT
 
 RETURN STATUS
     0   Stream generated successfully.
-    1   Invalid invocation, missing -- separator, no library references, or core
+    1   Invalid invocation, missing -- separator, no library references, or base
         was not explicitly selected.
     2   command-source or a selected library is not a readable regular file.
     3   Quoting or output generation failed.

@@ -3,8 +3,8 @@
 # Public function:
 #   loadlib_inject_stream COMMAND_SOURCE LIBRARY_REFERENCE... -- [COMMAND_ARG...]
 #
-# The caller supplies the complete embedded library set. No dependency parsing
-# or transitive-closure discovery is performed.
+# The caller supplies the complete embedded library set, including base.
+# No dependency parsing or transitive-closure discovery is performed.
 
 loadlib_inject_stream()
 (
@@ -19,7 +19,7 @@ loadlib_inject_stream()
 
   _loadlib_inject_stream_refs=
   _loadlib_inject_stream_count=0
-  _loadlib_inject_stream_core=0
+  _loadlib_inject_stream_base=0
 
   while [ "$#" -gt 0 ] && [ "$1" != "--" ]
   do
@@ -38,7 +38,7 @@ loadlib_inject_stream()
       _loadlib_inject_stream_refs=$_loadlib_inject_stream_quoted_ref
     fi
 
-    [ "$1" = "core" ] && _loadlib_inject_stream_core=1
+    [ "$1" = "base" ] && _loadlib_inject_stream_base=1
     _loadlib_inject_stream_count=$((_loadlib_inject_stream_count + 1))
     shift
   done
@@ -47,18 +47,9 @@ loadlib_inject_stream()
   shift
 
   [ "$_loadlib_inject_stream_count" -gt 0 ] || return 1
-  [ "$_loadlib_inject_stream_core" -eq 1 ] || return 1
+  [ "$_loadlib_inject_stream_base" -eq 1 ] || return 1
 
   _loadlib_inject_stream_args="$(quote "$@")" || return 3
-
-  cat <<'EOF_LOADSYS' || exit 3
-loadsyslib()
-{
-  [ "$#" -eq 1 ] || return 1
-
-  loadlib "sys/sh/$1"
-}
-EOF_LOADSYS
 
   eval "set -- $_loadlib_inject_stream_refs"
 
@@ -92,7 +83,7 @@ EOF_LOADSYS
   printf '  esac\n' || exit 3
   printf '}\n\n' || exit 3
 
-  printf 'loadsyslib "core" || exit "$?"\n\n' || exit 3
+  printf 'loadlib "sys/sh/base" || exit "$?"\n\n' || exit 3
 
   if [ -n "$_loadlib_inject_stream_args" ]
   then
