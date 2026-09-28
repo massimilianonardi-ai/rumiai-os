@@ -446,14 +446,3 @@ waituser()
     read -r EXIT_VAR
   fi
 }
-
-#-------------------------------------------------------------------------------
-# FACILITY DEFAULT ENVIRONMENT
-#-------------------------------------------------------------------------------
-
-loadsyslib "pkg/pkg-provider"
-
-if ! pkg_provider_global_environment_apply
-then
-  printf -- '%s\n' 'bootstrap provider environment error' >&2
-fi
