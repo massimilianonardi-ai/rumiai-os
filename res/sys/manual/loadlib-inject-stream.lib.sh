@@ -73,7 +73,7 @@ CALLER OBLIGATIONS
     transport such as rsudo --interactive may consume it through standard input.
 
     The generator runs inside the normal m runtime and relies on m_LIB_DIR and
-    the core quote function.
+    the common base runtime's quote function.
 
 SEE ALSO
     rsudo
