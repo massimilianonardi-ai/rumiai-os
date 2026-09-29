@@ -91,7 +91,7 @@ ssh_auth()
     [ "${#_ssh_auth_token}" -eq 32 ] || exit 1
     [ "$_ssh_auth_token" = "${_ssh_auth_token%%[!0123456789abcdef]*}" ] || exit 1
 
-    _ssh_auth_dir="${_ssh_auth_base%/}/ssh-auth.$.$_ssh_auth_token"
+    _ssh_auth_dir="${_ssh_auth_base%/}/ssh-auth.$_ssh_auth_token"
 
     if (umask 077; mkdir "$_ssh_auth_dir" 2>/dev/null)
     then
