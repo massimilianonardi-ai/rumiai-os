@@ -1,0 +1,463 @@
+#!/usr/bin/env m
+
+loadsyslib "rsudo/rsudo"
+
+rsudo_admin_display_safe()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  printf '%s' "$1" |
+    command -p tr '\n' '?' |
+    command -p awk '{ gsub(/[[:cntrl:]]/, "?"); printf "%s", $0 }'
+}
+
+rsudo_admin_host_groups()
+(
+  set |
+    while IFS= read -r rsudo_admin_line
+    do
+      case "$rsudo_admin_line" in
+        RSUDO_CREDENTIALS_GROUP_*_HOST=*)
+          rsudo_admin_variable=${rsudo_admin_line%%=*}
+          rsudo_admin_group=${rsudo_admin_variable#RSUDO_CREDENTIALS_GROUP_}
+          rsudo_admin_group=${rsudo_admin_group%_HOST}
+
+          if valid_shell_identifier "$rsudo_admin_group"
+          then
+            printf '%s\n' "$rsudo_admin_group"
+          fi
+        ;;
+      esac
+    done |
+    LC_ALL=C command -p sort -u
+)
+
+rsudo_admin_menu_failure()
+{
+  fatal 2 execution execution-failed operation rsudo-admin reason menu-failed
+}
+
+rsudo_admin_select_host()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  rsudo_admin_host_header=$1
+  rsudo_admin_groups=$(rsudo_admin_host_groups) || return 2
+  [ -n "$rsudo_admin_groups" ] || return 3
+
+  rsudo_admin_old_ifs=$IFS
+  IFS='
+'
+  set -f
+  set --
+
+  for rsudo_admin_group in $rsudo_admin_groups
+  do
+    rsudo_admin_variable="RSUDO_CREDENTIALS_GROUP_${rsudo_admin_group}_HOST"
+    eval "rsudo_admin_host=\${$rsudo_admin_variable-}"
+    [ -n "$rsudo_admin_host" ] || continue
+
+    rsudo_admin_host_label=$(rsudo_admin_display_safe "$rsudo_admin_host") || {
+      set +f
+      IFS=$rsudo_admin_old_ifs
+      return 2
+    }
+
+    set -- "$@" "${rsudo_admin_group}@:=${rsudo_admin_host_label} [${rsudo_admin_group}]"
+  done
+
+  set +f
+  IFS=$rsudo_admin_old_ifs
+  unset rsudo_admin_old_ifs rsudo_admin_groups rsudo_admin_variable rsudo_admin_host rsudo_admin_host_label
+
+  [ "$#" -gt 0 ] || return 3
+
+  rsudo_admin_host_result=$(command -- menu \
+    -H "$rsudo_admin_host_header" \
+    -F 'Enter: select | Escape: back' \
+    -- "$@")
+  rsudo_admin_host_status=$?
+
+  case "$rsudo_admin_host_status" in
+    0) ;;
+    1) return 1 ;;
+    2) return 2 ;;
+    *) return "$rsudo_admin_host_status" ;;
+  esac
+
+  eval "set -- $rsudo_admin_host_result" || return 2
+  [ "$#" -eq 2 ] && [ "$1" = enter ] || return 2
+
+  rsudo_admin_selected_group=$2
+  return 0
+}
+
+rsudo_admin_connect()
+{
+  rsudo_admin_select_host 'Connect to host'
+  rsudo_admin_status=$?
+
+  case "$rsudo_admin_status" in
+    0) ;;
+    1) return 0 ;;
+    3)
+      rsudo_admin_message='No credential hosts are loaded in memory.'
+      return 0
+      ;;
+    2) rsudo_admin_menu_failure ;;
+    *) return "$rsudo_admin_status" ;;
+  esac
+
+  (
+    rsudo --load ":$rsudo_admin_selected_group" --interactive
+  )
+  rsudo_admin_status=$?
+
+  if [ "$rsudo_admin_status" -eq 0 ]
+  then
+    rsudo_admin_message="Connection closed: $rsudo_admin_selected_group"
+  else
+    rsudo_admin_message="Connection failed: $rsudo_admin_selected_group (status $rsudo_admin_status)"
+  fi
+
+  return 0
+}
+
+rsudo_admin_browse_host()
+{
+  rsudo_admin_select_host 'Browse host'
+  rsudo_admin_status=$?
+
+  case "$rsudo_admin_status" in
+    0) ;;
+    1) return 0 ;;
+    3)
+      rsudo_admin_message='No credential hosts are loaded in memory.'
+      return 0
+      ;;
+    2) rsudo_admin_menu_failure ;;
+    *) return "$rsudo_admin_status" ;;
+  esac
+
+  (
+    rsudo --load ":$rsudo_admin_selected_group" --interactive \
+      exec inject \
+      base array map term menu \
+      -- "$m_BIN_SYS_DIR/menu" -d /
+  ) >/dev/null
+  rsudo_admin_status=$?
+
+  if [ "$rsudo_admin_status" -eq 0 ]
+  then
+    rsudo_admin_message="Remote browser closed: $rsudo_admin_selected_group"
+  else
+    rsudo_admin_message="Remote browser failed: $rsudo_admin_selected_group (status $rsudo_admin_status)"
+  fi
+
+  return 0
+}
+
+rsudo_admin_select_file()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  rsudo_admin_file_header=$1
+  rsudo_admin_file_dir=$rsudo_admin_browse_dir
+  rsudo_admin_file_message=
+
+  while :
+  do
+    rsudo_admin_file_result=$(command -- menu \
+      -H "$rsudo_admin_file_header" \
+      -F 'Enter: browse | Tab: select | Escape: back' \
+      -B "$rsudo_admin_file_message" \
+      -d "$rsudo_admin_file_dir")
+    rsudo_admin_file_status=$?
+
+    case "$rsudo_admin_file_status" in
+      0) ;;
+      1) return 1 ;;
+      2) return 2 ;;
+      *) return "$rsudo_admin_file_status" ;;
+    esac
+
+    eval "set -- $rsudo_admin_file_result" || return 2
+    [ "$#" -eq 2 ] && [ "$1" = tab ] || return 2
+    rsudo_admin_file_path=$2
+
+    if [ -f "$rsudo_admin_file_path" ] && [ -r "$rsudo_admin_file_path" ]
+    then
+      rsudo_admin_selected_file=$rsudo_admin_file_path
+      rsudo_admin_browse_dir=$(command -p dirname "$rsudo_admin_file_path") || return 2
+      return 0
+    fi
+
+    if [ -d "$rsudo_admin_file_path" ]
+    then
+      rsudo_admin_file_dir=$rsudo_admin_file_path
+      rsudo_admin_file_message='Select a readable regular file.'
+    else
+      rsudo_admin_file_message='Selected path is not a readable regular file.'
+    fi
+  done
+}
+
+rsudo_admin_job_execute()
+(
+  [ "$#" -eq 2 ] || return 2
+
+  set +x
+  rsudo_admin_job_library=$1
+  rsudo_admin_job_template=$2
+  rsudo_admin_job_token=$(randhex 12) || return 1
+  rsudo_admin_job_tmp="${TMPDIR:-/tmp}/rsudo-admin-job.$rsudo_admin_job_token"
+
+  rsudo_admin_job_cleanup()
+  {
+    [ -z "${rsudo_admin_job_tmp-}" ] || command -p rm -f "$rsudo_admin_job_tmp" 2>/dev/null || :
+  }
+
+  trap rsudo_admin_job_cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+
+  . "$rsudo_admin_job_library" || return 1
+
+  (
+    umask 077
+    set -C
+    command -p cat "$rsudo_admin_job_template" > "$rsudo_admin_job_tmp"
+  ) || return 1
+
+  command -- editor "$rsudo_admin_job_tmp" || return 1
+  command -p sh -n "$rsudo_admin_job_tmp" || return 1
+
+  (
+    . "$rsudo_admin_job_tmp"
+  )
+)
+
+rsudo_admin_jobs()
+{
+  rsudo_admin_select_file 'rsudo jobs - select library'
+  rsudo_admin_status=$?
+  case "$rsudo_admin_status" in
+    0) rsudo_admin_job_library=$rsudo_admin_selected_file ;;
+    1) return 0 ;;
+    2) rsudo_admin_menu_failure ;;
+    *) return "$rsudo_admin_status" ;;
+  esac
+
+  rsudo_admin_select_file 'rsudo jobs - select template'
+  rsudo_admin_status=$?
+  case "$rsudo_admin_status" in
+    0) rsudo_admin_job_template=$rsudo_admin_selected_file ;;
+    1) return 0 ;;
+    2) rsudo_admin_menu_failure ;;
+    *) return "$rsudo_admin_status" ;;
+  esac
+
+  rsudo_admin_job_execute "$rsudo_admin_job_library" "$rsudo_admin_job_template"
+  rsudo_admin_status=$?
+
+  if [ "$rsudo_admin_status" -eq 0 ]
+  then
+    rsudo_admin_message='rsudo job completed successfully.'
+  else
+    rsudo_admin_message="rsudo job ended with status $rsudo_admin_status."
+  fi
+
+  return 0
+}
+
+rsudo_admin_encrypted_new()
+(
+  [ "$#" -eq 1 ] && [ -d "$1" ] || return 2
+
+  set +x
+  rsudo_admin_new_dir=$1
+
+  printf 'New encrypted file name: ' > /dev/tty || return 2
+  IFS= read -r rsudo_admin_new_name < /dev/tty || return 1
+
+  case "$rsudo_admin_new_name" in
+    ''|.|..|*/*) return 1 ;;
+  esac
+
+  rsudo_admin_new_target="$rsudo_admin_new_dir/$rsudo_admin_new_name"
+  [ ! -e "$rsudo_admin_new_target" ] && [ ! -L "$rsudo_admin_new_target" ] || return 3
+
+  rsudo_admin_new_plain_with_sentinel=$(
+    command -- vsed
+    rsudo_admin_new_status=$?
+    [ "$rsudo_admin_new_status" -eq 0 ] || exit "$rsudo_admin_new_status"
+    printf x
+  ) || return "$?"
+  rsudo_admin_new_plain=${rsudo_admin_new_plain_with_sentinel%x}
+  unset rsudo_admin_new_plain_with_sentinel
+
+  rsudo_admin_new_token=$(randhex 12) || {
+    unset rsudo_admin_new_plain
+    return 2
+  }
+  rsudo_admin_new_tmp="$rsudo_admin_new_dir/.rsudo-admin-new.$rsudo_admin_new_token"
+
+  rsudo_admin_new_cleanup()
+  {
+    [ -z "${rsudo_admin_new_tmp-}" ] || command -p rm -f "$rsudo_admin_new_tmp" 2>/dev/null || :
+  }
+
+  trap rsudo_admin_new_cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 131' QUIT
+  trap 'exit 143' TERM
+
+  (
+    umask 077
+    set -C
+    printf '%s' "$rsudo_admin_new_plain" | encode > "$rsudo_admin_new_tmp"
+  ) || {
+    unset rsudo_admin_new_plain
+    return 2
+  }
+  unset rsudo_admin_new_plain
+
+  command -p ln "$rsudo_admin_new_tmp" "$rsudo_admin_new_target" || return 2
+  command -p rm -f "$rsudo_admin_new_tmp" || return 2
+  rsudo_admin_new_tmp=
+
+  printf '%s\n' "$rsudo_admin_new_target"
+)
+
+rsudo_admin_encrypted_files()
+{
+  rsudo_admin_encrypted_dir=$rsudo_admin_browse_dir
+  rsudo_admin_encrypted_message=
+
+  while :
+  do
+    rsudo_admin_encrypted_result=$(command -- menu \
+      -H 'Encrypted file load/edit/new' \
+      -F 'Enter: browse | l: load | e: edit | n: new | Escape: back' \
+      -B "$rsudo_admin_encrypted_message" \
+      -K l -K e -K n \
+      -d "$rsudo_admin_encrypted_dir")
+    rsudo_admin_encrypted_status=$?
+
+    case "$rsudo_admin_encrypted_status" in
+      0) ;;
+      1) return 0 ;;
+      2) rsudo_admin_menu_failure ;;
+      *) return "$rsudo_admin_encrypted_status" ;;
+    esac
+
+    eval "set -- $rsudo_admin_encrypted_result" || rsudo_admin_menu_failure
+    [ "$#" -eq 2 ] || rsudo_admin_menu_failure
+    rsudo_admin_encrypted_key=$1
+    rsudo_admin_encrypted_path=$2
+
+    case "$rsudo_admin_encrypted_key" in
+      l)
+        if [ ! -f "$rsudo_admin_encrypted_path" ] || [ ! -r "$rsudo_admin_encrypted_path" ]
+        then
+          rsudo_admin_encrypted_message='Load requires a readable regular file.'
+          continue
+        fi
+
+        if encoded_file_eval "$rsudo_admin_encrypted_path"
+        then
+          rsudo_admin_encrypted_message="Loaded: $rsudo_admin_encrypted_path"
+        else
+          rsudo_admin_encrypted_message="Load failed: $rsudo_admin_encrypted_path"
+        fi
+        ;;
+      e)
+        if [ ! -f "$rsudo_admin_encrypted_path" ] || [ ! -r "$rsudo_admin_encrypted_path" ] || [ ! -w "$rsudo_admin_encrypted_path" ]
+        then
+          rsudo_admin_encrypted_message='Edit requires a readable and writable regular file.'
+          continue
+        fi
+
+        if encoded_file_edit "$rsudo_admin_encrypted_path"
+        then
+          rsudo_admin_encrypted_message="Edited: $rsudo_admin_encrypted_path"
+        else
+          rsudo_admin_encrypted_message="Edit cancelled or failed: $rsudo_admin_encrypted_path"
+        fi
+        ;;
+      n)
+        if [ -d "$rsudo_admin_encrypted_path" ]
+        then
+          rsudo_admin_new_dir=$rsudo_admin_encrypted_path
+        else
+          rsudo_admin_new_dir=$(command -p dirname "$rsudo_admin_encrypted_path") || rsudo_admin_menu_failure
+        fi
+
+        rsudo_admin_new_path=$(rsudo_admin_encrypted_new "$rsudo_admin_new_dir")
+        rsudo_admin_new_status=$?
+        case "$rsudo_admin_new_status" in
+          0) rsudo_admin_encrypted_message="Created: $rsudo_admin_new_path" ;;
+          1) rsudo_admin_encrypted_message='New encrypted file cancelled.' ;;
+          3) rsudo_admin_encrypted_message='New encrypted file already exists.' ;;
+          *) rsudo_admin_encrypted_message='New encrypted file creation failed.' ;;
+        esac
+        ;;
+      *) rsudo_admin_menu_failure ;;
+    esac
+
+    if [ -d "$rsudo_admin_encrypted_path" ]
+    then
+      rsudo_admin_encrypted_dir=$rsudo_admin_encrypted_path
+    else
+      rsudo_admin_encrypted_dir=$(command -p dirname "$rsudo_admin_encrypted_path") || rsudo_admin_menu_failure
+    fi
+    rsudo_admin_browse_dir=$rsudo_admin_encrypted_dir
+  done
+}
+
+main()
+{
+  [ "$#" -eq 0 ] || fatal 1 execution invalid-arguments operation rsudo-admin
+
+  rsudo_admin_invocation_dir=$(command -p pwd -P) || fatal 2 execution execution-failed operation rsudo-admin reason cwd-unavailable
+  rsudo_admin_browse_dir=$rsudo_admin_invocation_dir
+  rsudo_admin_message=
+
+  while :
+  do
+    rsudo_admin_result=$(command -- menu \
+      -H 'rsudo admin' \
+      -F 'Enter: open | Escape: exit' \
+      -B "$rsudo_admin_message" \
+      -- \
+      'connect@:=Connect to host' \
+      'browse@:=Browse host' \
+      'jobs@:=rsudo jobs' \
+      'encrypted@:=Encrypted file load/edit/new')
+    rsudo_admin_status=$?
+
+    case "$rsudo_admin_status" in
+      0) ;;
+      1) return 0 ;;
+      2) rsudo_admin_menu_failure ;;
+      *) return "$rsudo_admin_status" ;;
+    esac
+
+    eval "set -- $rsudo_admin_result" || rsudo_admin_menu_failure
+    [ "$#" -eq 2 ] && [ "$1" = enter ] || rsudo_admin_menu_failure
+
+    rsudo_admin_message=
+    case "$2" in
+      connect) rsudo_admin_connect || return "$?" ;;
+      browse) rsudo_admin_browse_host || return "$?" ;;
+      jobs) rsudo_admin_jobs || return "$?" ;;
+      encrypted) rsudo_admin_encrypted_files || return "$?" ;;
+      *) rsudo_admin_menu_failure ;;
+    esac
+  done
+}
+
+main "$@"
