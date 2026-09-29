@@ -145,7 +145,8 @@ STREAMING AND LINKS
     The local side uses a private invocation-owned FIFO to connect the producer
     and consumer while retaining their statuses independently. This preserves
     all-stage transfer failure detection even when the host /bin/sh does not
-    implement pipefail.
+    implement pipefail. The FIFO and its private directory are removed after the
+    transfer and on handled termination.
 
     The current transfer path deliberately does not use tar -h or tar -L.
     Symbolic links are therefore transferred as symbolic links rather than by
