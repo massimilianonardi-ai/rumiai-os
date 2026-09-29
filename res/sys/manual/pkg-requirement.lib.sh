@@ -26,6 +26,10 @@ FUNCTIONS
         package-consumer implicit fallback. It never installs a package, changes a
         facility default or creates a package-consumer binding.
 
+        A status-1 failure emits a diagnostic that distinguishes an unconfigured
+        facility default, an unresolvable configured default and an incompatible
+        selected provider, including the facility and requested constraints.
+
         Returns 0 when satisfied, 1 when the requirement is not currently
         satisfiable, and 2 for invalid invocation or syntax.
 

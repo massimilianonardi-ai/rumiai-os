@@ -595,12 +595,26 @@ pkg_dependency_default_resolve()
   pkg_dependency_default_provider="$(pkg_provider_default_resolve "$pkg_dependency_default_facility")"
   pkg_dependency_default_status=$?
   case "$pkg_dependency_default_status" in
-    0) : ;;
-    2) return 2 ;;
-    *) return 1 ;;
+    0)
+      ;;
+    1)
+      log error execution execution-failed operation pkg-requirement         reason facility-default-unconfigured facility "$pkg_dependency_default_facility"         constraints "$pkg_dependency_default_constraints" || :
+      return 1
+      ;;
+    2)
+      return 2
+      ;;
+    *)
+      log error execution execution-failed operation pkg-requirement         reason facility-default-unresolvable facility "$pkg_dependency_default_facility"         constraints "$pkg_dependency_default_constraints" || :
+      return 1
+      ;;
   esac
 
-  _pkg_dependency_provider_satisfies     "$pkg_dependency_default_provider"     "$pkg_dependency_default_facility"     "$pkg_dependency_default_constraints" || return 1
+  if ! _pkg_dependency_provider_satisfies     "$pkg_dependency_default_provider"     "$pkg_dependency_default_facility"     "$pkg_dependency_default_constraints"
+  then
+    log error execution execution-failed operation pkg-requirement       reason selected-provider-incompatible facility "$pkg_dependency_default_facility"       constraints "$pkg_dependency_default_constraints"       provider "$pkg_dependency_default_provider" || :
+    return 1
+  fi
 
   printf -- '%s\n' "$pkg_dependency_default_provider"
 )

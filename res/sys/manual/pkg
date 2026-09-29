@@ -117,7 +117,9 @@ COMMANDS
 
         On success, print the selected concrete provider identity. The query is
         read-only: it does not install providers, choose among installed providers
-        implicitly, change a facility default or create a consumer binding.
+        implicitly, change a facility default or create a consumer binding. A
+        status-1 failure identifies whether the facility default is unconfigured,
+        unresolvable or resolves to an incompatible provider.
 
         Compatibility constraints use the package dependency language, for example:
 
