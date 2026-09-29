@@ -103,8 +103,8 @@ ENVIRONMENT
         available.
 
     RSUDO_PASSWORD
-        Non-empty authentication value available to the remote authentication
-        process.
+        Non-empty authentication value used by normal rsudo as the ssh_auth
+        candidate secret and made available to remote sudo when needed.
 
     RSUDO_CREDENTIALS_GROUP_<group>_HOST
     RSUDO_CREDENTIALS_GROUP_<group>_USER
