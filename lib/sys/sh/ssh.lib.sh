@@ -116,7 +116,7 @@ ssh_auth()
     do
       printf '%s\n' "$_ssh_auth_secret" > "$_ssh_auth_fifo" || exit 0
     done
-  ) &
+  ) 2>/dev/null &
   _ssh_auth_broker_pid="$!"
   case "$_ssh_auth_broker_pid" in
     ''|*[!0123456789]*) exit 1 ;;
