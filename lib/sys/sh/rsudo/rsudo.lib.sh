@@ -1,4 +1,3 @@
-ssh -
 # rsudo [--interactive] [--askpass] [--connect user@host] [--load file:name] [--user sudo_as_user] [submodule] [--] [args]
 #
 # if not provided on command line if env vars are defined outside, then they will be used
@@ -84,15 +83,9 @@ $(quote "$@")"
 
 
 
-  # prepare ipc broker to rsudo-askpass. state owned only by this rsudo_core invocation
-  export SSH_ASKPASS="$m_BIN_SYS_DIR/rsudo-askpass"
-  export SSH_ASKPASS_REQUIRE="force"
-
-  RSUDO_SSH_IPC_1=""
-  RSUDO_SSH_IPC_2=""
+  # prepare cleanup
   RSUDO_DAEMON_PID=""
 
-  # prepare cleanup
   _rsudo_core_cleanup()
   {
     if [ -n "$RSUDO_DAEMON_PID" ]
@@ -101,9 +94,6 @@ $(quote "$@")"
       wait "$RSUDO_DAEMON_PID" 2>/dev/null || :
       RSUDO_DAEMON_PID=""
     fi
-
-    ipc_once_clear RSUDO_SSH_IPC_1 2>/dev/null || :
-    ipc_once_clear RSUDO_SSH_IPC_2 2>/dev/null || :
   }
 
   _rsudo_core_terminate()
@@ -131,16 +121,12 @@ $(quote "$@")"
     # non interactive command
     log debug rsudo execution-mode mode non-interactive
 
-    ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
-
     (printf '%s\n' "$RSUDO_PASSWORD"; if [ ! -t 0 ]; then cat; fi) | \
-    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
+    ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" \
     "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
     sudo -S --prompt=''${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@"
 
     RSUDO_STATUS="$?"
-
-    ipc_once_clear RSUDO_SSH_IPC_1
   else
     # -------------------------------------------------------------------------
     # interactive command
@@ -173,10 +159,8 @@ unset RSUDO_PASSWORD
 EOF
 )" || exit 1
 
-    ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
-
     # launch 1st ssh (daemon password broker)
-    (printf '%s\n' "$RSUDO_PASSWORD" | m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" "$RSUDO_REMOTE_DAEMON") &
+    (printf '%s\n' "$RSUDO_PASSWORD" | ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" "$RSUDO_REMOTE_DAEMON") &
 
     RSUDO_DAEMON_PID="$!"
 
@@ -201,21 +185,14 @@ unset RSUDO_PASSWORD;
 EOF
 )" || exit 1
 
-    # launch 2nd ssh (reads password from daemon broker, then interactive session)
-    ipc_once_set RSUDO_SSH_IPC_2 "$RSUDO_PASSWORD" || exit 1
-
-    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_2" ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
+    ssh_auth "$RSUDO_PASSWORD" -t -l "$RSUDO_USER" "$RSUDO_HOST" \
     "$RSUDO_REMOTE_INTERACTIVE" sudo${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@" </dev/tty
 
     RSUDO_STATUS="$?"
 
-    ipc_once_clear RSUDO_SSH_IPC_2
-
     wait "$RSUDO_DAEMON_PID" 2>/dev/null
     RSUDO_DAEMON_STATUS="$?"
     RSUDO_DAEMON_PID=""
-
-    ipc_once_clear RSUDO_SSH_IPC_1
 
     if [ "$RSUDO_STATUS" -eq 0 ] && [ "$RSUDO_DAEMON_STATUS" -ne 0 ]
     then
@@ -225,6 +202,7 @@ EOF
 
   log info rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$RSUDO_STATUS" argn "$#"
   log trace rsudo end user "$RSUDO_USER" host "$RSUDO_HOST" status "$RSUDO_STATUS" command "$*"
+
   exit "$RSUDO_STATUS"
 )
 
@@ -302,7 +280,11 @@ rsudo()
 
       --ssh-auth-test)
         shift
-        ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" true
+        SSH_ASKPASS_REQUIRE="never" ssh \
+        -o BatchMode=no -o StrictHostKeyChecking=ask -o AddKeysToAgent=yes -o ControlPath=none \
+        -l "$RSUDO_USER" "$RSUDO_HOST" true \
+        && ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" true
+
         [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
       ;;
 
