@@ -1,0 +1,173 @@
+NAME
+    rsudo-admin - interactive rsudo administration console
+
+SYNOPSIS
+    rsudo-admin
+
+DESCRIPTION
+    rsudo-admin is an m-owned terminal console that composes the existing rsudo,
+    menu, editor, vsed and encrypted-file facilities into recurring
+    administrative workflows.
+
+    The main menu contains:
+
+        Connect to host
+        Browse host
+        rsudo jobs
+        Encrypted file load/edit/new
+
+    The command accepts no operands or options. Escape from the main menu exits
+    successfully.
+
+HOST DISCOVERY
+    Connect to host and Browse host discover credential groups already present
+    in the current rsudo-admin shell by matching shell variables named:
+
+        RSUDO_CREDENTIALS_GROUP_<group>_HOST
+
+    <group> must be a valid shell identifier and the HOST value must be
+    non-empty. The menu displays the host plus its group identity. Selecting an
+    entry selects the corresponding credential group through current rsudo
+    --load :group semantics.
+
+    Credential groups normally become available by using the encrypted-file
+    Load action during the same rsudo-admin session, or from state already
+    present when rsudo-admin starts.
+
+CONNECT TO HOST
+    Connect to host opens the host selector and, after selection, starts:
+
+        rsudo --load :group --interactive
+
+    The operation runs in an action-local subshell. rsudo reusable mode state
+    selected by the interactive session therefore does not leak into later
+    rsudo-admin actions.
+
+BROWSE HOST
+    Browse host opens the host selector and injects the existing m filesystem
+    menu into the selected privileged remote rsudo session.
+
+    The injected dependency set is explicitly:
+
+        base
+        array
+        map
+        term
+        menu
+
+    The injected one-shot command is the current local bin/sys/menu source with:
+
+        -d /
+
+    Remote menu standard output is discarded by rsudo-admin; the terminal UI is
+    the browsing interface. The action runs in a subshell so its rsudo mode
+    state does not alter the surrounding console session.
+
+RSUDO JOBS
+    rsudo jobs modernizes the former tracked rsudo-jobs-template workflow using
+    current m facilities.
+
+    The workflow is:
+
+        1. select one readable local shell library source with the file browser;
+        2. select one readable local shell template with the file browser;
+        3. source the selected library inside a job subshell;
+        4. copy the template to a private temporary file;
+        5. edit the temporary copy through editor;
+        6. validate the edited copy with POSIX sh -n;
+        7. execute the edited copy as shell source in a nested subshell;
+        8. remove the temporary copy on every normal or trapped job exit.
+
+    File selection starts in the rsudo-admin invocation directory and may browse
+    elsewhere. The selected library and template are explicit executable shell
+    code. Sourcing them is the purpose of this workflow, not data parsing.
+
+    The job subshell inherits credential groups and other shell state available
+    to rsudo-admin. Job-local definitions, exit, traps and other process-local
+    effects do not persist back into the main console. The temporary edited copy
+    is created under ${TMPDIR:-/tmp} with private creation permissions.
+
+ENCRYPTED FILE LOAD/EDIT/NEW
+    This entry opens one filesystem browser with these action keys:
+
+        l   load
+        e   edit
+        n   new
+
+    Enter browses directories and Escape returns to the main menu.
+
+    Load
+        Requires a readable regular file and calls:
+
+            encoded_file_eval file
+
+        Therefore Load follows the current enc.lib.sh contract: the file is
+        completely authenticated/decrypted before evaluation, then its plaintext
+        is evaluated as POSIX shell source in the current rsudo-admin shell.
+        Variables and functions established by the encrypted source can remain
+        available to later menu actions.
+
+    Edit
+        Requires a readable/writable regular file and calls:
+
+            encoded_file_edit file
+
+        Editing uses vsed's memory-only plaintext editor path and commits only
+        encrypted output according to enc.lib.sh.
+
+    New
+        Creates a new encrypted file in the selected directory, or in the
+        containing directory when the selected browser item is not a directory.
+        rsudo-admin prompts for the new leaf name, opens an empty document in
+        vsed, holds the saved plaintext only in process memory, encrypts it to a
+        private sibling temporary ciphertext file, and publishes the new file
+        only after encryption succeeds.
+
+        New refuses an empty name, '.', '..', a name containing '/', or an
+        already existing destination. Cancellation leaves no destination file.
+
+SECURITY
+    Credential passwords are not included in host menu labels.
+
+    Host discovery does not export credential state. It inspects current shell
+    state and exposes only matching group identities and HOST labels to menu.
+
+    Browse host does not eval the remote menu result locally.
+
+    rsudo jobs intentionally sources user-selected local shell code. Use only
+    trusted job libraries and templates.
+
+    Encrypted-file Load intentionally follows encoded_file_eval's authenticated
+    shell-source evaluation contract. It is not a data-only assignment parser.
+
+    New encrypted files do not use plaintext temporary files. Portable POSIX
+    shell cannot guarantee memory zeroization or protection from operating-system
+    paging, process inspection, terminal capture or equivalent host mechanisms.
+
+EXIT STATUS
+    0   main menu exited normally
+    1   invalid command invocation
+    2   unrecoverable local menu/runtime setup failure
+
+    Failures of an individual connection, remote browser, job, encrypted load,
+    encrypted edit or encrypted creation are reported in the console and return
+    control to the main menu instead of terminating the console.
+
+    Signal-derived statuses from interrupted underlying interactive operations
+    may be propagated when the console itself cannot continue normally.
+
+FILES
+    bin/sys/rsudo-admin
+        Public m command.
+
+    lib/sys/sh/rsudo/rsudo-jobs-template
+        Superseded predecessor removed by the rsudo-admin implementation.
+
+SEE ALSO
+    manual rsudo
+    manual rsudo.lib.sh
+    manual rsudo-mod-exec.lib.sh
+    manual menu
+    manual enc.lib.sh
+    manual vsed
+    manual editor
