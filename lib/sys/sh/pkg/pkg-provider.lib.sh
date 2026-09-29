@@ -846,16 +846,23 @@ pkg_provider_global_environment_apply()
   fi
   [ -d "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ] || return 1
 
-  pkg_provider_global_environment_files="$(
-    (set -o pipefail) 2>/dev/null || exit 1
-    set -o pipefail || exit 1
-
+  pkg_provider_global_environment_unsorted="$(
     for pkg_provider_global_environment_file in "$pkg_provider_global_environment_root"/*
     do
       [ -e "$pkg_provider_global_environment_file" ] || [ -L "$pkg_provider_global_environment_file" ] || continue
       printf -- '%s\n' "$pkg_provider_global_environment_file" || exit 1
-    done | LC_ALL=C command -p -- sort
+    done
   )" || return 1
+
+  if [ -n "$pkg_provider_global_environment_unsorted" ]
+  then
+    pkg_provider_global_environment_files="$(
+      printf -- '%s\n' "$pkg_provider_global_environment_unsorted" |
+        LC_ALL=C command -p -- sort
+    )" || return 1
+  else
+    pkg_provider_global_environment_files=
+  fi
   [ -n "$pkg_provider_global_environment_files" ] || return 0
 
   pkg_provider_global_environment_osarch="$(_pkg_provider_global_active_osarch 2>/dev/null)" || pkg_provider_global_environment_osarch=
