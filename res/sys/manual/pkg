@@ -10,6 +10,7 @@ SYNOPSIS
     pkg provider default -u [--] <facility>
     pkg provider bind <consumer> <facility> [<provider-selector>]
     pkg provider bind -u [--] <consumer> <facility>
+    pkg requirement list <package-spec>
     pkg requirement resolve <facility> <constraint>...
 
 DESCRIPTION
@@ -47,6 +48,12 @@ COMMANDS
         An already installed concrete is not reinstalled. Its error diagnostic
         identifies the installed concrete and the current/default concrete for
         the same package/platform class when one exists.
+
+        Dependency declarations are validated from the selected catalog definition
+        before artifact download. Runtime dependency satisfiability is not an
+        installation precondition: missing or ambiguous providers are reported as
+        warnings after a successful install and are resolved again when the package
+        is launched.
 
         $m_PKG_DIR is materialized on demand when the first syntactically valid
         install operand is processed. An invocation containing only invalid
@@ -92,8 +99,15 @@ COMMANDS
         Set the provider selector bound to the consumer/facility pair.
 
     provider bind -u [--] <consumer> <facility>
-        Remove the consumer binding. Absence of a binding means that dependency
-        resolution inherits the system facility default.
+        Remove the consumer binding. A package consumer then uses the system facility
+        default when configured; if neither binding nor default exists, runtime
+        resolution may use an unambiguous compatible installed provider.
+
+    requirement list <package-spec>
+        Resolve the selected package/version/platform definition from the current
+        catalog and print its declared dependency lines without downloading or
+        extracting the package artifact. An empty successful result means that the
+        selected package definition declares no facility dependencies.
 
     requirement resolve <facility> <constraint>...
         Resolve the configured system facility default using the normal global
@@ -163,7 +177,11 @@ EXAMPLES
 
         pkg provider bind maven java temurin@25.0.4.1+1
 
-    Verify that the current system java provider satisfies a build requirement:
+    Inspect the requirements declared by the catalog-selected Keycloak package:
+
+        pkg requirement list keycloak
+
+    Verify that the current system java provider satisfies a global/build requirement:
 
         pkg requirement resolve java '>=21' '<26'
 

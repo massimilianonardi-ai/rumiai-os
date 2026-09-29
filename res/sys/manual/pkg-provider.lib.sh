@@ -49,16 +49,20 @@ FUNCTIONS
         drops privilege. Selector intent is not changed.
 
     pkg_provider_effective_selector_runtime_access_prepare <consumer> <facility>
-        Prepare the effective provider selector used by one consumer/facility pair
-        for read-only resolution by a non-owner runtime account. An explicit binding
-        is prepared when present; otherwise the system facility default is prepared.
-        Selector intent is not changed.
+        Prepare explicit selector metadata used by one consumer/facility pair for
+        read-only resolution by a non-owner runtime account. An explicit binding is
+        prepared when present; otherwise a configured system facility default is
+        prepared. If neither exists, no selector-state preparation is required
+        because package-consumer resolution may be implicit. Selector intent is not
+        changed.
 
     pkg_provider_effective_selector <consumer> <facility>
-        Print the effective configured selector for the consumer/facility pair:
-        the explicit consumer binding when present, otherwise the system facility
-        default. Returns 1 when neither selector is configured or configured state
-        is invalid.
+        Print the effective explicitly configured selector for the consumer/facility
+        pair: the explicit consumer binding when present, otherwise the configured
+        system facility default. Returns 1 when neither selector is configured,
+        2 for invalid invocation/syntax and 3 when selector configuration exists but
+        is invalid. Installed-provider fallback belongs to pkg-dependency.lib.sh,
+        not to this configuration API.
 
     pkg_provider_selector_resolve <provider-selector> [<consumer-osarch>]
         Resolve selector intent to one installed concrete package identity. A
@@ -109,8 +113,9 @@ FUNCTIONS
         Set the consumer/facility provider selector.
 
     pkg_provider bind -u [--] <consumer> <facility>
-        Remove the consumer binding. Dependency resolution then inherits the
-        facility default when one is configured.
+        Remove the consumer binding. Package-consumer dependency resolution then
+        uses the facility default when configured and otherwise may use deterministic
+        implicit installed-provider resolution.
 
 PROVIDER SELECTORS
     Provider selectors use package-spec syntax:

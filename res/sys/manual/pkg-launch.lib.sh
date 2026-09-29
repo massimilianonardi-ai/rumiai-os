@@ -11,9 +11,11 @@ DESCRIPTION
     package state and State Instance equal to the service identity; this does not
     create a second package launcher or infer state scope from POSIX account identity.
 
-    Facility dependencies are re-resolved at every launch. The launcher applies the
-    consumer's configured binding when present, otherwise the system facility
-    default. A platform-independent consumer concrete uses the active m_OSARCH as
+    Facility dependencies are re-resolved at every launch. Resolution uses the
+    consumer's configured binding when present, otherwise the configured system
+    facility default, and otherwise an unambiguous compatible installed provider.
+    Multiple compatible provider packages without explicit selection are rejected
+    as ambiguous. A platform-independent consumer concrete uses the active m_OSARCH as
     its applicable dependency platform class; its concrete identity remains
     platform-independent. Selected provider projections are interpreted generically from
     facility-cmd and facility-env metadata; package-specific provider logic is not

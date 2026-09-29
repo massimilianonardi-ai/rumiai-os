@@ -3,56 +3,71 @@ NAME
 
 DESCRIPTION
     pkg-dependency.lib.sh owns package dependency declaration parsing, compatibility
-    checks and resolution of each required facility through the configured provider
-    selection model.
+    checks and package-consumer provider resolution.
 
-    Resolution never chooses among installed providers implicitly. For each facility
-    it uses the consumer binding when present, otherwise the system facility default.
-    The selected provider must already resolve to an installed concrete that declares
-    a compatible facility.
+    For a package consumer, an explicit consumer binding has highest precedence,
+    followed by a configured system facility default. When neither exists,
+    resolution discovers compatible installed concrete providers directly from
+    their materialized facility declarations.
+
+    Implicit resolution selects one compatible concrete when unambiguous. Multiple
+    compatible versions of the same provider package may be disambiguated by that
+    package's normal default when the default itself is compatible. Multiple
+    compatible provider packages are ambiguous and are not silently ranked.
+
+    Explicit binding/default intent never silently falls back: if configured intent
+    is unavailable, invalid or incompatible, resolution fails with that reason.
 
 FUNCTIONS
     pkg_dependency_default_resolve <facility> <constraint>...
-        Resolve the configured system facility default through the normal global
+        Resolve the configured system facility default through normal global
         package-class/osarch semantics and require the selected installed concrete
         to declare <facility> at a compatibility satisfying every supplied
         constraint.
 
-        On success, print the selected concrete provider identity. The function is
-        read-only: it does not install packages, choose a provider implicitly,
-        create/change a facility default or create a consumer binding.
+        This is the global/non-package query path and deliberately does not use
+        package-consumer implicit fallback. On success it prints the selected
+        concrete provider identity. It is read-only and does not install packages
+        or mutate provider configuration.
 
-        Returns 0 on success, 1 when the requirement is not currently satisfiable,
-        and 2 for invalid invocation, facility or constraint syntax.
+        Returns 0 on success, 1 when the global requirement is not currently
+        satisfiable, and 2 for invalid invocation, facility or constraint syntax.
 
     pkg_dependency_runtime_access_prepare <provider-concrete>
         Starting from one installed concrete provider, recursively resolve its
-        facility dependencies using the normal binding/default rules and prepare
-        only the selected provider-selector configuration paths for read-only
-        access by a non-owner runtime account. It does not change selector intent,
-        install packages or alter executable package roots.
+        facility dependencies and prepare only explicit selector configuration that
+        actually exists for read-only access by a non-owner runtime account. An
+        implicit dependency requires no selector-state permission change. The
+        function does not change selector intent, install packages or alter package
+        roots.
 
     pkg_dependency_resolve <dependency-file> <consumer> <consumer-osarch>
-        Resolve every dependency declaration through the effective provider selector.
-        consumer-osarch is the consumer's applicable execution/install target class.
-        When it is empty, the active m_OSARCH class is used, detecting the current
-        host platform through the normal osarch library when the caller has not
-        already initialized it. This allows a platform-independent consumer concrete to depend on a platform-specific
-        provider without adding an osarch suffix to the consumer identity.
+        Resolve every dependency declaration using binding -> facility default ->
+        deterministic implicit installed-provider precedence. consumer-osarch is
+        the consumer's applicable execution platform class. When empty, active
+        m_OSARCH is used.
+
         On success, print zero or more tab-separated lines:
 
             <facility><TAB><provider-concrete>
 
-        A missing dependency file is valid and produces no output. The function does
-        not install providers and does not modify provider configuration.
+        A missing dependency file is valid and produces no output. Resolution never
+        installs providers or creates provider configuration.
 
-        Returns 0 on success, 1 when declarations/configuration/providers cannot
-        satisfy the dependency set, and 2 for invalid invocation.
+        Failure diagnostics identify the consumer, facility and constraints and
+        distinguish unavailable, ambiguous, invalid-selection and incompatible
+        explicit-provider cases; ambiguous diagnostics include compatible provider
+        candidates.
+
+        Returns 0 on success, 1 when the dependency set is not satisfiable, and 2
+        for invalid invocation.
 
 MATERIALIZATION
     Integration stores the validated dependency declaration in the installed
     consumer concrete. Provider bindings are not materialized in the package store;
-    authoritative bindings live in system package configuration.
+    authoritative explicit bindings live in system package configuration. Installed
+    provider discovery reads concrete facility metadata directly and has no
+    authoritative mutable provider index.
 
 DEPENDENCIES
     The library uses the package facility compatibility contract and

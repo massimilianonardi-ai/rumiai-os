@@ -7,8 +7,10 @@ DESCRIPTION
     and one package provider realization.
 
     Facility/provider definitions are inert declarations. Validation does not create
-    a facility default, create a consumer binding, publish commands, export
-    environment variables or otherwise select/apply a provider.
+    a facility default, create a consumer binding, publish commands or export
+    environment variables. Installed concrete facility declarations are also the
+    source used by dependency resolution to discover installed providers; no
+    separate mutable provider-index registry is authoritative.
 
     The generic facility contract envelope is:
 
