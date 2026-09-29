@@ -72,6 +72,36 @@ _rsudo_fs_stream_fifo_clear()
 
 #------------------------------------------------------------------------------
 
+_rsudo_fs_stream_cleanup()
+{
+  if [ -n "${RSUDO_FS_PRODUCER_PID-}" ]
+  then
+    kill "$RSUDO_FS_PRODUCER_PID" 2>/dev/null || :
+    wait "$RSUDO_FS_PRODUCER_PID" 2>/dev/null || :
+    RSUDO_FS_PRODUCER_PID=""
+  fi
+
+  if [ -n "${RSUDO_FS_STREAM_FIFO-}" ]
+  then
+    _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" 2>/dev/null || :
+    RSUDO_FS_STREAM_FIFO=""
+  fi
+}
+
+#------------------------------------------------------------------------------
+
+_rsudo_fs_stream_terminate()
+{
+  _rsudo_fs_stream_signal="$1"
+
+  trap - 0 "$_rsudo_fs_stream_signal"
+  _rsudo_fs_stream_cleanup
+
+  kill -s "$_rsudo_fs_stream_signal" "$"
+}
+
+#------------------------------------------------------------------------------
+
 rsudo_mod_fs_rm()
 (
   [ "$#" -gt 0 ] || exit 1
@@ -246,6 +276,15 @@ rsudo_mod_fs_get()
   #
   # A private FIFO replaces the shell pipeline so producer and consumer status
   # are independently observable on every supported host shell.
+  RSUDO_FS_STREAM_FIFO=""
+  RSUDO_FS_PRODUCER_PID=""
+
+  trap '_rsudo_fs_stream_cleanup' 0
+  trap '_rsudo_fs_stream_terminate HUP' HUP
+  trap '_rsudo_fs_stream_terminate INT' INT
+  trap '_rsudo_fs_stream_terminate QUIT' QUIT
+  trap '_rsudo_fs_stream_terminate TERM' TERM
+
   RSUDO_FS_STREAM_FIFO="$(_rsudo_fs_stream_fifo_create)" || {
     rm -rf -- "$LOCAL_EXTRACT"
     exit 1
@@ -273,12 +312,15 @@ rsudo_mod_fs_get()
 
   wait "$RSUDO_FS_PRODUCER_PID"
   RSUDO_FS_PRODUCER_STATUS="$?"
+  RSUDO_FS_PRODUCER_PID=""
 
   _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" || {
     rm -rf -- "$LOCAL_EXTRACT"
     exit 1
   }
-  unset RSUDO_FS_STREAM_FIFO RSUDO_FS_PRODUCER_PID
+  RSUDO_FS_STREAM_FIFO=""
+
+  trap - 0 HUP INT QUIT TERM
 
   if [ "$RSUDO_FS_PRODUCER_STATUS" -ne 0 ] ||
      [ "$RSUDO_FS_CONSUMER_STATUS" -ne 0 ]
@@ -501,6 +543,15 @@ rsudo_mod_fs_put()
   #
   # Use the same explicit-status FIFO topology as get so both local producer and
   # remote consumer failures are visible without relying on pipefail.
+  RSUDO_FS_STREAM_FIFO=""
+  RSUDO_FS_PRODUCER_PID=""
+
+  trap '_rsudo_fs_stream_cleanup' 0
+  trap '_rsudo_fs_stream_terminate HUP' HUP
+  trap '_rsudo_fs_stream_terminate INT' INT
+  trap '_rsudo_fs_stream_terminate QUIT' QUIT
+  trap '_rsudo_fs_stream_terminate TERM' TERM
+
   RSUDO_FS_STREAM_FIFO="$(_rsudo_fs_stream_fifo_create)" || exit 1
 
   (
@@ -538,9 +589,12 @@ rsudo_mod_fs_put()
 
   wait "$RSUDO_FS_PRODUCER_PID"
   RSUDO_FS_PRODUCER_STATUS="$?"
+  RSUDO_FS_PRODUCER_PID=""
 
   _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" || exit 1
-  unset RSUDO_FS_STREAM_FIFO RSUDO_FS_PRODUCER_PID
+  RSUDO_FS_STREAM_FIFO=""
+
+  trap - 0 HUP INT QUIT TERM
 
   if [ "$RSUDO_FS_PRODUCER_STATUS" -ne 0 ] ||
      [ "$RSUDO_FS_CONSUMER_STATUS" -ne 0 ]
