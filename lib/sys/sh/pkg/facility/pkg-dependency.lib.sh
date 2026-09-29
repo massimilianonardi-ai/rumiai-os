@@ -595,27 +595,14 @@ pkg_dependency_default_resolve()
   pkg_dependency_default_provider="$(pkg_provider_default_resolve "$pkg_dependency_default_facility")"
   pkg_dependency_default_status=$?
   case "$pkg_dependency_default_status" in
-    0)
-      _pkg_dependency_provider_satisfies         "$pkg_dependency_default_provider"         "$pkg_dependency_default_facility"         "$pkg_dependency_default_constraints" || return 1
-      printf -- '%s\n' "$pkg_dependency_default_provider"
-      return 0
-      ;;
-    1)
-      _pkg_dependency_consumer_osarch_resolve "" || return 1
-      pkg_dependency_default_provider="$(
-        _pkg_dependency_implicit_resolve           "$pkg_dependency_default_facility"           "$pkg_dependency_default_constraints"           "$pkg_dependency_effective_osarch"
-      )"
-      [ "$?" -eq 0 ] || return 1
-      printf -- '%s\n' "$pkg_dependency_default_provider"
-      return 0
-      ;;
-    2)
-      return 2
-      ;;
-    *)
-      return 1
-      ;;
+    0) : ;;
+    2) return 2 ;;
+    *) return 1 ;;
   esac
+
+  _pkg_dependency_provider_satisfies     "$pkg_dependency_default_provider"     "$pkg_dependency_default_facility"     "$pkg_dependency_default_constraints" || return 1
+
+  printf -- '%s\n' "$pkg_dependency_default_provider"
 )
 
 _pkg_dependency_runtime_access_prepare_concrete()

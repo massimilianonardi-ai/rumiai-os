@@ -8,6 +8,11 @@ pkg_requirement()
   shift
 
   case "$pkg_requirement_action" in
+    list)
+      [ "$#" -eq 1 ] || return 2
+      loadsyslib "pkg/pkg-install" || return 1
+      pkg_install_requirement_list "$1"
+      ;;
     resolve)
       [ "$#" -ge 2 ] || return 2
       pkg_dependency_default_resolve "$@"
