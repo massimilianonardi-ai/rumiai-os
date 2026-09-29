@@ -283,6 +283,175 @@ _pkg_dependency_consumer_osarch_resolve()
   _pkg_provider_osarch_valid "$pkg_dependency_effective_osarch"
 }
 
+_pkg_dependency_compatible_providers()
+(
+  [ "$#" -eq 3 ] || return 2
+  pkg_dependency_candidate_facility=$1
+  pkg_dependency_candidate_constraints=$2
+  pkg_dependency_candidate_osarch=$3
+
+  _pkg_facility_name_valid "$pkg_dependency_candidate_facility" || return 2
+  _pkg_provider_osarch_valid "$pkg_dependency_candidate_osarch" || return 2
+
+  if [ ! -e "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ]
+  then
+    return 0
+  fi
+  [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
+
+  pkg_dependency_candidate_set=
+  for pkg_dependency_candidate_path in "$m_PKG_DIR"/*
+  do
+    [ -e "$pkg_dependency_candidate_path" ] || [ -L "$pkg_dependency_candidate_path" ] || continue
+    [ -d "$pkg_dependency_candidate_path" ] && [ ! -L "$pkg_dependency_candidate_path" ] || continue
+
+    pkg_dependency_candidate_name=${pkg_dependency_candidate_path##*/}
+    _pkg_provider_concrete_parse "$pkg_dependency_candidate_name" || continue
+    if [ -n "$pkg_provider_concrete_osarch" ] && [ "$pkg_provider_concrete_osarch" != "$pkg_dependency_candidate_osarch" ]
+    then
+      continue
+    fi
+
+    pkg_dependency_candidate_facility_file="$pkg_dependency_candidate_path/facility"
+    if [ ! -e "$pkg_dependency_candidate_facility_file" ] && [ ! -L "$pkg_dependency_candidate_facility_file" ]
+    then
+      continue
+    fi
+    _pkg_facility_file_validate "$pkg_dependency_candidate_facility_file" || continue
+
+    pkg_dependency_candidate_matches=0
+    while IFS= read -r pkg_dependency_candidate_line
+    do
+      _pkg_facility_line_parse "$pkg_dependency_candidate_line" || {
+        pkg_dependency_candidate_matches=0
+        break
+      }
+      [ "$pkg_facility_name" = "$pkg_dependency_candidate_facility" ] || continue
+      if _pkg_dependency_constraints_satisfied "$pkg_facility_compatibility" "$pkg_dependency_candidate_constraints"
+      then
+        pkg_dependency_candidate_matches=1
+      fi
+      break
+    done < "$pkg_dependency_candidate_facility_file"
+
+    [ "$pkg_dependency_candidate_matches" -eq 1 ] || continue
+    if [ -n "$pkg_dependency_candidate_set" ]
+    then
+      pkg_dependency_candidate_set="$pkg_dependency_candidate_set
+$pkg_dependency_candidate_name"
+    else
+      pkg_dependency_candidate_set=$pkg_dependency_candidate_name
+    fi
+  done
+
+  [ -z "$pkg_dependency_candidate_set" ] ||     printf -- '%s\n' "$pkg_dependency_candidate_set" | LC_ALL=C command -p -- sort -u
+)
+
+_pkg_dependency_implicit_resolve()
+(
+  [ "$#" -eq 3 ] || return 2
+  pkg_dependency_implicit_facility=$1
+  pkg_dependency_implicit_constraints=$2
+  pkg_dependency_implicit_osarch=$3
+
+  pkg_dependency_implicit_candidates="$(
+    _pkg_dependency_compatible_providers       "$pkg_dependency_implicit_facility"       "$pkg_dependency_implicit_constraints"       "$pkg_dependency_implicit_osarch"
+  )"
+  pkg_dependency_implicit_status=$?
+  [ "$pkg_dependency_implicit_status" -eq 0 ] || return "$pkg_dependency_implicit_status"
+  [ -n "$pkg_dependency_implicit_candidates" ] || return 1
+
+  pkg_dependency_implicit_lf='
+'
+  case "$pkg_dependency_implicit_candidates" in
+    *"$pkg_dependency_implicit_lf"*) : ;;
+    *)
+      printf -- '%s\n' "$pkg_dependency_implicit_candidates"
+      return 0
+      ;;
+  esac
+
+  pkg_dependency_implicit_package=
+  pkg_dependency_implicit_one_package=1
+  while IFS= read -r pkg_dependency_implicit_candidate
+  do
+    _pkg_provider_concrete_parse "$pkg_dependency_implicit_candidate" || return 3
+    if [ -z "$pkg_dependency_implicit_package" ]
+    then
+      pkg_dependency_implicit_package=$pkg_provider_concrete_pkg
+    elif [ "$pkg_dependency_implicit_package" != "$pkg_provider_concrete_pkg" ]
+    then
+      pkg_dependency_implicit_one_package=0
+      break
+    fi
+  done <<EOF_DEPENDENCY_IMPLICIT_CANDIDATES
+$pkg_dependency_implicit_candidates
+EOF_DEPENDENCY_IMPLICIT_CANDIDATES
+
+  if [ "$pkg_dependency_implicit_one_package" -eq 1 ]
+  then
+    pkg_dependency_implicit_default="$(
+      pkg_provider_selector_resolve         "$pkg_dependency_implicit_package"         "$pkg_dependency_implicit_osarch" 2>/dev/null
+    )"
+    if [ "$?" -eq 0 ]
+    then
+      while IFS= read -r pkg_dependency_implicit_candidate
+      do
+        if [ "$pkg_dependency_implicit_candidate" = "$pkg_dependency_implicit_default" ]
+        then
+          printf -- '%s\n' "$pkg_dependency_implicit_default"
+          return 0
+        fi
+      done <<EOF_DEPENDENCY_IMPLICIT_DEFAULT
+$pkg_dependency_implicit_candidates
+EOF_DEPENDENCY_IMPLICIT_DEFAULT
+    fi
+  fi
+
+  printf -- '%s\n' "$pkg_dependency_implicit_candidates"
+  return 4
+)
+
+_pkg_dependency_failure_candidates_set()
+{
+  [ "$#" -eq 1 ] || return 2
+  pkg_dependency_failure_candidates=
+  while IFS= read -r pkg_dependency_failure_candidate
+  do
+    [ -n "$pkg_dependency_failure_candidate" ] || continue
+    if [ -n "$pkg_dependency_failure_candidates" ]
+    then
+      pkg_dependency_failure_candidates="$pkg_dependency_failure_candidates $pkg_dependency_failure_candidate"
+    else
+      pkg_dependency_failure_candidates=$pkg_dependency_failure_candidate
+    fi
+  done <<EOF_DEPENDENCY_FAILURE_CANDIDATES
+$1
+EOF_DEPENDENCY_FAILURE_CANDIDATES
+}
+
+_pkg_dependency_failure_log()
+{
+  [ "$#" -eq 0 ] || return 2
+  pkg_dependency_log_reason=${pkg_dependency_failure_reason:-dependency-resolution-failed}
+  pkg_dependency_log_facility=${pkg_dependency_facility-}
+  pkg_dependency_log_constraints=${pkg_dependency_constraints-}
+  pkg_dependency_log_consumer=${pkg_dependency_consumer-}
+
+  if [ -n "${pkg_dependency_failure_selector-}" ] && [ -n "${pkg_dependency_failure_candidates-}" ]
+  then
+    log error execution execution-failed operation pkg-dependency       reason "$pkg_dependency_log_reason" consumer "$pkg_dependency_log_consumer"       facility "$pkg_dependency_log_facility" constraints "$pkg_dependency_log_constraints"       selector "$pkg_dependency_failure_selector" providers "$pkg_dependency_failure_candidates"
+  elif [ -n "${pkg_dependency_failure_selector-}" ]
+  then
+    log error execution execution-failed operation pkg-dependency       reason "$pkg_dependency_log_reason" consumer "$pkg_dependency_log_consumer"       facility "$pkg_dependency_log_facility" constraints "$pkg_dependency_log_constraints"       selector "$pkg_dependency_failure_selector"
+  elif [ -n "${pkg_dependency_failure_candidates-}" ]
+  then
+    log error execution execution-failed operation pkg-dependency       reason "$pkg_dependency_log_reason" consumer "$pkg_dependency_log_consumer"       facility "$pkg_dependency_log_facility" constraints "$pkg_dependency_log_constraints"       providers "$pkg_dependency_failure_candidates"
+  else
+    log error execution execution-failed operation pkg-dependency       reason "$pkg_dependency_log_reason" consumer "$pkg_dependency_log_consumer"       facility "$pkg_dependency_log_facility" constraints "$pkg_dependency_log_constraints"
+  fi
+}
+
 _pkg_dependency_resolve_one()
 {
   [ "$#" -eq 4 ] || return 2
@@ -291,10 +460,62 @@ _pkg_dependency_resolve_one()
   pkg_dependency_consumer=$3
   _pkg_dependency_consumer_osarch_resolve "$4" || return 1
   pkg_dependency_consumer_osarch=$pkg_dependency_effective_osarch
+  pkg_dependency_failure_reason=
+  pkg_dependency_failure_selector=
+  pkg_dependency_failure_candidates=
 
-  pkg_dependency_selector="$(pkg_provider_effective_selector "$pkg_dependency_consumer" "$pkg_dependency_facility")" || return 1
-  pkg_dependency_resolved_provider="$(pkg_provider_selector_resolve "$pkg_dependency_selector" "$pkg_dependency_consumer_osarch")" || return 1
-  _pkg_dependency_provider_satisfies "$pkg_dependency_resolved_provider" "$pkg_dependency_facility" "$pkg_dependency_constraints"
+  pkg_dependency_selector="$(pkg_provider_effective_selector "$pkg_dependency_consumer" "$pkg_dependency_facility")"
+  pkg_dependency_selector_status=$?
+  case "$pkg_dependency_selector_status" in
+    0)
+      pkg_dependency_failure_selector=$pkg_dependency_selector
+      pkg_dependency_resolved_provider="$(
+        pkg_provider_selector_resolve "$pkg_dependency_selector" "$pkg_dependency_consumer_osarch"
+      )" || {
+        pkg_dependency_failure_reason=selected-provider-unavailable
+        return 1
+      }
+      if ! _pkg_dependency_provider_satisfies         "$pkg_dependency_resolved_provider"         "$pkg_dependency_facility"         "$pkg_dependency_constraints"
+      then
+        pkg_dependency_failure_reason=selected-provider-incompatible
+        pkg_dependency_failure_candidates=$pkg_dependency_resolved_provider
+        return 1
+      fi
+      return 0
+      ;;
+    1)
+      pkg_dependency_implicit_output="$(
+        _pkg_dependency_implicit_resolve           "$pkg_dependency_facility"           "$pkg_dependency_constraints"           "$pkg_dependency_consumer_osarch"
+      )"
+      pkg_dependency_implicit_status=$?
+      case "$pkg_dependency_implicit_status" in
+        0)
+          pkg_dependency_resolved_provider=$pkg_dependency_implicit_output
+          return 0
+          ;;
+        1)
+          pkg_dependency_failure_reason=provider-unavailable
+          return 1
+          ;;
+        4)
+          pkg_dependency_failure_reason=provider-ambiguous
+          _pkg_dependency_failure_candidates_set "$pkg_dependency_implicit_output" || return 1
+          return 1
+          ;;
+        *)
+          pkg_dependency_failure_reason=provider-discovery-invalid
+          return 1
+          ;;
+      esac
+      ;;
+    2)
+      return 2
+      ;;
+    *)
+      pkg_dependency_failure_reason=provider-selection-invalid
+      return 1
+      ;;
+  esac
 }
 
 _pkg_dependency_resolve()
@@ -305,18 +526,29 @@ _pkg_dependency_resolve()
   pkg_dependency_consumer_osarch=$3
   pkg_dependency_resolved=
   pkg_dependency_tab="$(printf '\t')"
+  pkg_dependency_failure_reason=
+  pkg_dependency_failure_selector=
+  pkg_dependency_failure_candidates=
+  pkg_dependency_facility=
+  pkg_dependency_constraints=
 
   if [ ! -e "$pkg_dependency_source" ] && [ ! -L "$pkg_dependency_source" ]
   then
     return 0
   fi
 
-  _pkg_dependency_file_validate "$pkg_dependency_source" || return 1
+  _pkg_dependency_file_validate "$pkg_dependency_source" || {
+    pkg_dependency_failure_reason=dependency-metadata-invalid
+    return 1
+  }
 
   while IFS= read -r pkg_dependency_line
   do
-    _pkg_dependency_line_parse "$pkg_dependency_line" || return 1
-    _pkg_dependency_resolve_one "$pkg_dependency_facility" "$pkg_dependency_constraints" "$pkg_dependency_consumer" "$pkg_dependency_consumer_osarch" || return 1
+    _pkg_dependency_line_parse "$pkg_dependency_line" || {
+      pkg_dependency_failure_reason=dependency-metadata-invalid
+      return 1
+    }
+    _pkg_dependency_resolve_one       "$pkg_dependency_facility"       "$pkg_dependency_constraints"       "$pkg_dependency_consumer"       "$pkg_dependency_consumer_osarch" || return $?
     if [ -n "$pkg_dependency_resolved" ]
     then
       pkg_dependency_resolved="$pkg_dependency_resolved
@@ -330,7 +562,13 @@ $pkg_dependency_facility$pkg_dependency_tab$pkg_dependency_resolved_provider"
 pkg_dependency_resolve()
 (
   [ "$#" -eq 3 ] || return 2
-  _pkg_dependency_resolve "$1" "$2" "$3" || return $?
+  _pkg_dependency_resolve "$1" "$2" "$3"
+  pkg_dependency_resolve_status=$?
+  if [ "$pkg_dependency_resolve_status" -ne 0 ]
+  then
+    [ "$pkg_dependency_resolve_status" -ne 1 ] || _pkg_dependency_failure_log || :
+    return "$pkg_dependency_resolve_status"
+  fi
   [ -z "$pkg_dependency_resolved" ] || printf -- '%s\n' "$pkg_dependency_resolved"
 )
 
@@ -357,14 +595,27 @@ pkg_dependency_default_resolve()
   pkg_dependency_default_provider="$(pkg_provider_default_resolve "$pkg_dependency_default_facility")"
   pkg_dependency_default_status=$?
   case "$pkg_dependency_default_status" in
-    0) : ;;
-    2) return 2 ;;
-    *) return 1 ;;
+    0)
+      _pkg_dependency_provider_satisfies         "$pkg_dependency_default_provider"         "$pkg_dependency_default_facility"         "$pkg_dependency_default_constraints" || return 1
+      printf -- '%s\n' "$pkg_dependency_default_provider"
+      return 0
+      ;;
+    1)
+      _pkg_dependency_consumer_osarch_resolve "" || return 1
+      pkg_dependency_default_provider="$(
+        _pkg_dependency_implicit_resolve           "$pkg_dependency_default_facility"           "$pkg_dependency_default_constraints"           "$pkg_dependency_effective_osarch"
+      )"
+      [ "$?" -eq 0 ] || return 1
+      printf -- '%s\n' "$pkg_dependency_default_provider"
+      return 0
+      ;;
+    2)
+      return 2
+      ;;
+    *)
+      return 1
+      ;;
   esac
-
-  _pkg_dependency_provider_satisfies     "$pkg_dependency_default_provider"     "$pkg_dependency_default_facility"     "$pkg_dependency_default_constraints" || return 1
-
-  printf -- '%s\n' "$pkg_dependency_default_provider"
 )
 
 _pkg_dependency_runtime_access_prepare_concrete()

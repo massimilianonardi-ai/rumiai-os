@@ -256,6 +256,12 @@ pkg_provider_effective_selector_runtime_access_prepare()
     return $?
   fi
 
+  _pkg_provider_default_file "$2" || return $?
+  if [ ! -e "$pkg_provider_config_file" ] && [ ! -L "$pkg_provider_config_file" ]
+  then
+    return 0
+  fi
+
   pkg_provider_default_runtime_access_prepare "$2"
 }
 
@@ -543,12 +549,18 @@ pkg_provider_effective_selector()
 
   if [ -e "$pkg_provider_effective_binding" ] || [ -L "$pkg_provider_effective_binding" ]
   then
-    _pkg_provider_config_query "$pkg_provider_effective_binding"
-    return $?
+    [ -f "$pkg_provider_effective_binding" ] && [ ! -L "$pkg_provider_effective_binding" ] || return 3
+    _pkg_provider_config_query "$pkg_provider_effective_binding" || return 3
+    return 0
   fi
 
   _pkg_provider_default_file "$pkg_provider_effective_facility" || return $?
-  _pkg_provider_config_query "$pkg_provider_config_file"
+  if [ ! -e "$pkg_provider_config_file" ] && [ ! -L "$pkg_provider_config_file" ]
+  then
+    return 1
+  fi
+  [ -f "$pkg_provider_config_file" ] && [ ! -L "$pkg_provider_config_file" ] || return 3
+  _pkg_provider_config_query "$pkg_provider_config_file" || return 3
 )
 
 
