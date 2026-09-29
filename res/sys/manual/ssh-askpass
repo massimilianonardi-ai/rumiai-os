@@ -10,25 +10,25 @@ DESCRIPTION
 
     OpenSSH invokes the helper with one prompt operand.
 
-    For ssh_auth, the helper reads one copy of the invocation-owned reusable
-    secret from m_SSH_ASKPASS_FIFO. Multiple helper invocations during the same
-    OpenSSH authentication attempt may therefore receive the same secret.
+    In ssh_auth mode, the helper reads one record from the private repeatable
+    FIFO identified by m_SSH_ASKPASS_FIFO. Each secret-entry invocation may
+    therefore receive the same caller-owned secret.
 
-    For ssh_password, the helper consumes the invocation-owned one-shot IPC
+    In ssh_password mode, the helper consumes the invocation-owned one-shot IPC
     value identified by m_SSH_ASKPASS_ID.
 
-    Exactly one provider must be selected.
-
     When OpenSSH marks the request as a confirmation prompt through
-    SSH_ASKPASS_PROMPT=confirm, ssh-askpass refuses the request before reading
-    either provider.
+    SSH_ASKPASS_PROMPT=confirm, ssh-askpass refuses the request before consuming
+    authentication data.
 
-    Normal callers use ssh_auth or ssh_password from ssh.lib.sh rather than
-    invoking this command directly.
+    The two transport identities are mutually exclusive. Normal callers use
+    ssh_auth or ssh_password from ssh.lib.sh rather than invoking this command
+    directly.
 
 ENVIRONMENT
     m_SSH_ASKPASS_FIFO
-        Private FIFO established by ssh_auth for repeatable secret delivery.
+        Absolute private FIFO pathname established by ssh_auth for repeatable
+        secret delivery.
 
     m_SSH_ASKPASS_ID
         One-shot IPC identity established by ssh_password.
@@ -37,9 +37,9 @@ ENVIRONMENT
         OpenSSH prompt classification. The value confirm is refused.
 
 EXIT STATUS
-    0   authentication secret delivered successfully
-    1   confirmation request, invalid provider selection, invalid provider
-        resource, or provider read failure
+    0   authentication value delivered successfully
+    1   confirmation request, invalid/missing transport identity, conflicting
+        transport identities, or transport failure
     2   invocation does not contain exactly one prompt operand
 
 SEE ALSO
