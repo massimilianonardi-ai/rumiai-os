@@ -4,7 +4,8 @@ loadsyslib "ipc"
 
 set +x
 
-[ "$#" -eq 0 ] || exit 2
+[ "$#" -eq 1 ] || exit 2
+[ "${SSH_ASKPASS_PROMPT-}" != "confirm" ] || exit 1
 [ -n "${m_SSH_ASKPASS_ID-}" ] || exit 1
 
 ipc_once_get "$m_SSH_ASKPASS_ID" || exit 1
