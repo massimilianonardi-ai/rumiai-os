@@ -30,7 +30,7 @@ FUNCTIONS
         Invoke ssh using password authentication with password supplied through
         the m askpass path.
 
-        password must be non-empty and at least one ssh argument must be supplied.
+        password must be non-empty, must not contain a newline, and at least one ssh argument must be supplied.
 
         The invocation forces these OpenSSH settings:
 
