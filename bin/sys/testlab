@@ -11,7 +11,7 @@ testlab_name_valid()
 testlab_project_resolve()
 {
   testlab_project_root=$(command -p pwd -P) || return 1
-  testlab_scenario_dir="$testlab_project_root/testlab/scenarios"
+  testlab_scenario_dir="$testlab_project_root/res/sys/testlab/scenarios"
 }
 
 testlab_state_resolve()

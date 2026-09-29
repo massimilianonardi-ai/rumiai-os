@@ -25,10 +25,11 @@ PROJECT SCENARIOS
 
     Scenarios are regular executable, non-symlink files under:
 
-        testlab/scenarios/<scenario>
+        res/sys/testlab/scenarios/<scenario>
 
-    Scenario names use the m controlled-name grammar. The scenario is invoked
-    as a child program and is never sourced into testlab.
+    The directory is the technical sys testlab resource class under the existing
+    project res/ hierarchy. Scenario names use the m controlled-name grammar.
+    The scenario is invoked as a child program and is never sourced into testlab.
 
     Lifecycle phases are:
 
@@ -169,7 +170,7 @@ FILES
     res/sys/manual/testlab
         This operational manual topic.
 
-    <project-root>/testlab/scenarios/
+    <project-root>/res/sys/testlab/scenarios/
         Project-local scenario definitions.
 
     $(state-path user sys testlab data)/instances/
