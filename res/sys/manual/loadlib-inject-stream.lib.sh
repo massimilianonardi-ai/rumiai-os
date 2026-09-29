@@ -57,9 +57,10 @@ FUNCTIONS
         --command command-name local-source
             Define a reusable generated command function.
 
-            command-name must already be a valid POSIX shell identifier:
-            alphabetic or underscore first character, followed only by
-            alphabetic characters, digits or underscore.
+            command-name must already be a portable POSIX shell function
+            identifier: alphabetic or underscore first character, followed only
+            by alphabetic characters, digits or underscore, and not a POSIX
+            shell reserved word.
 
             command-name loadlib and names beginning
             _loadlib_inject_stream_ are reserved by the generated runtime.

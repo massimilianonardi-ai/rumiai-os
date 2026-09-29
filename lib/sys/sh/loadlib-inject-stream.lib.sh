@@ -35,6 +35,9 @@ loadlib_inject_stream()
         "" | [!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ_]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_]*)
           return 1
           ;;
+        case | do | done | elif | else | esac | fi | for | if | in | then | until | while)
+          return 1
+          ;;
         loadlib | _loadlib_inject_stream_*)
           return 1
           ;;
