@@ -140,8 +140,10 @@ rsudo_admin_browse_host()
     rsudo --load ":$rsudo_admin_selected_group" --interactive \
       exec inject \
       base array map term menu \
-      -- "$m_BIN_SYS_DIR/menu" -d /
-  ) >/dev/null
+      --command _rsudo_admin_remote_menu "$m_BIN_SYS_DIR/menu" <<'EOF_RSUDO_ADMIN_REMOTE_MENU'
+_rsudo_admin_remote_menu -d / >/dev/null
+EOF_RSUDO_ADMIN_REMOTE_MENU
+  )
   rsudo_admin_status=$?
 
   if [ "$rsudo_admin_status" -eq 0 ]
