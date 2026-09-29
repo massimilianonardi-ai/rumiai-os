@@ -278,14 +278,9 @@ rsudo()
         unset RSUDO_ENCODED_FILE RSUDO_CREDENTIALS_GROUP_NAME
       ;;
 
-      --ssh-auth-test)
+      --ssh-auth-check)
         shift
-        SSH_ASKPASS_REQUIRE="never" ssh \
-        -o BatchMode=no -o StrictHostKeyChecking=ask -o AddKeysToAgent=yes -o ControlPath=none \
-        -l "$RSUDO_USER" "$RSUDO_HOST" true \
-        && ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" true
-
-        [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
+        RSUDO_SSH_AUTH_CHECK="true"
       ;;
 
       --*) log fatal execution invalid-arguments option "$1"; return 8;;
@@ -330,6 +325,28 @@ rsudo()
   [ -z "${RSUDO_PASSWORD-}" ] && { log fatal execution invalid-arguments field rsudo-password reason empty; return 13; }
 
   log debug rsudo connection-state host "$RSUDO_HOST" user "$RSUDO_USER" password-present true
+
+
+
+  if [ "${RSUDO_SSH_AUTH_CHECK-}" = "true" ]
+  then
+    unset RSUDO_SSH_AUTH_CHECK
+
+    [ -t 0 ] || { log fatal execution execution-failed operation ssh-auth-check reason tty-required; return 254; }
+
+    log info rsudo ssh-auth-check start user "$RSUDO_USER" host "$RSUDO_HOST"
+
+    SSH_ASKPASS_REQUIRE="never" ssh \
+    -o BatchMode=no -o StrictHostKeyChecking=ask -o AddKeysToAgent=yes -o ControlPath=none \
+    -l "$RSUDO_USER" "$RSUDO_HOST" true \
+    && ssh_auth "$RSUDO_PASSWORD" -o ControlPath=none -l "$RSUDO_USER" "$RSUDO_HOST" true
+
+    [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
+
+    log info rsudo ssh-auth-check end user "$RSUDO_USER" host "$RSUDO_HOST" status 0
+
+    return 0
+  fi
 
 
 
