@@ -138,7 +138,7 @@ SECURITY
     trusted job libraries and templates.
 
     Encrypted-file Load intentionally follows encoded_file_eval's authenticated
-    shell-source evaluation contract. It is not a data-only assignment parser.
+    shell-source evaluation contract.
 
     New encrypted files do not use plaintext temporary files. Portable POSIX
     shell cannot guarantee memory zeroization or protection from operating-system
