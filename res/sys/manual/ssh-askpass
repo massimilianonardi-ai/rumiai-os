@@ -1,0 +1,26 @@
+NAME
+    ssh-askpass - OpenSSH askpass companion for ssh.lib.sh
+
+SYNOPSIS
+    ssh-askpass
+
+DESCRIPTION
+    ssh-askpass is the bootstrap-integrated helper used by ssh.lib.sh.
+    It reads the invocation-owned one-shot IPC value identified by
+    m_SSH_ASKPASS_ID and writes that value for OpenSSH.
+
+    Normal callers use ssh_password from ssh.lib.sh rather than invoking this
+    command directly.
+
+ENVIRONMENT
+    m_SSH_ASKPASS_ID
+        Required one-shot IPC identity established by ssh.lib.sh.
+
+EXIT STATUS
+    0   value delivered successfully
+    1   missing or invalid IPC identity, or IPC delivery failure
+    2   command arguments were supplied
+
+SEE ALSO
+    ssh.lib.sh
+    ipc.lib.sh
