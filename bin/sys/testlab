@@ -1,0 +1,490 @@
+#!/usr/bin/env m
+
+testlab_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    "" | [!abcdefghijklmnopqrstuvwxyz0123456789]* | *[!abcdefghijklmnopqrstuvwxyz0123456789._-]* | *[._-]) return 1 ;;
+  esac
+}
+
+testlab_project_resolve()
+{
+  testlab_project_root=$(command -p pwd -P) || return 1
+  testlab_scenario_dir="$testlab_project_root/testlab/scenarios"
+}
+
+testlab_state_resolve()
+{
+  testlab_data_root=$(command -- state-path user sys testlab data) || return 1
+  testlab_instances_root="$testlab_data_root/instances"
+}
+
+testlab_state_prepare()
+{
+  command -p mkdir -p -- "$testlab_instances_root" || return 1
+  [ -d "$testlab_instances_root" ] && [ ! -L "$testlab_instances_root" ]
+}
+
+testlab_value_write()
+{
+  [ "$#" -eq 2 ] || return 2
+  testlab_value_path=$1
+  testlab_value_tmp="$testlab_value_path.tmp.$$"
+  command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+  printf '%s' "$2" > "$testlab_value_tmp" || {
+    command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+    return 1
+  }
+  command -p mv -- "$testlab_value_tmp" "$testlab_value_path" || {
+    command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+    return 1
+  }
+}
+
+testlab_value_read()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || return 1
+  testlab_value_read_result=$(
+    command -p cat -- "$1" || exit 1
+    printf X
+  ) || return 1
+  testlab_value_read_result=${testlab_value_read_result%X}
+}
+
+testlab_scenario_find()
+{
+  [ "$#" -eq 1 ] || return 2
+  testlab_name_valid "$1" || return 1
+  testlab_scenario_path="$testlab_scenario_dir/$1"
+  [ -f "$testlab_scenario_path" ] && [ ! -L "$testlab_scenario_path" ] && [ -x "$testlab_scenario_path" ]
+}
+
+testlab_scenarios_print()
+{
+  [ -d "$testlab_scenario_dir" ] && [ ! -L "$testlab_scenario_dir" ] || return 0
+  {
+    for testlab_candidate in "$testlab_scenario_dir"/*
+    do
+      [ -f "$testlab_candidate" ] && [ ! -L "$testlab_candidate" ] && [ -x "$testlab_candidate" ] || continue
+      testlab_candidate_name=${testlab_candidate##*/}
+      testlab_name_valid "$testlab_candidate_name" || continue
+      printf '%s\n' "$testlab_candidate_name" || return 1
+    done
+  } | LC_ALL=C command -p sort
+}
+
+testlab_check()
+{
+  testlab_check_name=$1
+  shift
+  TESTLAB_PROJECT_ROOT=$testlab_project_root
+  TESTLAB_SCENARIO_NAME=$testlab_check_name
+  export TESTLAB_PROJECT_ROOT TESTLAB_SCENARIO_NAME
+  (
+    unset TESTLAB_INSTANCE_ID TESTLAB_INSTANCE_DIR TESTLAB_CONTEXT_DIR TESTLAB_RESOURCES_DIR
+    CDPATH= cd -P -- "$testlab_project_root" || exit 125
+    "$testlab_scenario_path" check "$@"
+  )
+}
+
+testlab_instance_allocate()
+{
+  testlab_allocate_name=$1
+  testlab_allocate_source=$2
+  testlab_timestamp=$(command -p date -u '+%Y%m%d%H%M%S') || return 1
+  testlab_instance_base="$testlab_allocate_name-$testlab_timestamp-$$"
+  testlab_instance_id=$testlab_instance_base
+  testlab_instance_suffix=0
+
+  while [ -e "$testlab_instances_root/$testlab_instance_id" ] || [ -L "$testlab_instances_root/$testlab_instance_id" ]
+  do
+    testlab_instance_suffix=$((testlab_instance_suffix + 1))
+    testlab_instance_id="$testlab_instance_base-$testlab_instance_suffix"
+  done
+
+  testlab_instance_dir="$testlab_instances_root/$testlab_instance_id"
+  command -p mkdir -m 700 -- "$testlab_instance_dir" || return 1
+
+  if ! command -p mkdir -m 700 -- "$testlab_instance_dir/context" "$testlab_instance_dir/resources" ||
+     ! command -p cat -- "$testlab_allocate_source" > "$testlab_instance_dir/scenario" ||
+     ! command -p chmod 700 -- "$testlab_instance_dir/scenario" ||
+     ! testlab_value_write "$testlab_instance_dir/scenario-name" "$testlab_allocate_name" ||
+     ! testlab_value_write "$testlab_instance_dir/project-root" "$testlab_project_root" ||
+     ! testlab_value_write "$testlab_instance_dir/state" preparing
+  then
+    command -p rm -rf -- "$testlab_instance_dir" 2>/dev/null || :
+    return 1
+  fi
+
+  testlab_prepared_id=$testlab_instance_id
+}
+
+testlab_instance_load()
+{
+  [ "$#" -eq 1 ] || return 2
+  testlab_name_valid "$1" || return 1
+  testlab_instance_id=$1
+  testlab_instance_dir="$testlab_instances_root/$testlab_instance_id"
+
+  [ -d "$testlab_instance_dir" ] && [ ! -L "$testlab_instance_dir" ] || return 1
+  [ -d "$testlab_instance_dir/context" ] && [ ! -L "$testlab_instance_dir/context" ] || return 2
+  [ -d "$testlab_instance_dir/resources" ] && [ ! -L "$testlab_instance_dir/resources" ] || return 2
+  [ -f "$testlab_instance_dir/scenario" ] && [ ! -L "$testlab_instance_dir/scenario" ] && [ -x "$testlab_instance_dir/scenario" ] || return 2
+
+  testlab_value_read "$testlab_instance_dir/scenario-name" || return 2
+  testlab_instance_scenario=$testlab_value_read_result
+  testlab_name_valid "$testlab_instance_scenario" || return 2
+
+  testlab_value_read "$testlab_instance_dir/project-root" || return 2
+  testlab_instance_project_root=$testlab_value_read_result
+
+  testlab_value_read "$testlab_instance_dir/state" || return 2
+  testlab_instance_state=$testlab_value_read_result
+  case "$testlab_instance_state" in
+    preparing | ready | failed | closed) : ;;
+    *) return 2 ;;
+  esac
+
+  testlab_context_dir="$testlab_instance_dir/context"
+  testlab_resources_dir="$testlab_instance_dir/resources"
+}
+
+testlab_instance_phase()
+{
+  testlab_phase=$1
+  shift
+  TESTLAB_PROJECT_ROOT=$testlab_instance_project_root
+  TESTLAB_SCENARIO_NAME=$testlab_instance_scenario
+  TESTLAB_INSTANCE_ID=$testlab_instance_id
+  TESTLAB_INSTANCE_DIR=$testlab_instance_dir
+  TESTLAB_CONTEXT_DIR=$testlab_context_dir
+  TESTLAB_RESOURCES_DIR=$testlab_resources_dir
+  export TESTLAB_PROJECT_ROOT TESTLAB_SCENARIO_NAME TESTLAB_INSTANCE_ID TESTLAB_INSTANCE_DIR TESTLAB_CONTEXT_DIR TESTLAB_RESOURCES_DIR
+  (
+    CDPATH= cd -P -- "$testlab_instance_dir" || exit 125
+    "$testlab_instance_dir/scenario" "$testlab_phase" "$@"
+  )
+}
+
+testlab_failure_record()
+{
+  testlab_value_write "$testlab_instance_dir/failure-phase" "$1" || return 1
+  testlab_value_write "$testlab_instance_dir/failure-status" "$2" || return 1
+  testlab_value_write "$testlab_instance_dir/state" failed
+}
+
+testlab_prepare_internal()
+{
+  [ "$#" -ge 1 ] || return 1
+  testlab_prepare_name=$1
+  shift
+
+  if ! testlab_scenario_find "$testlab_prepare_name"
+  then
+    printf 'testlab: scenario not found: %s\n' "$testlab_prepare_name" >&2
+    return 2
+  fi
+  testlab_prepare_source=$testlab_scenario_path
+
+  testlab_check "$testlab_prepare_name" "$@"
+  testlab_phase_status=$?
+  if [ "$testlab_phase_status" -ne 0 ]
+  then
+    printf 'testlab: scenario check failed: %s (status %s)\n' "$testlab_prepare_name" "$testlab_phase_status" >&2
+    return 3
+  fi
+
+  testlab_state_prepare || {
+    printf 'testlab: cannot prepare persistent instance state\n' >&2
+    return 4
+  }
+
+  testlab_instance_allocate "$testlab_prepare_name" "$testlab_prepare_source" || {
+    printf 'testlab: cannot allocate scenario instance\n' >&2
+    return 4
+  }
+
+  testlab_instance_load "$testlab_prepared_id" || {
+    printf 'testlab: allocated instance is unreadable: %s\n' "$testlab_prepared_id" >&2
+    return 4
+  }
+
+  testlab_instance_phase prepare "$@"
+  testlab_phase_status=$?
+  if [ "$testlab_phase_status" -ne 0 ]
+  then
+    testlab_failure_record prepare "$testlab_phase_status" || return 4
+    printf 'testlab: scenario prepare failed: %s (instance %s, status %s)\n' "$testlab_prepare_name" "$testlab_prepared_id" "$testlab_phase_status" >&2
+    return 3
+  fi
+
+  testlab_value_write "$testlab_instance_dir/state" ready || return 4
+}
+
+testlab_prepare_command()
+{
+  testlab_prepare_internal "$@"
+  testlab_prepare_status=$?
+  [ "$testlab_prepare_status" -eq 0 ] || return "$testlab_prepare_status"
+  printf '%s\n' "$testlab_prepared_id" || return 4
+}
+
+testlab_status_one()
+{
+  testlab_instance_load "$1"
+  testlab_load_status=$?
+  case "$testlab_load_status" in
+    0) ;;
+    1) printf 'testlab: instance not found: %s\n' "$1" >&2; return 2 ;;
+    *) printf 'testlab: invalid persistent instance state: %s\n' "$1" >&2; return 4 ;;
+  esac
+
+  printf 'instance\t%s\nscenario\t%s\nstate\t%s\nproject-root\t%s\n'     "$testlab_instance_id" "$testlab_instance_scenario" "$testlab_instance_state" "$testlab_instance_project_root" || return 4
+
+  for testlab_failure_key in failure-phase failure-status
+  do
+    if [ -f "$testlab_instance_dir/$testlab_failure_key" ] && [ ! -L "$testlab_instance_dir/$testlab_failure_key" ]
+    then
+      testlab_value_read "$testlab_instance_dir/$testlab_failure_key" || return 4
+      printf '%s\t%s\n' "$testlab_failure_key" "$testlab_value_read_result" || return 4
+    fi
+  done
+}
+
+testlab_status_all()
+{
+  [ -d "$testlab_instances_root" ] && [ ! -L "$testlab_instances_root" ] || return 0
+  for testlab_candidate in "$testlab_instances_root"/*
+  do
+    [ -d "$testlab_candidate" ] && [ ! -L "$testlab_candidate" ] || continue
+    testlab_candidate_id=${testlab_candidate##*/}
+    testlab_name_valid "$testlab_candidate_id" || continue
+    testlab_instance_load "$testlab_candidate_id"
+    testlab_load_status=$?
+    [ "$testlab_load_status" -eq 0 ] || {
+      printf 'testlab: invalid persistent instance state: %s\n' "$testlab_candidate_id" >&2
+      return 4
+    }
+    printf '%s\t%s\t%s\n' "$testlab_instance_id" "$testlab_instance_scenario" "$testlab_instance_state" || return 4
+  done
+}
+
+testlab_context_command()
+{
+  [ "$#" -eq 1 ] || [ "$#" -eq 2 ] || return 1
+  testlab_instance_load "$1"
+  testlab_load_status=$?
+  case "$testlab_load_status" in
+    0) ;;
+    1) return 2 ;;
+    *) return 4 ;;
+  esac
+
+  if [ "$#" -eq 1 ]
+  then
+    {
+      for testlab_context_path in "$testlab_context_dir"/*
+      do
+        [ -f "$testlab_context_path" ] && [ ! -L "$testlab_context_path" ] || continue
+        testlab_context_key=${testlab_context_path##*/}
+        testlab_name_valid "$testlab_context_key" || continue
+        printf '%s\n' "$testlab_context_key" || return 1
+      done
+    } | LC_ALL=C command -p sort
+    return $?
+  fi
+
+  testlab_name_valid "$2" || return 1
+  testlab_context_path="$testlab_context_dir/$2"
+  [ -f "$testlab_context_path" ] && [ ! -L "$testlab_context_path" ] && [ -r "$testlab_context_path" ] || return 2
+  command -p cat -- "$testlab_context_path" || return 4
+}
+
+testlab_enter_command()
+{
+  [ "$#" -eq 1 ] || return 1
+  testlab_instance_load "$1"
+  testlab_load_status=$?
+  case "$testlab_load_status" in
+    0) ;;
+    1) printf 'testlab: instance not found: %s\n' "$1" >&2; return 2 ;;
+    *) printf 'testlab: invalid persistent instance state: %s\n' "$1" >&2; return 4 ;;
+  esac
+  [ "$testlab_instance_state" = ready ] || {
+    printf 'testlab: instance is not ready: %s (%s)\n' "$testlab_instance_id" "$testlab_instance_state" >&2
+    return 2
+  }
+
+  testlab_instance_phase enter
+  testlab_phase_status=$?
+  [ "$testlab_phase_status" -eq 0 ] && return 0
+  [ "$testlab_phase_status" -ge 128 ] 2>/dev/null && return "$testlab_phase_status"
+  printf 'testlab: scenario enter failed: %s (instance %s, status %s)\n' "$testlab_instance_scenario" "$testlab_instance_id" "$testlab_phase_status" >&2
+  return 3
+}
+
+testlab_close_command()
+{
+  [ "$#" -eq 1 ] || return 1
+  testlab_instance_load "$1"
+  testlab_load_status=$?
+  case "$testlab_load_status" in
+    0) ;;
+    1) printf 'testlab: instance not found: %s\n' "$1" >&2; return 2 ;;
+    *) printf 'testlab: invalid persistent instance state: %s\n' "$1" >&2; return 4 ;;
+  esac
+  [ "$testlab_instance_state" = closed ] && return 0
+
+  testlab_instance_phase cleanup
+  testlab_phase_status=$?
+  if [ "$testlab_phase_status" -ne 0 ]
+  then
+    testlab_failure_record cleanup "$testlab_phase_status" || return 4
+    printf 'testlab: scenario cleanup failed: %s (instance %s, status %s)\n' "$testlab_instance_scenario" "$testlab_instance_id" "$testlab_phase_status" >&2
+    return 3
+  fi
+  testlab_value_write "$testlab_instance_dir/state" closed || return 4
+}
+
+testlab_menu_once()
+{
+  set --
+
+  if [ -d "$testlab_scenario_dir" ] && [ ! -L "$testlab_scenario_dir" ]
+  then
+    for testlab_candidate in "$testlab_scenario_dir"/*
+    do
+      [ -f "$testlab_candidate" ] && [ ! -L "$testlab_candidate" ] && [ -x "$testlab_candidate" ] || continue
+      testlab_candidate_name=${testlab_candidate##*/}
+      testlab_name_valid "$testlab_candidate_name" || continue
+      set -- "$@" "scenario:$testlab_candidate_name@:=[new] $testlab_candidate_name"
+    done
+  fi
+
+  if [ -d "$testlab_instances_root" ] && [ ! -L "$testlab_instances_root" ]
+  then
+    for testlab_candidate in "$testlab_instances_root"/*
+    do
+      [ -d "$testlab_candidate" ] && [ ! -L "$testlab_candidate" ] || continue
+      testlab_candidate_id=${testlab_candidate##*/}
+      testlab_name_valid "$testlab_candidate_id" || continue
+      testlab_instance_load "$testlab_candidate_id"
+      [ "$?" -eq 0 ] || return 4
+      [ "$testlab_instance_state" != closed ] || continue
+      set -- "$@" "instance:$testlab_instance_id@:=[$testlab_instance_state] $testlab_instance_scenario ($testlab_instance_id)"
+    done
+  fi
+
+  [ "$#" -gt 0 ] || {
+    printf 'testlab: no scenarios or open instances\n'
+    return 1
+  }
+
+  testlab_menu_result=$(command -- menu -H testlab -F 'Enter: open | c: close instance | Escape: exit' -K c -- "$@")
+  testlab_menu_status=$?
+  [ "$testlab_menu_status" -eq 0 ] || return "$testlab_menu_status"
+
+  eval "set -- $testlab_menu_result" || return 4
+  [ "$#" -eq 2 ] || return 4
+  TESTLAB_MENU_KEY=$1
+  TESTLAB_MENU_VALUE=$2
+  return 0
+}
+
+testlab_interactive()
+{
+  while :
+  do
+    testlab_menu_once
+    testlab_menu_status=$?
+    case "$testlab_menu_status" in
+      0) ;;
+      1) return 0 ;;
+      2) return 4 ;;
+      *) return "$testlab_menu_status" ;;
+    esac
+
+    case "$TESTLAB_MENU_VALUE" in
+      scenario:*)
+        testlab_menu_name=${TESTLAB_MENU_VALUE#scenario:}
+        [ "$TESTLAB_MENU_KEY" = enter ] || continue
+        testlab_prepare_internal "$testlab_menu_name" || continue
+        printf 'instance: %s\n' "$testlab_prepared_id"
+        testlab_enter_command "$testlab_prepared_id" || :
+        ;;
+      instance:*)
+        testlab_menu_id=${TESTLAB_MENU_VALUE#instance:}
+        case "$TESTLAB_MENU_KEY" in
+          enter) testlab_enter_command "$testlab_menu_id" || : ;;
+          c) testlab_close_command "$testlab_menu_id" || : ;;
+        esac
+        ;;
+      *) return 4 ;;
+    esac
+  done
+}
+
+testlab_usage()
+{
+  printf '%s\n'     'usage: testlab'     '       testlab scenarios'     '       testlab prepare <scenario> [<scenario-arg> ...]'     '       testlab status [<instance-id>]'     '       testlab context <instance-id> [<key>]'     '       testlab enter <instance-id>'     '       testlab close <instance-id>' >&2
+}
+
+main()
+{
+  testlab_project_resolve || {
+    printf 'testlab: cannot resolve project root\n' >&2
+    return 4
+  }
+  testlab_state_resolve || {
+    printf 'testlab: cannot resolve persistent state root\n' >&2
+    return 4
+  }
+
+  if [ "$#" -eq 0 ]
+  then
+    testlab_state_prepare || return 4
+    testlab_interactive
+    return $?
+  fi
+
+  testlab_command=$1
+  shift
+  case "$testlab_command" in
+    scenarios)
+      [ "$#" -eq 0 ] || { testlab_usage; return 1; }
+      testlab_scenarios_print || return 4
+      ;;
+    prepare)
+      [ "$#" -ge 1 ] || { testlab_usage; return 1; }
+      testlab_prepare_command "$@"
+      ;;
+    status)
+      [ "$#" -le 1 ] || { testlab_usage; return 1; }
+      testlab_state_prepare || return 4
+      if [ "$#" -eq 0 ]; then testlab_status_all; else testlab_status_one "$1"; fi
+      ;;
+    context)
+      [ "$#" -eq 1 ] || [ "$#" -eq 2 ] || { testlab_usage; return 1; }
+      testlab_state_prepare || return 4
+      testlab_context_command "$@"
+      ;;
+    enter)
+      [ "$#" -eq 1 ] || { testlab_usage; return 1; }
+      testlab_state_prepare || return 4
+      testlab_enter_command "$1"
+      ;;
+    close)
+      [ "$#" -eq 1 ] || { testlab_usage; return 1; }
+      testlab_state_prepare || return 4
+      testlab_close_command "$1"
+      ;;
+    *)
+      testlab_usage
+      return 1
+      ;;
+  esac
+}
+
+main "$@"

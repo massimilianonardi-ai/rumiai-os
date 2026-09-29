@@ -1,0 +1,168 @@
+NAME
+    testlab - create and operate live development scenario instances
+
+SYNOPSIS
+    testlab
+    testlab scenarios
+    testlab prepare scenario [scenario-arg ...]
+    testlab status [instance-id]
+    testlab context instance-id [key]
+    testlab enter instance-id
+    testlab close instance-id
+
+DESCRIPTION
+    testlab is the m developer-facing live scenario environment command.
+
+    It prepares concrete development realities and keeps their lifecycle state
+    persistent so an operator can leave an instance alive, inspect it, re-enter
+    it later, or recover cleanup after a failed/interrupted preparation.
+
+    testlab is not a test runner and does not produce PASS/FAIL assertions or
+    formal validation evidence.
+
+PROJECT SCENARIOS
+    The physical current working directory at invocation is the project root.
+
+    Scenarios are regular executable, non-symlink files under:
+
+        testlab/scenarios/<scenario>
+
+    Scenario names use the m controlled-name grammar. The scenario is invoked
+    as a child program and is never sourced into testlab.
+
+    Lifecycle phases are:
+
+        check
+        prepare
+        enter
+        cleanup
+
+    check runs before persistent instance allocation and validates prerequisites
+    without runtime mutation.
+
+    prepare creates or binds resources, records ownership as resources are
+    acquired, publishes factual context and returns after readiness.
+
+    enter attaches the operator directly using the inherited terminal and
+    standard streams.
+
+    cleanup may destroy only resources recorded as owned and must support
+    recovery after failed or interrupted preparation.
+
+SCENARIO ENVIRONMENT
+    check receives:
+
+        TESTLAB_PROJECT_ROOT
+        TESTLAB_SCENARIO_NAME
+
+    prepare, enter and cleanup additionally receive:
+
+        TESTLAB_INSTANCE_ID
+        TESTLAB_INSTANCE_DIR
+        TESTLAB_CONTEXT_DIR
+        TESTLAB_RESOURCES_DIR
+
+    Scenario arguments after the scenario name are passed to check and prepare.
+    Later phases use persisted instance state.
+
+    TESTLAB_CONTEXT_DIR contains factual handles for activities.
+
+    TESTLAB_RESOURCES_DIR is the scenario's persistent ownership/recovery
+    inventory. The first baseline defines no generic resource-record format.
+
+INSTANCE STATE
+    Persistent technical state is rooted by:
+
+        state-path user sys testlab data
+
+    Instance records live below its instances/ directory.
+
+    Each instance contains a frozen executable copy of its selected scenario.
+    enter and close use the frozen copy even if the project source later changes.
+
+    States are:
+
+        preparing
+        ready
+        failed
+        closed
+
+    failed and interrupted preparing instances remain available for diagnosis
+    and close/recovery. Repeating close on a closed instance succeeds without
+    running cleanup again.
+
+    Closed records are retained; the baseline defines no automatic purge policy.
+
+COMMANDS
+    testlab
+        Open the interactive-first menu. Project scenarios appear as new
+        choices and persisted non-closed instances can be re-entered or closed.
+
+    testlab scenarios
+        Print discoverable scenario names in ascending bytewise lexical order.
+
+    testlab prepare scenario [scenario-arg ...]
+        Run check, allocate persistent state, freeze the scenario and run
+        prepare. On success print the opaque instance id.
+
+        A prepare failure after allocation leaves a failed persistent instance;
+        the diagnostic includes its id for inspection and cleanup.
+
+    testlab status
+        List persisted instance id, scenario name and lifecycle state.
+
+    testlab status instance-id
+        Print id, scenario, state and project root, plus recorded failure data.
+
+    testlab context instance-id
+        List controlled context keys in ascending bytewise lexical order.
+
+    testlab context instance-id key
+        Write the selected context file verbatim.
+
+    testlab enter instance-id
+        Invoke the frozen enter phase of a ready instance.
+
+    testlab close instance-id
+        Invoke frozen cleanup for ready, failed or preparing instances, then
+        mark the instance closed only after successful cleanup.
+
+EXIT STATUS
+    0   Success.
+    1   Invalid invocation.
+    2   Scenario, instance or context not found, or incompatible lifecycle state.
+    3   Scenario lifecycle phase failed.
+    4   testlab infrastructure or persistent-state failure.
+
+    Signal-derived statuses from an interrupted interactive scenario may be
+    propagated.
+
+FILES
+    bin/sys/testlab
+        Public m command.
+
+    res/sys/manual/testlab
+        This operational manual topic.
+
+    <project-root>/testlab/scenarios/
+        Project-local scenario definitions.
+
+    $(state-path user sys testlab data)/instances/
+        Persistent scenario instance records.
+
+EXAMPLES
+    List scenarios:
+
+        testlab scenarios
+
+    Prepare, inspect, enter and close scratch:
+
+        instance=$(testlab prepare scratch)
+        testlab context "$instance"
+        testlab context "$instance" root
+        testlab enter "$instance"
+        testlab close "$instance"
+
+SEE ALSO
+    manual menu
+    manual state-path

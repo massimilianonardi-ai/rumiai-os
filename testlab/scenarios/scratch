@@ -1,0 +1,34 @@
+#!/usr/bin/env m
+
+case "${1-}" in
+  check)
+    shift
+    [ "$#" -eq 0 ] || exit 2
+    command -v shell >/dev/null 2>&1 || exit 3
+    ;;
+  prepare)
+    shift
+    [ "$#" -eq 0 ] || exit 2
+    printf '%s\n' owned > "$TESTLAB_RESOURCES_DIR/work" || exit 4
+    command -p mkdir -m 700 -- "$TESTLAB_INSTANCE_DIR/work" || exit 4
+    printf '%s' "$TESTLAB_INSTANCE_DIR/work" > "$TESTLAB_CONTEXT_DIR/root" || exit 4
+    ;;
+  enter)
+    shift
+    [ "$#" -eq 0 ] || exit 2
+    [ -d "$TESTLAB_INSTANCE_DIR/work" ] && [ ! -L "$TESTLAB_INSTANCE_DIR/work" ] || exit 4
+    CDPATH= cd -P -- "$TESTLAB_INSTANCE_DIR/work" || exit 4
+    command -- shell
+    exit $?
+    ;;
+  cleanup)
+    shift
+    [ "$#" -eq 0 ] || exit 2
+    [ -f "$TESTLAB_RESOURCES_DIR/work" ] && [ ! -L "$TESTLAB_RESOURCES_DIR/work" ] || exit 4
+    [ "$(command -p cat -- "$TESTLAB_RESOURCES_DIR/work")" = owned ] || exit 4
+    command -p rm -rf -- "$TESTLAB_INSTANCE_DIR/work" || exit 4
+    ;;
+  *)
+    exit 2
+    ;;
+esac
