@@ -2,8 +2,8 @@ NAME
     rsudo - execute a command under sudo on a remote host
 
 SYNOPSIS
-    rsudo [--interactive] [--askpass] [--connect user@host]
-          [--load file:group] [--user sudo_as_user]
+    rsudo [--interactive] [--askpass] [--ssh-auth-check]
+          [--connect user@host] [--load file:group] [--user sudo_as_user]
           [--no-preserve-quotes] [submodule] [--] [args...]
 
 DESCRIPTION
@@ -18,13 +18,24 @@ DESCRIPTION
     remain active in the current shell and are inherited by recursive rsudo
     calls. --user and --interactive update those reusable values.
 
-    Askpass and no-preserve-quotes are invocation-local: every rsudo call clears
-    those two modes before parsing its own options.
+    Askpass, no-preserve-quotes and ssh-auth-check are invocation-local: every
+    rsudo call clears those modes before parsing its own options.
 
     A literal -- ends rsudo option and submodule interpretation and sends the
     remaining operands to normal remote execution.
 
 OPTIONS
+    --ssh-auth-check
+        Perform an interactive SSH preparation followed by a real ssh_auth
+        verification, then return without executing sudo or a remote target.
+
+        The check requires a TTY and accepts no remaining command/submodule
+        operands. The first SSH connection uses StrictHostKeyChecking=ask,
+        AddKeysToAgent=yes and ControlPath=none so host enrollment and ordinary
+        OpenSSH credential interaction can occur. The second connection uses
+        ssh_auth with RSUDO_PASSWORD and ControlPath=none to verify the normal
+        rsudo authentication path.
+
     --interactive
         Force interactive remote execution through a terminal-capable path.
 
@@ -80,8 +91,8 @@ RECURSIVE CALLS
     RSUDO_HOST, RSUDO_USER and RSUDO_PASSWORD. They also inherit current
     RSUDO_AS_USER and RSUDO_INTERACTIVE state.
 
-    RSUDO_ASKPASS and RSUDO_NO_PRESERVE_QUOTES are cleared at each rsudo call
-    and therefore are not inherited implicitly.
+    RSUDO_ASKPASS, RSUDO_NO_PRESERVE_QUOTES and RSUDO_SSH_AUTH_CHECK are
+    cleared at each rsudo call and therefore are not inherited implicitly.
 
 ENVIRONMENT
     RSUDO_HOST
@@ -92,8 +103,8 @@ ENVIRONMENT
         available.
 
     RSUDO_PASSWORD
-        Non-empty authentication value available to the remote authentication
-        process.
+        Non-empty authentication value used by normal rsudo as the ssh_auth
+        candidate secret and made available to remote sudo when needed.
 
     RSUDO_CREDENTIALS_GROUP_<group>_HOST
     RSUDO_CREDENTIALS_GROUP_<group>_USER
@@ -104,9 +115,9 @@ ENVIRONMENT
         Fallback login user when RSUDO_USER is empty.
 
     RSUDO_AS_USER and RSUDO_INTERACTIVE are reusable rsudo caller state and may
-    be inherited by recursive calls. RSUDO_ASKPASS and
-    RSUDO_NO_PRESERVE_QUOTES are invocation-local and are cleared before each
-    rsudo invocation parses its options.
+    be inherited by recursive calls. RSUDO_ASKPASS,
+    RSUDO_NO_PRESERVE_QUOTES and RSUDO_SSH_AUTH_CHECK are invocation-local and
+    are cleared before each rsudo invocation parses its options.
 
 EXEC INJECT SUBMODULE
     rsudo exec inject
@@ -183,6 +194,9 @@ EXIT STATUS
         14  invalid delegated submodule function name
         15  rsudo submodule load failed
         16  delegated submodule function is unavailable
+        253 --ssh-auth-check received unexpected remaining operands
+        254 --ssh-auth-check requires a TTY
+        255 --ssh-auth-check authentication verification failed
 
 SECURITY
     RSUDO_PASSWORD is authentication data. It must not become ordinary target
@@ -191,5 +205,5 @@ SECURITY
 
 SEE ALSO
     rsudo.lib.sh
-    rsudo-askpass
+    ssh.lib.sh
     rsudo-mod-fs.lib.sh

@@ -4,8 +4,8 @@ NAME
 SYNOPSIS
     loadsyslib "rsudo/rsudo"
 
-    rsudo [--interactive] [--askpass] [--connect user@host]
-          [--load file:group] [--user sudo_as_user]
+    rsudo [--interactive] [--askpass] [--ssh-auth-check]
+          [--connect user@host] [--load file:group] [--user sudo_as_user]
           [--no-preserve-quotes] [submodule] [--] [args...]
 
     rsudo_core [args...]
@@ -28,9 +28,14 @@ DESCRIPTION
     stdin, stdout, stderr and final status are preserved according to the
     selected interactive or non-interactive mode.
 
-    Authentication details are internal to the implementation. Callers should
-    rely on the functional behavior documented here rather than on a particular
-    SSH/sudo call sequence, process topology or temporary-resource layout.
+    Normal SSH transport uses ssh_auth with RSUDO_PASSWORD as the repeatable
+    candidate secret. OpenSSH keeps its configured authentication-method
+    selection and ordering; rsudo does not perform host enrollment during normal
+    execution.
+
+    Other SSH/sudo process-topology details remain internal. Callers should rely
+    on the functional behavior documented here rather than on a particular
+    temporary-resource layout.
 
 FUNCTIONS
     rsudo [options] [submodule] [--] [args...]
@@ -48,9 +53,10 @@ FUNCTIONS
         This allows submodules and recursive rsudo calls to preserve the selected
         privilege target and interactive transport mode.
 
-        Askpass and no-preserve-quotes remain invocation-local. At function entry
-        rsudo clears RSUDO_ASKPASS and RSUDO_NO_PRESERVE_QUOTES, then enables
-        them only from options in the current invocation.
+        Askpass, no-preserve-quotes and ssh-auth-check remain invocation-local.
+        At function entry rsudo clears RSUDO_ASKPASS,
+        RSUDO_NO_PRESERVE_QUOTES and RSUDO_SSH_AUTH_CHECK, then enables them only
+        from options in the current invocation.
 
         A literal -- ends rsudo option/submodule interpretation and forces the
         remaining operands to normal remote execution.
@@ -78,6 +84,9 @@ FUNCTIONS
             14  invalid delegated submodule function name
             15  rsudo submodule load failed
             16  delegated submodule function is unavailable
+            253 --ssh-auth-check received unexpected remaining operands
+            254 --ssh-auth-check requires a TTY
+            255 --ssh-auth-check authentication verification failed
 
     rsudo_core [args...]
 
@@ -128,6 +137,23 @@ FUNCTIONS
             2   failed to collect piped interactive source input
 
 OPTIONS
+    --ssh-auth-check
+        Perform the explicit interactive SSH preparation and verification check,
+        then return without executing a sudo target or submodule.
+
+        The check requires a TTY and no remaining operands. It resolves host,
+        user and password through the normal rsudo paths.
+
+        First it runs ordinary interactive OpenSSH with BatchMode=no,
+        StrictHostKeyChecking=ask, AddKeysToAgent=yes and ControlPath=none, with
+        SSH_ASKPASS_REQUIRE=never. This permits host-key enrollment and ordinary
+        OpenSSH credential interaction and allows a successfully loaded
+        file-backed identity to be added to the current agent.
+
+        If that succeeds, rsudo performs a fresh ssh_auth verification using
+        RSUDO_PASSWORD and ControlPath=none. Success therefore verifies the same
+        non-interactive authentication facility used by normal rsudo execution.
+
     --interactive
         Force interactive execution.
 
@@ -191,9 +217,9 @@ ENVIRONMENT
         available.
 
     RSUDO_PASSWORD
-        Non-empty password value available to the remote authentication process.
-        The remote environment may or may not need it for each authentication
-        step.
+        Non-empty authentication value used by normal rsudo as the ssh_auth
+        candidate secret and made available to remote sudo when needed. OpenSSH
+        may try it for any secret-entry request permitted by ssh_auth.
 
     RSUDO_AS_USER
         Optional reusable rsudo/rsudo_core caller state selecting the sudo target
@@ -209,6 +235,10 @@ ENVIRONMENT
         Optional direct rsudo_core caller state. The literal value true disables
         normal command normalization. rsudo clears any ambient value before
         parsing its own --no-preserve-quotes option.
+
+    RSUDO_SSH_AUTH_CHECK
+        Internal invocation-local rsudo mode selected by --ssh-auth-check.
+        rsudo clears any ambient value before parsing each invocation.
 
     RSUDO_CREDENTIALS_GROUP_<group>_HOST
     RSUDO_CREDENTIALS_GROUP_<group>_USER
@@ -257,7 +287,7 @@ DEPENDENCIES
 
         rand.lib.sh
         enc.lib.sh
-        ipc.lib.sh
+        ssh.lib.sh
 
     It also relies on m-integrated facilities used by the current implementation,
     including logging, quoting, password input and identifier/function
@@ -277,5 +307,4 @@ SECURITY
 
 SEE ALSO
     rsudo
-    rsudo-askpass
-    ipc.lib.sh
+    ssh.lib.sh
