@@ -61,7 +61,8 @@ FUNCTIONS
             identifier: alphabetic or underscore first character, followed only
             by alphabetic characters, digits or underscore, and not a POSIX
             shell word that POSIX requires or permits an implementation to
-            recognize as reserved.
+            recognize as reserved, and not the name of a POSIX special built-in
+            utility.
 
             command-name loadlib and names beginning
             _loadlib_inject_stream_ are reserved by the generated runtime.

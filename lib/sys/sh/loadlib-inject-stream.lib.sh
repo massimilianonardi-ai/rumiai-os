@@ -38,6 +38,9 @@ loadlib_inject_stream()
         case | do | done | elif | else | esac | fi | for | function | if | in | namespace | select | then | time | until | while)
           return 1
           ;;
+        break | continue | eval | exec | exit | export | readonly | return | set | shift | times | trap | unset)
+          return 1
+          ;;
         loadlib | _loadlib_inject_stream_*)
           return 1
           ;;
