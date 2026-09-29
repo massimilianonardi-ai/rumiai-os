@@ -1,5 +1,5 @@
 NAME
-    rsudo-askpass - internal SSH askpass bridge used by rsudo
+    rsudo-askpass - legacy one-shot SSH askpass bridge
 
 SYNOPSIS
     rsudo-askpass [prompt...]
