@@ -10,7 +10,7 @@
 
 loadsyslib "rand"
 loadsyslib "enc"
-loadsyslib "ipc"
+loadsyslib "ssh"
 
 #------------------------------------------------------------------------------
 
