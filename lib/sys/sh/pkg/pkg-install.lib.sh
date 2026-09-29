@@ -513,6 +513,8 @@ _pkg_install_one()
     pkg_repository_resolve_artifact "$pkg_install_repository_dir" "$pkg_install_selected_range" "$pkg_install_version"
   ) > "$pkg_install_descriptor" || return 1
 
+  _pkg_install_dependency_report "$pkg_install_selected_range/dependency" "$pkg_install_pkg" "$pkg_install_target" || return 1
+
 
   pkg_install_format="$(_pkg_install_scalar "$pkg_install_selected_range/format")" || return 1
   pkg_install_component=
@@ -586,7 +588,6 @@ _pkg_install_one()
     pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" || return 1
   fi
 
-  _pkg_install_dependency_report     "$pkg_install_selected_range/dependency"     "$pkg_install_pkg"     "$pkg_install_target" || return 1
 )
 
 _pkg_install_cleanup()
