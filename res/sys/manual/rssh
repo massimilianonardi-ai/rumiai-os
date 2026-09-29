@@ -1,0 +1,40 @@
+NAME
+    rssh - start a managed shell with the rsudo shell extension
+
+SYNOPSIS
+    rssh [<shell-argument> ...]
+
+DESCRIPTION
+    rssh starts the managed shell environment with rsudo.lib.sh selected as the
+    shell extension.
+
+    Before delegating to shell, rssh exports m_SHELL_EXT as the current
+    rsudo.lib.sh path and installs an RSSH prompt in PS1. The prompt uses tput
+    capabilities for terminal styling and shows the current user, host and
+    working directory.
+
+    All command-line arguments are forwarded unchanged to shell.
+
+ENVIRONMENT
+    m_SHELL_EXT
+        Exported as $m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh before shell startup.
+
+    PS1
+        Replaced with the RSSH prompt used by the managed shell session.
+
+    SHELL
+        Consumed by shell to select the shell executable. See the shell manual.
+
+EXIT STATUS
+    rssh delegates shell preparation, execution and resulting status to shell.
+    A non-zero status indicates failure to prepare or start the managed shell.
+
+DEPENDENCIES
+    rssh is an m-integrated command. It uses the m runtime roots and delegates
+    to the shell facility. The selected shell session loads rsudo.lib.sh through
+    m_SHELL_EXT.
+
+SEE ALSO
+    shell
+    rsudo
+    rsudo.lib.sh
