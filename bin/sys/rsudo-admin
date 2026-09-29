@@ -48,7 +48,6 @@ rsudo_admin_select_host()
   rsudo_admin_old_ifs=$IFS
   IFS='
 '
-  set -f
   set --
 
   for rsudo_admin_group in $rsudo_admin_groups
@@ -58,7 +57,6 @@ rsudo_admin_select_host()
     [ -n "$rsudo_admin_host" ] || continue
 
     rsudo_admin_host_label=$(rsudo_admin_display_safe "$rsudo_admin_host") || {
-      set +f
       IFS=$rsudo_admin_old_ifs
       return 2
     }
@@ -66,7 +64,6 @@ rsudo_admin_select_host()
     set -- "$@" "${rsudo_admin_group}@:=${rsudo_admin_host_label} [${rsudo_admin_group}]"
   done
 
-  set +f
   IFS=$rsudo_admin_old_ifs
   unset rsudo_admin_old_ifs rsudo_admin_groups rsudo_admin_variable rsudo_admin_host rsudo_admin_host_label
 
@@ -212,6 +209,8 @@ rsudo_admin_job_execute()
   rsudo_admin_job_token=$(randhex 12) || return 1
   rsudo_admin_job_tmp="${TMPDIR:-/tmp}/rsudo-admin-job.$rsudo_admin_job_token"
 
+  . "$rsudo_admin_job_library" || return 1
+
   rsudo_admin_job_cleanup()
   {
     [ -z "${rsudo_admin_job_tmp-}" ] || command -p rm -f "$rsudo_admin_job_tmp" 2>/dev/null || :
@@ -222,8 +221,6 @@ rsudo_admin_job_execute()
   trap 'exit 130' INT
   trap 'exit 131' QUIT
   trap 'exit 143' TERM
-
-  . "$rsudo_admin_job_library" || return 1
 
   (
     umask 077
