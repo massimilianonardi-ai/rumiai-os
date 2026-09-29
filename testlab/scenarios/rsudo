@@ -1,0 +1,324 @@
+#!/usr/bin/env m
+
+RSUDO_SCENARIO_IMAGE=docker.io/library/ubuntu:26.04
+RSUDO_SCENARIO_USER=testlab
+
+rsudo_scenario_error()
+{
+  printf 'testlab rsudo: %s\n' "$*" >&2
+}
+
+rsudo_scenario_need()
+{
+  command -v "$1" >/dev/null 2>&1 || {
+    rsudo_scenario_error "missing host prerequisite: $1"
+    return 1
+  }
+}
+
+rsudo_scenario_context_write()
+{
+  [ "$#" -eq 2 ] || return 2
+  printf '%s' "$2" > "$TESTLAB_CONTEXT_DIR/$1"
+}
+
+rsudo_scenario_context_read()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -f "$TESTLAB_CONTEXT_DIR/$1" ] && [ ! -L "$TESTLAB_CONTEXT_DIR/$1" ] || return 1
+  rsudo_scenario_context_value=$(
+    command -p cat "$TESTLAB_CONTEXT_DIR/$1" || exit 1
+    printf X
+  ) || return 1
+  rsudo_scenario_context_value=${rsudo_scenario_context_value%X}
+}
+
+rsudo_scenario_resource_write()
+{
+  [ "$#" -eq 3 ] || return 2
+  rsudo_scenario_resource_tmp="$TESTLAB_RESOURCES_DIR/$1.tmp.$$"
+  command -p rm -f "$rsudo_scenario_resource_tmp" 2>/dev/null || :
+  {
+    printf '%s\n' "$2"
+    printf '%s\n' "$3"
+  } > "$rsudo_scenario_resource_tmp" || {
+    command -p rm -f "$rsudo_scenario_resource_tmp" 2>/dev/null || :
+    return 1
+  }
+  command -p mv "$rsudo_scenario_resource_tmp" "$TESTLAB_RESOURCES_DIR/$1" || {
+    command -p rm -f "$rsudo_scenario_resource_tmp" 2>/dev/null || :
+    return 1
+  }
+}
+
+rsudo_scenario_resource_read()
+{
+  [ "$#" -eq 1 ] || return 2
+  rsudo_scenario_resource_path="$TESTLAB_RESOURCES_DIR/$1"
+  [ -f "$rsudo_scenario_resource_path" ] && [ ! -L "$rsudo_scenario_resource_path" ] || return 1
+
+  {
+    IFS= read -r rsudo_scenario_resource_ownership || exit 1
+    IFS= read -r rsudo_scenario_resource_identity || exit 1
+    IFS= read -r rsudo_scenario_resource_extra && exit 1
+    [ -n "$rsudo_scenario_resource_identity" ] || exit 1
+  } < "$rsudo_scenario_resource_path" || return 1
+
+  case "$rsudo_scenario_resource_ownership" in
+    owned | external) : ;;
+    *) return 1 ;;
+  esac
+}
+
+rsudo_scenario_check()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  [ -x "$TESTLAB_PROJECT_ROOT/m" ] || {
+    rsudo_scenario_error "project bootstrap is unavailable: $TESTLAB_PROJECT_ROOT/m"
+    return 3
+  }
+  [ -x "$TESTLAB_PROJECT_ROOT/bin/sys/rsudo" ] || {
+    rsudo_scenario_error "project rsudo command is unavailable"
+    return 3
+  }
+
+  for rsudo_scenario_tool in podman ssh ssh-keyscan openssl sed sleep cat chmod mkdir mv rm
+  do
+    rsudo_scenario_need "$rsudo_scenario_tool" || return 3
+  done
+
+  podman info >/dev/null 2>&1 || {
+    rsudo_scenario_error "Podman host prerequisite is not operational"
+    return 3
+  }
+
+  rsudo_scenario_real_ssh=$(command -v ssh) || return 3
+  case "$rsudo_scenario_real_ssh" in
+    /*) : ;;
+    *)
+      rsudo_scenario_error "host ssh did not resolve to an absolute path"
+      return 3
+      ;;
+  esac
+}
+
+rsudo_scenario_prepare()
+{
+  [ "$#" -eq 0 ] || return 2
+  umask 077
+
+  rsudo_scenario_real_ssh=$(command -v ssh) || return 4
+  rsudo_scenario_password=$(openssl rand -hex 16) || {
+    rsudo_scenario_error "cannot generate synthetic password"
+    return 4
+  }
+  [ -n "$rsudo_scenario_password" ] || return 4
+
+  rsudo_scenario_container="testlab-rsudo-$TESTLAB_INSTANCE_ID"
+  rsudo_scenario_host="$rsudo_scenario_container"
+
+  rsudo_scenario_resource_write target-root external "$TESTLAB_PROJECT_ROOT" || return 4
+
+  podman pull "$RSUDO_SCENARIO_IMAGE" >/dev/null || {
+    rsudo_scenario_error "cannot resolve/pull base image: $RSUDO_SCENARIO_IMAGE"
+    return 4
+  }
+  rsudo_scenario_resource_write podman-image external "$RSUDO_SCENARIO_IMAGE" || return 4
+
+  podman run -d \
+    --name "$rsudo_scenario_container" \
+    -p 127.0.0.1::22 \
+    "$RSUDO_SCENARIO_IMAGE" sleep infinity >/dev/null || {
+      rsudo_scenario_error "cannot create SSH/sudo container"
+      return 4
+    }
+
+  rsudo_scenario_resource_write podman-container owned "$rsudo_scenario_container" || {
+    rsudo_scenario_error "cannot record owned container"
+    return 4
+  }
+
+  podman exec -e DEBIAN_FRONTEND=noninteractive "$rsudo_scenario_container" \
+    sh -c 'apt-get update && apt-get install -y --no-install-recommends openssh-server sudo && rm -rf /var/lib/apt/lists/*' \
+    >/dev/null || {
+      rsudo_scenario_error "cannot install sshd/sudo in container"
+      return 4
+    }
+
+  printf '%s\n' "$rsudo_scenario_password" |
+    podman exec -i "$rsudo_scenario_container" sh -c '
+      user=$1
+      IFS= read -r password || exit 1
+      useradd -m -s /bin/sh "$user" || exit 1
+      printf "%s:%s\n" "$user" "$password" | chpasswd || exit 1
+      printf "%s ALL=(ALL:ALL) ALL\n" "$user" > "/etc/sudoers.d/$user" || exit 1
+      chmod 440 "/etc/sudoers.d/$user" || exit 1
+      mkdir -p /run/sshd || exit 1
+      ssh-keygen -A >/dev/null 2>&1 || exit 1
+    ' sh "$RSUDO_SCENARIO_USER" || {
+      rsudo_scenario_error "cannot configure SSH/sudo account"
+      return 4
+    }
+
+  podman exec "$rsudo_scenario_container" /usr/sbin/sshd \
+    -o PasswordAuthentication=yes \
+    -o KbdInteractiveAuthentication=no \
+    -o PermitRootLogin=no \
+    -o "AllowUsers=$RSUDO_SCENARIO_USER" || {
+      rsudo_scenario_error "cannot start sshd"
+      return 4
+    }
+
+  rsudo_scenario_mapping=$(podman port "$rsudo_scenario_container" 22/tcp 2>/dev/null | sed -n '1p') || {
+    rsudo_scenario_error "cannot read published SSH port"
+    return 4
+  }
+  rsudo_scenario_port=${rsudo_scenario_mapping##*:}
+  case "$rsudo_scenario_port" in
+    '' | *[!0123456789]*)
+      rsudo_scenario_error "invalid published SSH port: $rsudo_scenario_mapping"
+      return 4
+      ;;
+  esac
+
+  rsudo_scenario_known_hosts_tmp="$TESTLAB_INSTANCE_DIR/known-hosts.tmp"
+  rsudo_scenario_known_hosts="$TESTLAB_INSTANCE_DIR/known-hosts"
+  rsudo_scenario_ready=false
+  rsudo_scenario_attempt=0
+  while [ "$rsudo_scenario_attempt" -lt 30 ]
+  do
+    rsudo_scenario_attempt=$((rsudo_scenario_attempt + 1))
+    if ssh-keyscan -T 2 -p "$rsudo_scenario_port" 127.0.0.1 > "$rsudo_scenario_known_hosts_tmp" 2>/dev/null &&
+       [ -s "$rsudo_scenario_known_hosts_tmp" ]
+    then
+      command -p mv "$rsudo_scenario_known_hosts_tmp" "$rsudo_scenario_known_hosts" || return 4
+      rsudo_scenario_ready=true
+      break
+    fi
+    sleep 1
+  done
+  command -p rm -f "$rsudo_scenario_known_hosts_tmp" 2>/dev/null || :
+  [ "$rsudo_scenario_ready" = true ] || {
+    rsudo_scenario_error "sshd did not become ready"
+    return 4
+  }
+
+  rsudo_scenario_ssh_config="$TESTLAB_INSTANCE_DIR/ssh-config"
+  cat > "$rsudo_scenario_ssh_config" <<EOF_CONFIG
+Host $rsudo_scenario_host
+    HostName 127.0.0.1
+    Port $rsudo_scenario_port
+    UserKnownHostsFile $rsudo_scenario_known_hosts
+    StrictHostKeyChecking yes
+    PubkeyAuthentication no
+    PreferredAuthentications password
+    PasswordAuthentication yes
+    KbdInteractiveAuthentication no
+    IdentitiesOnly yes
+EOF_CONFIG
+
+  printf '%s' "$rsudo_scenario_real_ssh" > "$TESTLAB_INSTANCE_DIR/ssh-real" || return 4
+  command -p mkdir -m 700 "$TESTLAB_INSTANCE_DIR/bin" || return 4
+
+  cat > "$TESTLAB_INSTANCE_DIR/bin/ssh" <<'EOF_ADAPTER'
+#!/bin/sh
+
+case "$0" in
+  */*) adapter_bin=${0%/*} ;;
+  *) exit 127 ;;
+esac
+
+adapter_instance=$(CDPATH= cd -P "$adapter_bin/.." 2>/dev/null && pwd -P) || exit 127
+[ -r "$adapter_instance/ssh-real" ] || exit 127
+[ -r "$adapter_instance/ssh-config" ] || exit 127
+
+adapter_real_ssh=$(
+  cat "$adapter_instance/ssh-real" || exit 1
+  printf X
+) || exit 127
+adapter_real_ssh=${adapter_real_ssh%X}
+[ -n "$adapter_real_ssh" ] || exit 127
+
+exec "$adapter_real_ssh" -F "$adapter_instance/ssh-config" "$@"
+EOF_ADAPTER
+  command -p chmod 700 "$TESTLAB_INSTANCE_DIR/bin/ssh" || return 4
+
+  rsudo_scenario_context_write target-root "$TESTLAB_PROJECT_ROOT" || return 4
+  rsudo_scenario_context_write podman-container "$rsudo_scenario_container" || return 4
+  rsudo_scenario_context_write ssh-host "$rsudo_scenario_host" || return 4
+  rsudo_scenario_context_write ssh-port "$rsudo_scenario_port" || return 4
+  rsudo_scenario_context_write ssh-user "$RSUDO_SCENARIO_USER" || return 4
+  rsudo_scenario_context_write ssh-password "$rsudo_scenario_password" || return 4
+  rsudo_scenario_context_write ssh-config "$rsudo_scenario_ssh_config" || return 4
+  rsudo_scenario_context_write path-prefix "$TESTLAB_INSTANCE_DIR/bin" || return 4
+}
+
+rsudo_scenario_enter()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  rsudo_scenario_context_read target-root || return 4
+  rsudo_scenario_target_root=$rsudo_scenario_context_value
+  rsudo_scenario_context_read ssh-host || return 4
+  RSUDO_HOST=$rsudo_scenario_context_value
+  rsudo_scenario_context_read ssh-user || return 4
+  RSUDO_USER=$rsudo_scenario_context_value
+  rsudo_scenario_context_read ssh-password || return 4
+  RSUDO_PASSWORD=$rsudo_scenario_context_value
+  rsudo_scenario_context_read path-prefix || return 4
+  rsudo_scenario_path_prefix=$rsudo_scenario_context_value
+
+  PATH="$rsudo_scenario_path_prefix:$PATH"
+  export PATH RSUDO_HOST RSUDO_USER RSUDO_PASSWORD
+
+  exec "$rsudo_scenario_target_root/m" "$rsudo_scenario_target_root/bin/sys/rsudo" --interactive -- sh
+}
+
+rsudo_scenario_cleanup()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  if [ ! -e "$TESTLAB_RESOURCES_DIR/podman-container" ] && [ ! -L "$TESTLAB_RESOURCES_DIR/podman-container" ]
+  then
+    return 0
+  fi
+
+  rsudo_scenario_need podman || return 4
+  rsudo_scenario_resource_read podman-container || {
+    rsudo_scenario_error "invalid podman-container resource record"
+    return 4
+  }
+
+  [ "$rsudo_scenario_resource_ownership" = owned ] || return 0
+
+  if podman container exists "$rsudo_scenario_resource_identity" >/dev/null 2>&1
+  then
+    podman rm -f "$rsudo_scenario_resource_identity" >/dev/null 2>&1 || {
+      rsudo_scenario_error "cannot remove owned container: $rsudo_scenario_resource_identity"
+      return 4
+    }
+  fi
+}
+
+case "${1-}" in
+  check)
+    shift
+    rsudo_scenario_check "$@"
+    ;;
+  prepare)
+    shift
+    rsudo_scenario_prepare "$@"
+    ;;
+  enter)
+    shift
+    rsudo_scenario_enter "$@"
+    ;;
+  cleanup)
+    shift
+    rsudo_scenario_cleanup "$@"
+    ;;
+  *)
+    exit 2
+    ;;
+esac

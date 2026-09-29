@@ -49,6 +49,31 @@ PROJECT SCENARIOS
     cleanup may destroy only resources recorded as owned and must support
     recovery after failed or interrupted preparation.
 
+SHIPPED RUMIAI-OS SCENARIOS
+    The rumiai-os project currently ships these project-local scenarios:
+
+        host
+            Bind to the current project/host as an externally owned reality.
+
+        scratch
+            Create an instance-owned disposable working directory.
+
+        rsudo
+            Prepare a real disposable remote sudo target through host Podman.
+            The scenario creates one owned container with a real OpenSSH server,
+            password-authenticated unprivileged account and real sudo policy.
+            The current project checkout and the container image are external
+            resources and are never removed by scenario cleanup.
+
+            Podman, ssh, ssh-keyscan and openssl are scenario-specific host
+            prerequisites. They are not global testlab prerequisites.
+
+            Context includes target-root, podman-container, ssh-host, ssh-port,
+            ssh-user, ssh-password, ssh-config and path-prefix.
+
+            enter invokes the current project's real rsudo in interactive mode
+            against the prepared target using direct inherited terminal streams.
+
 SCENARIO ENVIRONMENT
     check receives:
 
