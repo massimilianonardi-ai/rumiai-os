@@ -22,7 +22,7 @@ testlab_state_resolve()
 
 testlab_state_prepare()
 {
-  command -p mkdir -p -- "$testlab_instances_root" || return 1
+  command -p mkdir -p "$testlab_instances_root" || return 1
   [ -d "$testlab_instances_root" ] && [ ! -L "$testlab_instances_root" ]
 }
 
@@ -31,13 +31,13 @@ testlab_value_write()
   [ "$#" -eq 2 ] || return 2
   testlab_value_path=$1
   testlab_value_tmp="$testlab_value_path.tmp.$$"
-  command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+  command -p rm -f "$testlab_value_tmp" 2>/dev/null || :
   printf '%s' "$2" > "$testlab_value_tmp" || {
-    command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+    command -p rm -f "$testlab_value_tmp" 2>/dev/null || :
     return 1
   }
-  command -p mv -- "$testlab_value_tmp" "$testlab_value_path" || {
-    command -p rm -f -- "$testlab_value_tmp" 2>/dev/null || :
+  command -p mv "$testlab_value_tmp" "$testlab_value_path" || {
+    command -p rm -f "$testlab_value_tmp" 2>/dev/null || :
     return 1
   }
 }
@@ -47,7 +47,7 @@ testlab_value_read()
   [ "$#" -eq 1 ] || return 2
   [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] || return 1
   testlab_value_read_result=$(
-    command -p cat -- "$1" || exit 1
+    command -p cat "$1" || exit 1
     printf X
   ) || return 1
   testlab_value_read_result=${testlab_value_read_result%X}
@@ -105,16 +105,16 @@ testlab_instance_allocate()
   done
 
   testlab_instance_dir="$testlab_instances_root/$testlab_instance_id"
-  command -p mkdir -m 700 -- "$testlab_instance_dir" || return 1
+  command -p mkdir -m 700 "$testlab_instance_dir" || return 1
 
-  if ! command -p mkdir -m 700 -- "$testlab_instance_dir/context" "$testlab_instance_dir/resources" ||
-     ! command -p cat -- "$testlab_allocate_source" > "$testlab_instance_dir/scenario" ||
-     ! command -p chmod 700 -- "$testlab_instance_dir/scenario" ||
+  if ! command -p mkdir -m 700 "$testlab_instance_dir/context" "$testlab_instance_dir/resources" ||
+     ! command -p cat "$testlab_allocate_source" > "$testlab_instance_dir/scenario" ||
+     ! command -p chmod 700 "$testlab_instance_dir/scenario" ||
      ! testlab_value_write "$testlab_instance_dir/scenario-name" "$testlab_allocate_name" ||
      ! testlab_value_write "$testlab_instance_dir/project-root" "$testlab_project_root" ||
      ! testlab_value_write "$testlab_instance_dir/state" preparing
   then
-    command -p rm -rf -- "$testlab_instance_dir" 2>/dev/null || :
+    command -p rm -rf "$testlab_instance_dir" 2>/dev/null || :
     return 1
   fi
 
@@ -299,7 +299,7 @@ testlab_context_command()
   testlab_name_valid "$2" || return 1
   testlab_context_path="$testlab_context_dir/$2"
   [ -f "$testlab_context_path" ] && [ ! -L "$testlab_context_path" ] && [ -r "$testlab_context_path" ] || return 2
-  command -p cat -- "$testlab_context_path" || return 4
+  command -p cat "$testlab_context_path" || return 4
 }
 
 testlab_enter_command()
