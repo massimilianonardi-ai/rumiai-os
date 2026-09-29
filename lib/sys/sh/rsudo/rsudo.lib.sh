@@ -250,12 +250,6 @@ rsudo()
         RSUDO_AS_USER="$1"
       ;;
 
-      --ssh-auth-test)
-        shift
-        ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" true
-        [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
-      ;;
-
       --connect)
         shift
         [ "$#" -ge "1" ] || { log fatal execution invalid-arguments operand connect reason missing; return 2; }
@@ -304,6 +298,12 @@ rsudo()
         fi
 
         unset RSUDO_ENCODED_FILE RSUDO_CREDENTIALS_GROUP_NAME
+      ;;
+
+      --ssh-auth-test)
+        shift
+        ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" true
+        [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
       ;;
 
       --*) log fatal execution invalid-arguments option "$1"; return 8;;
