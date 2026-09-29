@@ -142,6 +142,11 @@ STREAMING AND LINKS
     get and put stream tar output directly into tar extraction. They do not
     materialize a complete archive as an intermediate file.
 
+    The local side uses a private invocation-owned FIFO to connect the producer
+    and consumer while retaining their statuses independently. This preserves
+    all-stage transfer failure detection even when the host /bin/sh does not
+    implement pipefail.
+
     The current transfer path deliberately does not use tar -h or tar -L.
     Symbolic links are therefore transferred as symbolic links rather than by
     copying the objects they reference.
@@ -161,10 +166,10 @@ SPACE AND REPLACEMENT
 
 DEPENDENCIES
     The module depends on rsudo and the m runtime facilities available in the
-    invoking process, including logging and valid_integer.
+    invoking process, including logging, valid_integer and randhex.
 
     Current transfer operation requires compatible tar implementations locally
-    and remotely.
+    and remotely, plus the POSIX mkfifo utility locally.
 
     get and put also use awk, du and df for large-size parsing and destination-
     space preflight.
