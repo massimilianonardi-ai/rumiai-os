@@ -137,8 +137,9 @@ EXEC INJECT SUBMODULE
     subsequent input source.
 
     The recursive rsudo call inherits current target-user and interactive state.
-    Pipeline failure propagation uses the POSIX pipefail option so a generator or
-    transport failure produces a non-zero module result.
+    Source generation completes before recursive execution begins. A generator
+    failure is returned without invoking recursive rsudo; after successful
+    generation the recursive rsudo status is propagated.
 
 INPUT AND OUTPUT
     Non-interactive execution preserves the target's intended standard input.

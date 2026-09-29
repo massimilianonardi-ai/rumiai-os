@@ -43,13 +43,16 @@ FUNCTIONS
         Invocation-local askpass and no-preserve-quotes modes are handled by
         rsudo according to its own contract.
 
-        The operation enables POSIX pipefail for its generator-to-rsudo pipeline
-        so a generator or rsudo failure yields a non-zero result.
+        The operation completes source generation before invoking recursive
+        rsudo. Generated source is held in shell memory and a sentinel preserves
+        trailing newlines across command substitution. If generation fails,
+        recursive rsudo is not invoked. After successful generation the complete
+        source is written to recursive rsudo standard input.
 
 RETURN STATUS
-    The pipeline result under POSIX pipefail. Successful generation and remote
-    execution return the recursive rsudo status; generator or transport failure
-    is non-zero.
+    A loadlib_inject_stream failure is returned before recursive rsudo is
+    invoked. After successful generation, the recursive rsudo result is
+    returned.
 
 DEPENDENCIES
     loadlib-inject-stream.lib.sh
