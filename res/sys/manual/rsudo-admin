@@ -55,13 +55,15 @@ BROWSE HOST
         term
         menu
 
-    The injected one-shot command is the current local bin/sys/menu source with:
+    The current local bin/sys/menu source is injected as a named command and
+    invoked remotely with:
 
         -d /
 
-    Remote menu standard output is discarded by rsudo-admin; the terminal UI is
-    the browsing interface. The action runs in a subshell so its rsudo mode
-    state does not alter the surrounding console session.
+    The serialized menu result is discarded on the remote side. Terminal UI
+    traffic written to the remote /dev/tty remains visible through the SSH PTY
+    channel. The action runs in a subshell so its rsudo mode state does not alter
+    the surrounding console session.
 
 RSUDO JOBS
     rsudo jobs modernizes the former tracked rsudo-jobs-template workflow using
