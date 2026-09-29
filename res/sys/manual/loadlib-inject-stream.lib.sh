@@ -60,7 +60,8 @@ FUNCTIONS
             command-name must already be a portable POSIX shell function
             identifier: alphabetic or underscore first character, followed only
             by alphabetic characters, digits or underscore, and not a POSIX
-            shell reserved word.
+            shell word that POSIX requires or permits an implementation to
+            recognize as reserved.
 
             command-name loadlib and names beginning
             _loadlib_inject_stream_ are reserved by the generated runtime.
