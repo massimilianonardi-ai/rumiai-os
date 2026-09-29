@@ -3,38 +3,40 @@ NAME
 
 SYNOPSIS
     rsudo [rsudo-options...] exec inject
-          [library-reference...] [-- command-source [command-arg...]]
+          [library-reference | --command command-name local-source]...
+          [-- command-source [command-arg...]]
 
 DESCRIPTION
     rsudo-mod-exec.lib.sh provides source-injection execution operations for the
     rsudo dispatcher.
 
     exec inject composes loadlib_inject_stream with a recursive rsudo call. The
-    generator owns in-memory library embedding, optional command-source setup and
-    optional non-TTY stdin source. The module owns only composition with rsudo
-    transport.
+    generator owns in-memory library embedding, reusable named command-source
+    definitions, optional isolated one-shot command execution and optional
+    non-TTY stdin source. The module owns only composition with rsudo transport.
 
 FUNCTIONS
-    rsudo_mod_exec_inject [library-reference...]
-                          [-- command-source [command-arg...]]
+    rsudo_mod_exec_inject
+        [library-reference | --command command-name local-source]...
+        [-- command-source [command-arg...]]
 
         Generate the requested injection stream and pipe it into a recursive
         rsudo invocation.
 
-        Zero or more library references may be selected. Their semantics and the
-        optional command-source contract are defined by
+        Zero or more library references and repeatable --command registrations
+        may be selected. Their semantics, naming rules, subshell isolation and
+        optional one-shot command contract are defined by
         loadlib-inject-stream.lib.sh.
 
         Non-TTY standard input remaining after any outer rsudo password
         acquisition is consumed by loadlib_inject_stream and appended as shell
-        source after the generated libraries and optional command-source.
+        source after named-command definitions and the optional isolated one-shot
+        command invocation.
 
-        Combining an optional command-source with subsequent input source follows
-        ordinary POSIX shell semantics. If the command-source executes exit,
-        exec, or otherwise terminates or replaces the shell, the later input
-        source is not executed. exec inject does not impose a compatibility
-        convention on arbitrary command sources; the caller is responsible for
-        composing sources whose control flow permits the intended continuation.
+        exit, exec, trap, positional-parameter and other process-local effects of
+        an injected command remain inside that command's subshell. A subsequent
+        input source can therefore continue after one-shot command termination
+        and may invoke registered named commands repeatedly.
 
         The recursive rsudo invocation reuses current connection and credential
         state and inherits current RSUDO_AS_USER and RSUDO_INTERACTIVE state.

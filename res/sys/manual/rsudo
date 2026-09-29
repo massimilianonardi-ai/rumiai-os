@@ -109,25 +109,32 @@ ENVIRONMENT
     rsudo invocation parses its options.
 
 EXEC INJECT SUBMODULE
-    rsudo exec inject [library-reference...] [-- command-source [command-arg...]]
+    rsudo exec inject
+        [library-reference | --command command-name local-source]...
+        [-- command-source [command-arg...]]
 
     The exec inject operation generates an in-memory library/source program
     through loadlib_inject_stream and pipes that complete generated source into a
     recursive rsudo call.
 
-    Selected libraries are explicit and follow the loadlib_inject_stream
-    contract. An optional command-source and its arguments follow --.
+    Selected libraries and repeatable --command registrations are explicit and
+    follow the loadlib_inject_stream contract. Each --command associates a
+    caller-selected shell function identifier with one local source file and
+    executes that source in a subshell whenever invoked.
+
+    An optional one-shot command-source and its arguments follow --. The one-shot
+    source also executes through an isolated generated subshell wrapper.
 
     When input remains after outer password acquisition, non-TTY standard input
-    is appended by loadlib_inject_stream as shell source after the injected
-    libraries and optional command-source. It is therefore source code, not
-    runtime stdin for command-source.
+    is appended by loadlib_inject_stream as shell source after named-command
+    definitions and the optional one-shot command invocation. It is therefore
+    source code, not runtime stdin for an injected command.
 
-    When both command-source and input source are supplied, their compatibility
-    is a caller responsibility. They execute as one ordinary shell program in
-    that order. If command-source terminates or replaces the shell, for example
-    through exit or exec, the later input source is not reached. rsudo does not
-    reinterpret or suppress normal shell control flow to guarantee continuation.
+    Because injected command bodies execute in subshells, their exit, exec,
+    positional-parameter, trap, cwd, umask, file-descriptor and shell-option
+    effects do not terminate or mutate the containing continuation shell.
+    Registered named commands remain callable by the one-shot command and by
+    subsequent input source.
 
     The recursive rsudo call inherits current target-user and interactive state.
     Pipeline failure propagation uses the POSIX pipefail option so a generator or

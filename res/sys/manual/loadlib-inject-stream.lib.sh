@@ -1,121 +1,143 @@
 NAME
-    loadlib-inject-stream.lib.sh - generate explicit in-memory library streams
+    loadlib-inject-stream.lib.sh - generate explicit in-memory injection streams
 
 SYNOPSIS
     loadsyslib "loadlib-inject-stream"
 
-    loadlib_inject_stream [library-reference...] [-- command-source [command-arg...]]
+    loadlib_inject_stream
+        [library-reference | --command command-name local-source]...
+        [-- command-source [command-arg...]]
 
 DESCRIPTION
     loadlib-inject-stream.lib.sh generates one POSIX-sh source program suitable
     for source injection through transports such as rsudo --interactive.
 
-    The caller supplies zero or more embedded system-shell-library references
-    explicitly. No library identity is intrinsically mandatory or special. The
-    generator does not parse the command or libraries, discover dependencies, or
-    compute transitive closure.
+    The caller explicitly selects zero or more embedded system-shell libraries
+    and zero or more named command-source files. The generator performs no
+    dependency discovery or automatic transitive closure.
 
-    The generated program installs one wrapper for every selected library and an
-    in-memory loadlib implementation whose case dispatches directly to exactly
-    those generated wrappers. It then loads every selected library through that
-    in-memory loadlib in the same order in which the references were supplied.
+    A library-reference is relative to lib/sys/sh and omits .lib.sh. Each
+    selected library is embedded, exposed through the generated in-memory
+    loadlib implementation and loaded in caller-supplied order.
 
-    A library reference that is not embedded returns status 2 from the generated
-    loadlib implementation rather than falling back to a remote m library tree.
+    --command is repeatable. It associates one explicit POSIX shell function
+    identifier with one readable local source file. The generated function has
+    exactly command-name as its name and executes local-source inside a subshell
+    on every invocation. Its arguments therefore become the source file's
+    positional parameters for that invocation.
 
-    When -- is absent, no command body is appended and the generated program
-    does not alter positional parameters merely as a consequence of command
-    setup.
+    The command subshell isolates positional parameters, ordinary variable and
+    function definitions, traps, current directory, umask, additional file
+    descriptors, shell-option changes and exit/exec effects from the containing
+    generated program. Injected library functions and inherited environment
+    remain available to the command subshell.
 
-    When -- is present, it must be followed by one readable command-source.
-    After loading the selected libraries, the generated program reconstructs the
-    supplied command positional parameters and appends command-source unchanged.
+    A literal -- is non-repeatable and retains one-shot command mode. It must be
+    followed by one readable command-source; remaining operands are its
+    positional parameters. The one-shot source is generated inside a private
+    subshell function and invoked once, so it receives the same isolation
+    properties as a named --command source.
 
-    Independently of command mode, when standard input is not a TTY the
-    generator appends that input as POSIX shell source after the selected
-    libraries and any command-source. A separating newline is emitted before
-    the input source so it cannot merge with a command-source that lacks a final
-    newline. The input is source to be generated, not runtime stdin for the
-    generated command.
+    Non-TTY standard input, when present, is appended verbatim as POSIX shell
+    source after library loading, named-command definitions and the optional
+    one-shot invocation. It is generated source, not runtime stdin for a named
+    or one-shot command.
 
 FUNCTIONS
-    loadlib_inject_stream [library-reference...] [-- command-source [command-arg...]]
+    loadlib_inject_stream
+        [library-reference | --command command-name local-source]...
+        [-- command-source [command-arg...]]
+
         Write the generated shell program to standard output.
 
-        Every library-reference is relative to lib/sys/sh and omits the final
-        .lib.sh suffix. Zero library references are valid. Each selected library
-        is embedded and then loaded through the generated in-memory loadlib in
-        caller-supplied order.
+        library-reference
+            Select one system shell library to embed and load. References and
+            --command options may be interleaved before the final -- separator.
 
-        If a selected library itself loads another library, that dependency must
-        also be embedded explicitly. Because every selected reference is also
-        loaded explicitly, callers are responsible for any repeated sourcing
-        that results when selected libraries load one another.
+        --command command-name local-source
+            Define a reusable generated command function.
 
-        -- terminates the library-reference list and enables command mode.
-        command-source is mandatory when -- is present and must name one readable
-        regular file containing the command body to append to the generated
-        program.
+            command-name must already be a valid POSIX shell identifier:
+            alphabetic or underscore first character, followed only by
+            alphabetic characters, digits or underscore.
 
-        Remaining command-arg operands become the positional parameters received
-        by command-source. Their shell-string identity, including whitespace and
-        empty operands, is preserved through the existing quote primitive.
+            command-name loadlib and names beginning
+            _loadlib_inject_stream_ are reserved by the generated runtime.
+            Repeated registration of the same command-name is invalid.
 
-        All supplied library and command-source path inputs are validated before
+            local-source must be one readable regular file. The source is
+            embedded unchanged inside a subshell function named command-name.
+
+            The generator does not inspect library or command-source contents
+            for dependency or namespace collisions. Apart from reserved
+            generator names and duplicate --command registrations, the caller
+            owns compatibility between selected libraries and command names.
+
+        -- command-source [command-arg...]
+            Select one optional one-shot local command source. The separator may
+            appear at most once and terminates parsing of library-reference and
+            --command selectors.
+
+            command-source must be a readable regular file. command-arg identity,
+            including whitespace and empty operands, is preserved through the
+            existing quote primitive.
+
+            The one-shot source executes inside a private generated subshell
+            function. If it is the last generated operation, its status is the
+            generated program status. If appended stdin source follows, the
+            first subsequent shell command may observe its status through the
+            ordinary $? value.
+
+        All selected library and command-source path inputs are validated before
         source emission begins.
 
-        When standard input is not a TTY, it is copied after all generated
-        library and optional command source. The copied text executes later in
-        the same shell environment and therefore can use injected functions and
-        observe shell state left by the preceding command source.
-
-        When command-source and standard-input source are both present, ordinary
-        POSIX shell control flow applies across the combined program. The
-        standard-input source is reached only if execution of command-source
-        returns or falls through to it. A command-source that executes exit,
-        exec, or otherwise terminates or replaces the shell prevents subsequent
-        input source from running. The generator does not alter, isolate, or
-        compensate for those shell semantics; callers composing both components
-        are responsible for their compatibility.
-
 OUTPUT
-    Successful execution writes exactly one generated POSIX-sh program to
-    standard output.
+    Successful execution writes exactly one generated POSIX-sh program.
 
-    With no selected libraries, the program still contains an in-memory loadlib
+    Generated order is:
+
+        library wrapper definitions and in-memory loadlib
+        selected library loads
+        named --command function definitions
+        optional private one-shot command definition and invocation
+        optional non-TTY stdin source
+
+    With no selected libraries, the program still installs an in-memory loadlib
     whose unknown-reference result is status 2.
 
-    With no -- separator, the output contains the in-memory library loading
-    environment and requested library loads, followed by non-TTY stdin source
-    when supplied. With --, command setup and command-source are inserted before
-    that optional stdin source.
+    Named commands remain defined in the containing generated shell after one
+    invocation and may be called repeatedly by the one-shot command or by later
+    stdin source. Each invocation executes in its own subshell.
 
-    The output contains no dependency-discovery metadata and requires no remote
-    m library tree for the embedded libraries.
+    A separating newline precedes appended stdin source so it cannot merge
+    lexically with generated command source.
 
 RETURN STATUS
     0   Stream generated successfully.
-    1   Invalid invocation, empty library reference, or -- without command-source.
-    2   command-source or a selected library is not a readable regular file.
+    1   Invalid invocation, invalid/reserved/duplicate command-name, empty
+        library reference, or -- without command-source.
+    2   A selected library, named local-source or one-shot command-source is not
+        a readable regular file.
     3   Quoting, input copying or output generation failed.
 
 CALLER OBLIGATIONS
     The caller must explicitly embed every library that may be loaded while the
-    generated program is running, including transitive dependencies and
+    generated program runs, including transitive dependencies and
     runtime-selected candidates.
 
-    Selected libraries are loaded in caller-supplied order. The caller owns any
-    ordering and repeated-sourcing consequences.
+    Selected libraries are loaded in caller-supplied order. The caller owns
+    ordering, repeated-sourcing and non-reserved namespace-collision
+    consequences.
 
-    Standard input accepted by this generator is shell source to append to the
-    generated program. It is not preserved as runtime stdin for command-source.
+    --command names are explicit shell identifiers chosen by the caller. The
+    generator does not derive, sanitize or alias command names from filenames.
 
-    This generator does not execute or transport the generated program. A
-    transport such as rsudo may consume its generated output through standard
-    input.
+    Standard input accepted by this generator is shell source appended after the
+    optional one-shot invocation. It is not preserved as runtime stdin for
+    injected commands.
 
-    The generator itself runs inside the normal m runtime and relies on
-    m_LIB_DIR and quote.
+    The generator itself executes inside the normal m runtime and relies on
+    m_LIB_DIR and quote. It does not execute or transport the generated program.
 
 SEE ALSO
     rsudo
