@@ -23,7 +23,8 @@ rsudo_mod_fs_get()
   # Transfer errors from either side of the tar stream must fail the operation.
   # Disable pathname expansion in this function so an accidental unquoted token
   # cannot turn external pathname data into a filesystem glob.
-  set -o pipefail
+  (set -o pipefail) 2>/dev/null || exit 1
+  set -o pipefail || exit 1
   set -f
 
   [ "$#" -eq 2 ] || exit 1
@@ -54,12 +55,13 @@ rsudo_mod_fs_get()
   # parser in the pipeline.
   REMOTE_SIZE_KB="$(
     rsudo -- sh -c '
-      set -o pipefail
+      (set -o pipefail) 2>/dev/null || exit 1
+      set -o pipefail || exit 1
 
       path="$1"
       [ -e "$path" ] || [ -L "$path" ] || exit 1
 
-      du -sk "$path" | awk "NR == 1 { print \$1; exit }"
+      du -sk "$path" | awk "NR == 1 { print \$1 }"
     ' sh "$REMOTE_PATH"
   )" || {
     log error rsudo-fs remote-preflight-failed operation get path "$REMOTE_PATH"
@@ -78,12 +80,12 @@ rsudo_mod_fs_get()
     esac
   done
 
-  LOCAL_FREE_KB="$(df -Pk "$LOCAL_PROBE" | awk 'NR == 2 { print $4; exit }')" || exit 1
+  LOCAL_FREE_KB="$(df -Pk "$LOCAL_PROBE" | awk 'NR == 2 { print $4 }')" || exit 1
 
   if [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ]
   then
     LOCAL_EXISTS=1
-    LOCAL_OLD_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1; exit }')" || exit 1
+    LOCAL_OLD_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1 }')" || exit 1
   else
     LOCAL_EXISTS=0
     LOCAL_OLD_SIZE_KB=0
@@ -228,7 +230,8 @@ rsudo_mod_fs_put()
 (
   # The local tar producer and remote tar consumer are one operation. pipefail
   # prevents a producer failure from being hidden by a successful consumer.
-  set -o pipefail
+  (set -o pipefail) 2>/dev/null || exit 1
+  set -o pipefail || exit 1
   set -f
 
   [ "$#" -ge 2 ] && [ "$#" -le 4 ] || exit 1
@@ -255,7 +258,7 @@ rsudo_mod_fs_put()
   # du/df values can represent multi-terabyte filesystems. Keep awk for parsing
   # and comparison instead of relying on the minimum integer width guaranteed to
   # POSIX shell arithmetic. valid_integer protects the values before use.
-  LOCAL_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1; exit }')" || exit 1
+  LOCAL_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1 }')" || exit 1
   valid_integer "$LOCAL_SIZE_KB" || exit 1
 
   # The transfer id is controlled data. Staging names are siblings of the final
@@ -271,7 +274,8 @@ rsudo_mod_fs_put()
   # existing ancestor; newly-created descendants will belong to that filesystem.
   REMOTE_INFO="$(
     rsudo -- sh -c '
-      set -o pipefail
+      (set -o pipefail) 2>/dev/null || exit 1
+      set -o pipefail || exit 1
       set -f
 
       path="$1"
@@ -297,12 +301,12 @@ rsudo_mod_fs_put()
         esac
       done
 
-      free="$(df -Pk "$probe" | awk "NR == 2 { print \$4; exit }")" || exit 1
+      free="$(df -Pk "$probe" | awk "NR == 2 { print \$4 }")" || exit 1
 
       if [ -e "$path" ] || [ -L "$path" ]
       then
         exists=1
-        old="$(du -sk "$path" | awk "NR == 1 { print \$1; exit }")" || exit 1
+        old="$(du -sk "$path" | awk "NR == 1 { print \$1 }")" || exit 1
       else
         exists=0
         old=0

@@ -67,11 +67,11 @@ encode()
     return 1
 
   if printf '%s\n' "$_enc_gpg_options" |
-     command grep -qx -e '--use-ocb-sym'
+     command grep -x -e '--use-ocb-sym' >/dev/null
   then
     set -- "$1" '--use-ocb-sym'
   elif printf '%s\n' "$_enc_gpg_options" |
-       command grep -qx -e '--force-ocb'
+       command grep -x -e '--force-ocb' >/dev/null
   then
     set -- "$1" '--force-ocb'
   else
@@ -277,6 +277,7 @@ EOF
 encoded_file_edit()
 (
   set +x
+  (set -o pipefail) 2>/dev/null || return 1
   set -o pipefail || return 1
 
   _encoded_file_edit_preserve_timestamp=0

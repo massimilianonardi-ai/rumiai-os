@@ -121,10 +121,21 @@ $(quote "$@")"
     # non interactive command
     log debug rsudo execution-mode mode non-interactive
 
-    (printf '%s\n' "$RSUDO_PASSWORD"; if [ ! -t 0 ]; then cat; fi) | \
-    ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" \
-    "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
-    sudo -S --prompt=''${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@"
+    (
+      # This transport contract is intentionally rightmost-status based:
+      # the remote command may succeed without consuming all target stdin.
+      # Disable inherited pipefail only for this pipeline so a local feeder
+      # SIGPIPE cannot replace the authoritative SSH/remote result.
+      if (set -o pipefail) 2>/dev/null
+      then
+        set +o pipefail || exit 1
+      fi
+
+      (printf '%s\n' "$RSUDO_PASSWORD"; if [ ! -t 0 ]; then cat; fi) | \
+      ssh_auth "$RSUDO_PASSWORD" -l "$RSUDO_USER" "$RSUDO_HOST" \
+      "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
+      sudo -S --prompt=''${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@"
+    )
 
     RSUDO_STATUS="$?"
   else
