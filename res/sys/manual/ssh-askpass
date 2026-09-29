@@ -1,25 +1,32 @@
 NAME
-    ssh-askpass - OpenSSH askpass companion for ssh.lib.sh
+    ssh-askpass - password-only OpenSSH askpass companion for ssh.lib.sh
 
 SYNOPSIS
-    ssh-askpass
+    ssh-askpass prompt
 
 DESCRIPTION
-    ssh-askpass is the bootstrap-integrated helper used by ssh.lib.sh.
-    It reads the invocation-owned one-shot IPC value identified by
-    m_SSH_ASKPASS_ID and writes that value for OpenSSH.
+    ssh-askpass is the bootstrap-integrated helper used by ssh_password.
 
-    Normal callers use ssh_password from ssh.lib.sh rather than invoking this
-    command directly.
+    OpenSSH invokes the helper with one prompt operand. For a secret-input prompt,
+    ssh-askpass consumes the invocation-owned one-shot IPC value identified by
+    m_SSH_ASKPASS_ID and writes that password for OpenSSH.
+
+    When OpenSSH marks the request as a confirmation prompt through
+    SSH_ASKPASS_PROMPT=confirm, ssh-askpass refuses the request without consuming
+    the password. Normal callers use ssh_password from ssh.lib.sh rather than
+    invoking this command directly.
 
 ENVIRONMENT
     m_SSH_ASKPASS_ID
         Required one-shot IPC identity established by ssh.lib.sh.
 
+    SSH_ASKPASS_PROMPT
+        OpenSSH prompt classification. The value confirm is refused.
+
 EXIT STATUS
-    0   value delivered successfully
-    1   missing or invalid IPC identity, or IPC delivery failure
-    2   command arguments were supplied
+    0   password delivered successfully
+    1   confirmation request, missing or invalid IPC identity, or IPC failure
+    2   invocation does not contain exactly one prompt operand
 
 SEE ALSO
     ssh.lib.sh
