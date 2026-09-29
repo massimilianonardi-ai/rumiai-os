@@ -218,6 +218,7 @@ rsudo()
   do
     case "$1" in
       --) break;;
+      --ssh-auth-check) RSUDO_SSH_AUTH_CHECK="true";;
       --no-preserve-quotes) RSUDO_NO_PRESERVE_QUOTES="true";;
       --interactive) RSUDO_INTERACTIVE="true";;
       --askpass) RSUDO_ASKPASS="true";;
@@ -276,11 +277,6 @@ rsudo()
         fi
 
         unset RSUDO_ENCODED_FILE RSUDO_CREDENTIALS_GROUP_NAME
-      ;;
-
-      --ssh-auth-check)
-        shift
-        RSUDO_SSH_AUTH_CHECK="true"
       ;;
 
       --*) log fatal execution invalid-arguments option "$1"; return 8;;
