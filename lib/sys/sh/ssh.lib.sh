@@ -83,7 +83,6 @@ ssh_auth()
 
   [ -d "$_ssh_auth_base" ] && [ -w "$_ssh_auth_base" ] || exit 1
 
-  umask 077
   _ssh_auth_try=0
 
   while [ "$_ssh_auth_try" -lt 10 ]
@@ -92,9 +91,9 @@ ssh_auth()
     [ "${#_ssh_auth_token}" -eq 32 ] || exit 1
     [ "$_ssh_auth_token" = "${_ssh_auth_token%%[!0123456789abcdef]*}" ] || exit 1
 
-    _ssh_auth_dir="${_ssh_auth_base%/}/ssh-auth.$$.$_ssh_auth_token"
+    _ssh_auth_dir="${_ssh_auth_base%/}/ssh-auth.$.$_ssh_auth_token"
 
-    if mkdir "$_ssh_auth_dir" 2>/dev/null
+    if (umask 077; mkdir "$_ssh_auth_dir" 2>/dev/null)
     then
       break
     fi
@@ -107,7 +106,7 @@ ssh_auth()
   chmod 700 "$_ssh_auth_dir" || exit 1
 
   _ssh_auth_fifo="$_ssh_auth_dir/secret"
-  mkfifo "$_ssh_auth_fifo" || exit 1
+  (umask 077; mkfifo "$_ssh_auth_fifo") || exit 1
   chmod 600 "$_ssh_auth_fifo" || exit 1
 
   (
@@ -119,6 +118,9 @@ ssh_auth()
     done
   ) &
   _ssh_auth_broker_pid="$!"
+  case "$_ssh_auth_broker_pid" in
+    ''|*[!0123456789]*) exit 1 ;;
+  esac
 
   unset _ssh_auth_secret
 
