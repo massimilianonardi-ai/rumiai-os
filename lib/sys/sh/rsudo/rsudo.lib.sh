@@ -328,6 +328,8 @@ rsudo()
   then
     unset RSUDO_SSH_AUTH_CHECK
 
+    [ "$#" -eq 0 ] || { log fatal execution invalid-arguments option ssh-auth-check reason unexpected-operands; return 253; }
+
     [ -t 0 ] || { log fatal execution execution-failed operation ssh-auth-check reason tty-required; return 254; }
 
     log info rsudo ssh-auth-check start user "$RSUDO_USER" host "$RSUDO_HOST"
