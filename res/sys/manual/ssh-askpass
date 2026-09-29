@@ -1,31 +1,45 @@
 NAME
-    ssh-askpass - password-only OpenSSH askpass companion for ssh.lib.sh
+    ssh-askpass - OpenSSH askpass companion for ssh.lib.sh
 
 SYNOPSIS
     ssh-askpass prompt
 
 DESCRIPTION
-    ssh-askpass is the bootstrap-integrated helper used by ssh_password.
+    ssh-askpass is the bootstrap-integrated helper used by ssh_auth and
+    ssh_password.
 
-    OpenSSH invokes the helper with one prompt operand. For a secret-input prompt,
-    ssh-askpass consumes the invocation-owned one-shot IPC value identified by
-    m_SSH_ASKPASS_ID and writes that password for OpenSSH.
+    OpenSSH invokes the helper with one prompt operand.
+
+    In ssh_auth mode, the helper reads one record from the private repeatable
+    FIFO identified by m_SSH_ASKPASS_FIFO. Each secret-entry invocation may
+    therefore receive the same caller-owned secret.
+
+    In ssh_password mode, the helper consumes the invocation-owned one-shot IPC
+    value identified by m_SSH_ASKPASS_ID.
 
     When OpenSSH marks the request as a confirmation prompt through
-    SSH_ASKPASS_PROMPT=confirm, ssh-askpass refuses the request without consuming
-    the password. Normal callers use ssh_password from ssh.lib.sh rather than
-    invoking this command directly.
+    SSH_ASKPASS_PROMPT=confirm, ssh-askpass refuses the request before consuming
+    authentication data.
+
+    The two transport identities are mutually exclusive. Normal callers use
+    ssh_auth or ssh_password from ssh.lib.sh rather than invoking this command
+    directly.
 
 ENVIRONMENT
+    m_SSH_ASKPASS_FIFO
+        Absolute private FIFO pathname established by ssh_auth for repeatable
+        secret delivery.
+
     m_SSH_ASKPASS_ID
-        Required one-shot IPC identity established by ssh.lib.sh.
+        One-shot IPC identity established by ssh_password.
 
     SSH_ASKPASS_PROMPT
         OpenSSH prompt classification. The value confirm is refused.
 
 EXIT STATUS
-    0   password delivered successfully
-    1   confirmation request, missing or invalid IPC identity, or IPC failure
+    0   authentication value delivered successfully
+    1   confirmation request, invalid/missing transport identity, conflicting
+        transport identities, or transport failure
     2   invocation does not contain exactly one prompt operand
 
 SEE ALSO
