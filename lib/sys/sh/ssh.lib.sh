@@ -40,7 +40,13 @@ ssh_password()
   SSH_ASKPASS="$m_BIN_SYS_DIR/ssh-askpass" \
   SSH_ASKPASS_REQUIRE="force" \
   m_SSH_ASKPASS_ID="$_ssh_askpass_id" \
-  ssh "$@"
+  ssh \
+    -o BatchMode=no \
+    -o PasswordAuthentication=yes \
+    -o PreferredAuthentications=password \
+    -o NumberOfPasswordPrompts=1 \
+    -o ControlPath=none \
+    "$@"
   _ssh_status="$?"
 
   ipc_once_clear _ssh_askpass_id || exit 1
