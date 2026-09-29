@@ -847,6 +847,9 @@ pkg_provider_global_environment_apply()
   [ -d "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ] || return 1
 
   pkg_provider_global_environment_files="$(
+    (set -o pipefail) 2>/dev/null || exit 1
+    set -o pipefail || exit 1
+
     for pkg_provider_global_environment_file in "$pkg_provider_global_environment_root"/*
     do
       [ -e "$pkg_provider_global_environment_file" ] || [ -L "$pkg_provider_global_environment_file" ] || continue

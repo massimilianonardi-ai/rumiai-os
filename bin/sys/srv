@@ -1,5 +1,10 @@
 #!/usr/bin/env m
 
+if (set -o pipefail) 2>/dev/null
+then
+  set -o pipefail || exit 1
+fi
+
 loadsyslib "pkg/pkg-provider"
 loadsyslib "pkg/facility/pkg-facility"
 loadsyslib "pkg/facility/pkg-dependency"
