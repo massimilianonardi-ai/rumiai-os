@@ -1,4 +1,4 @@
-
+ssh -
 # rsudo [--interactive] [--askpass] [--connect user@host] [--load file:name] [--user sudo_as_user] [submodule] [--] [args]
 #
 # if not provided on command line if env vars are defined outside, then they will be used
@@ -134,7 +134,7 @@ $(quote "$@")"
     ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
 
     (printf '%s\n' "$RSUDO_PASSWORD"; if [ ! -t 0 ]; then cat; fi) | \
-    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" \
+    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" \
     "sudo -K; (sudo -n true 1>/dev/null 2>/dev/null) && read SUDO_PASS;" \
     sudo -S --prompt=''${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@"
 
@@ -176,7 +176,7 @@ EOF
     ipc_once_set RSUDO_SSH_IPC_1 "$RSUDO_PASSWORD" || exit 1
 
     # launch 1st ssh (daemon password broker)
-    (printf '%s\n' "$RSUDO_PASSWORD" | m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" "$RSUDO_REMOTE_DAEMON") &
+    (printf '%s\n' "$RSUDO_PASSWORD" | m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_1" ssh -l "$RSUDO_USER" "$RSUDO_HOST" "$RSUDO_REMOTE_DAEMON") &
 
     RSUDO_DAEMON_PID="$!"
 
@@ -204,7 +204,7 @@ EOF
     # launch 2nd ssh (reads password from daemon broker, then interactive session)
     ipc_once_set RSUDO_SSH_IPC_2 "$RSUDO_PASSWORD" || exit 1
 
-    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_2" ssh -o 'StrictHostKeyChecking ask' -t -l "$RSUDO_USER" "$RSUDO_HOST" \
+    m_RSUDO_ASKPASS_ID="$RSUDO_SSH_IPC_2" ssh -t -l "$RSUDO_USER" "$RSUDO_HOST" \
     "$RSUDO_REMOTE_INTERACTIVE" sudo${RSUDO_AS_USER:+ --user "$RSUDO_AS_USER"} -- "$@" </dev/tty
 
     RSUDO_STATUS="$?"
@@ -250,6 +250,12 @@ rsudo()
         shift
         [ "$#" -ge "1" ] && [ -n "$1" ] || { log fatal execution invalid-arguments operand user reason missing; return 1; }
         RSUDO_AS_USER="$1"
+      ;;
+
+      --ssh-auth-test)
+        shift
+        ssh -o 'StrictHostKeyChecking ask' -l "$RSUDO_USER" "$RSUDO_HOST" true
+        [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
       ;;
 
       --connect)
