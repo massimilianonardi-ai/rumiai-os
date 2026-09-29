@@ -12,8 +12,10 @@ DESCRIPTION
     delegates final package integration to the package integration facilities.
     Dependency declaration syntax is validated from catalog metadata before artifact
     download. Current provider availability/selection is not an installation gate.
-    After a successful install, currently unsatisfied dependencies are reported as
-    warnings with facility, constraints and resolution reason. A package resolved
+    After the artifact descriptor is resolved but before artifact transfer, currently
+    unsatisfied dependencies are reported as warnings with facility, constraints and
+    resolution reason. The warning is informational and never suppresses the
+    download/integration attempt. A package resolved
     from `all` keeps a platform-independent concrete identity.
 
 FUNCTIONS
@@ -29,7 +31,7 @@ FUNCTIONS
 
         Missing or ambiguous runtime providers do not fail artifact installation and
         are never auto-installed. They remain runtime resolution state and are
-        reported as warnings after the package has been integrated.
+        reported as pre-download warnings before the artifact transfer begins.
 
         $m_PKG_DIR and temporary installation state are materialized only when the
         first syntactically valid operand is processed. An invocation containing

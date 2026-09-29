@@ -51,9 +51,9 @@ COMMANDS
 
         Dependency declarations are validated from the selected catalog definition
         before artifact download. Runtime dependency satisfiability is not an
-        installation precondition: missing or ambiguous providers are reported as
-        warnings after a successful install and are resolved again when the package
-        is launched.
+        installation precondition: after artifact metadata is resolved, missing or
+        ambiguous providers are reported as warnings before artifact transfer and
+        are resolved again when the package is launched.
 
         $m_PKG_DIR is materialized on demand when the first syntactically valid
         install operand is processed. An invocation containing only invalid
