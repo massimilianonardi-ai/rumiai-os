@@ -4,8 +4,8 @@ NAME
 SYNOPSIS
     loadsyslib "rsudo/rsudo"
 
-    rsudo [--interactive] [--askpass] [--connect user@host]
-          [--load file:group] [--user sudo_as_user]
+    rsudo [--interactive] [--askpass] [--ssh-auth-check]
+          [--connect user@host] [--load file:group] [--user sudo_as_user]
           [--no-preserve-quotes] [submodule] [--] [args...]
 
     rsudo_core [args...]
@@ -48,9 +48,10 @@ FUNCTIONS
         This allows submodules and recursive rsudo calls to preserve the selected
         privilege target and interactive transport mode.
 
-        Askpass and no-preserve-quotes remain invocation-local. At function entry
-        rsudo clears RSUDO_ASKPASS and RSUDO_NO_PRESERVE_QUOTES, then enables
-        them only from options in the current invocation.
+        Askpass, no-preserve-quotes and ssh-auth-check remain invocation-local.
+        At function entry rsudo clears RSUDO_ASKPASS,
+        RSUDO_NO_PRESERVE_QUOTES and RSUDO_SSH_AUTH_CHECK, then enables them only
+        from options in the current invocation.
 
         A literal -- ends rsudo option/submodule interpretation and forces the
         remaining operands to normal remote execution.
@@ -78,6 +79,9 @@ FUNCTIONS
             14  invalid delegated submodule function name
             15  rsudo submodule load failed
             16  delegated submodule function is unavailable
+            253 --ssh-auth-check received unexpected remaining operands
+            254 --ssh-auth-check requires a TTY
+            255 --ssh-auth-check authentication verification failed
 
     rsudo_core [args...]
 
@@ -128,6 +132,23 @@ FUNCTIONS
             2   failed to collect piped interactive source input
 
 OPTIONS
+    --ssh-auth-check
+        Perform the explicit interactive SSH preparation and verification check,
+        then return without executing a sudo target or submodule.
+
+        The check requires a TTY and no remaining operands. It resolves host,
+        user and password through the normal rsudo paths.
+
+        First it runs ordinary interactive OpenSSH with BatchMode=no,
+        StrictHostKeyChecking=ask, AddKeysToAgent=yes and ControlPath=none, with
+        SSH_ASKPASS_REQUIRE=never. This permits host-key enrollment and ordinary
+        OpenSSH credential interaction and allows a successfully loaded
+        file-backed identity to be added to the current agent.
+
+        If that succeeds, rsudo performs a fresh ssh_auth verification using
+        RSUDO_PASSWORD and ControlPath=none. Success therefore verifies the same
+        non-interactive authentication facility used by normal rsudo execution.
+
     --interactive
         Force interactive execution.
 
@@ -210,6 +231,10 @@ ENVIRONMENT
         normal command normalization. rsudo clears any ambient value before
         parsing its own --no-preserve-quotes option.
 
+    RSUDO_SSH_AUTH_CHECK
+        Internal invocation-local rsudo mode selected by --ssh-auth-check.
+        rsudo clears any ambient value before parsing each invocation.
+
     RSUDO_CREDENTIALS_GROUP_<group>_HOST
     RSUDO_CREDENTIALS_GROUP_<group>_USER
     RSUDO_CREDENTIALS_GROUP_<group>_PASS
@@ -257,7 +282,7 @@ DEPENDENCIES
 
         rand.lib.sh
         enc.lib.sh
-        ipc.lib.sh
+        ssh.lib.sh
 
     It also relies on m-integrated facilities used by the current implementation,
     including logging, quoting, password input and identifier/function
@@ -277,5 +302,4 @@ SECURITY
 
 SEE ALSO
     rsudo
-    rsudo-askpass
     ipc.lib.sh
