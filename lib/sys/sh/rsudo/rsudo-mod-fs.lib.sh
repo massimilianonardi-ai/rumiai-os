@@ -97,7 +97,7 @@ _rsudo_fs_stream_terminate()
   trap - 0 "$_rsudo_fs_stream_signal"
   _rsudo_fs_stream_cleanup
 
-  kill -s "$_rsudo_fs_stream_signal" "$"
+  kill -s "$_rsudo_fs_stream_signal" "$$"
 }
 
 #------------------------------------------------------------------------------
