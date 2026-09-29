@@ -4,52 +4,54 @@ NAME
 SYNOPSIS
     loadsyslib "ssh"
 
-    ssh_auth pass ssh-argument...
+    ssh_auth secret ssh-argument...
     ssh_password password ssh-argument...
 
 DESCRIPTION
     ssh.lib.sh provides controlled invocation facilities around the system
-    OpenSSH client without consuming ssh standard input for authentication.
+    OpenSSH client while keeping authentication data separate from ordinary SSH
+    standard input.
 
-    ssh_auth preserves normal OpenSSH authentication-method selection. Whenever
-    OpenSSH requests secret-entry input through askpass, ssh_auth supplies the
-    same caller-provided pass value. The same value may therefore be tried for
-    more than one secret request during one invocation, including a private-key
-    passphrase and later account-password authentication.
+    ssh_auth leaves authentication-method selection and ordering to OpenSSH. It
+    supplies the same caller-provided secret whenever OpenSSH requests
+    secret-entry input, including repeated requests during one invocation.
 
-    ssh_password is the narrower password-only interface. It constrains OpenSSH
-    to password authentication and permits exactly one password prompt.
+    ssh_password is the narrower password-only facility. It constrains OpenSSH
+    to password authentication and permits one password prompt.
 
-    Both functions disable configured connection sharing for their invocation.
-    Caller ssh arguments follow the facility-owned options unchanged and in the
-    same order. Standard input, standard output and standard error retain their
-    normal ssh meanings.
-
-    OpenSSH remains responsible for host-key verification, connection setup,
-    terminal allocation and remote-command semantics. Confirmation prompts are
-    never answered with the supplied secret.
+    After the secret operand, caller arguments are passed to ssh unchanged and
+    in the same order. Standard input, output and error retain their normal ssh
+    meanings.
 
 FUNCTIONS
-    ssh_auth pass ssh-argument...
+    ssh_auth secret ssh-argument...
 
-        Invoke ssh with its normal configured authentication-method selection.
-        pass is supplied automatically for every accepted OpenSSH askpass
-        secret-entry request during the invocation.
+        Invoke ssh using its normally configured authentication mechanisms while
+        making secret available through the m askpass path for every
+        secret-entry request.
 
-        pass must be non-empty, must not contain a newline, and at least one ssh
-        argument must be supplied.
+        secret must be non-empty, must not contain a newline, and at least one
+        ssh argument must be supplied.
 
-        The invocation forces:
+        The invocation forces these OpenSSH settings:
 
             BatchMode=no
-            ControlPath=none
+            StrictHostKeyChecking=yes
 
-        It does not force PreferredAuthentications, PasswordAuthentication or
-        another authentication method.
+        It does not otherwise replace OpenSSH authentication-method selection or
+        ordering.
+
+        The same secret may therefore be tried as an encrypted private-key
+        passphrase, an account password, or another OpenSSH secret-entry value.
+        ssh_auth does not classify the mechanism by parsing prompt text.
+
+        StrictHostKeyChecking=yes makes normal ssh_auth use require
+        pre-established host trust. Host enrollment is performed outside this
+        facility.
 
         Return status:
             ssh status   OpenSSH completed and local cleanup succeeded
-            1            invalid secret or local provider/cleanup failure
+            1            empty/newline secret or local transport/cleanup failure
             2            fewer than two arguments
 
     ssh_password password ssh-argument...
@@ -60,7 +62,7 @@ FUNCTIONS
         password must be non-empty, must not contain a newline, and at least one
         ssh argument must be supplied.
 
-        The invocation forces:
+        The invocation forces these OpenSSH settings:
 
             BatchMode=no
             PasswordAuthentication=yes
@@ -70,27 +72,31 @@ FUNCTIONS
 
         Return status:
             ssh status   OpenSSH completed and local cleanup succeeded
-            1            invalid password or local IPC/cleanup failure
+            1            empty/newline password or local IPC/cleanup failure
             2            fewer than two arguments
 
 DEPENDENCIES
-    ipc.lib.sh
     rand.lib.sh
+    ipc.lib.sh
     ssh-askpass
     OpenSSH ssh client
 
 SECURITY
-    Authentication secrets are not added to ssh arguments or consumed from
+    Authentication values are not added to ssh arguments or consumed from
     standard input.
 
-    ssh_auth keeps its reusable secret in an invocation-owned broker process and
-    exposes only a private FIFO identity to ssh-askpass. ssh_password uses a
-    one-shot ipc_once value.
+    ssh_auth uses a private invocation-owned repeatable secret channel so
+    separate askpass helper invocations can obtain the same value without
+    placing it in the ssh environment or command arguments.
 
-    ssh-askpass refuses OpenSSH confirmation prompts before reading either
-    provider, so supplied secrets are never used as host-key confirmation input.
+    ssh_password uses an invocation-owned one-shot IPC value.
 
-    The facility does not disable or weaken OpenSSH host-key verification.
+    ssh-askpass refuses OpenSSH requests classified as confirmation prompts and
+    therefore does not answer those requests with authentication data.
+
+    ssh_auth additionally requires StrictHostKeyChecking=yes so an unknown or
+    changed host key does not enter an interactive enrollment path during normal
+    use.
 
 SEE ALSO
     ssh-askpass
