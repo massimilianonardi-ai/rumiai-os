@@ -1,10 +1,5 @@
 #!/usr/bin/env m
 
-if (set -o pipefail) 2>/dev/null
-then
-  set -o pipefail || exit 1
-fi
-
 manual_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -17,7 +12,7 @@ manual_discover()
 {
   [ -d "$m_RES_DIR" ] && [ ! -L "$m_RES_DIR" ] || return 1
 
-  manual_discover_unsorted="$(
+  {
     for manual_owner_dir in "$m_RES_DIR"/*
     do
       [ -d "$manual_owner_dir" ] && [ ! -L "$manual_owner_dir" ] || continue
@@ -32,14 +27,10 @@ manual_discover()
         [ -f "$manual_topic_path" ] && [ ! -L "$manual_topic_path" ] || continue
         manual_topic=${manual_topic_path##*/}
         manual_name_valid "$manual_topic" || continue
-        printf -- '%s %s\n' "$manual_owner" "$manual_topic" || exit 1
+        printf -- '%s %s\n' "$manual_owner" "$manual_topic" || return 1
       done
     done
-  )" || return 1
-
-  [ -n "$manual_discover_unsorted" ] || return 0
-  printf -- '%s\n' "$manual_discover_unsorted" |
-    LC_ALL=C command -p -- sort
+  } | LC_ALL=C command -p -- sort
 }
 
 manual_search()
@@ -49,7 +40,7 @@ manual_search()
 
   [ -d "$m_RES_DIR" ] && [ ! -L "$m_RES_DIR" ] || return 1
 
-  manual_search_unsorted="$(
+  {
     for manual_owner_dir in "$m_RES_DIR"/*
     do
       [ -d "$manual_owner_dir" ] && [ ! -L "$manual_owner_dir" ] || continue
@@ -67,16 +58,12 @@ manual_search()
 
         case "$manual_candidate_topic" in
           *"$manual_search_topic"*)
-            printf -- '%s %s\n' "$manual_owner" "$manual_candidate_topic" || exit 1
+            printf -- '%s %s\n' "$manual_owner" "$manual_candidate_topic" || return 1
             ;;
         esac
       done
     done
-  )" || return 1
-
-  [ -n "$manual_search_unsorted" ] || return 0
-  printf -- '%s\n' "$manual_search_unsorted" |
-    LC_ALL=C command -p -- sort
+  } | LC_ALL=C command -p -- sort
 }
 
 manual_ambiguity_print()
@@ -84,7 +71,7 @@ manual_ambiguity_print()
   [ "$#" -eq 1 ] || return 1
   manual_ambiguity_topic=$1
 
-  manual_ambiguity_unsorted="$(
+  {
     for manual_owner_dir in "$m_RES_DIR"/*
     do
       [ -d "$manual_owner_dir" ] && [ ! -L "$manual_owner_dir" ] || continue
@@ -96,23 +83,12 @@ manual_ambiguity_print()
 
       manual_candidate="$manual_dir/$manual_ambiguity_topic"
       [ -f "$manual_candidate" ] && [ ! -L "$manual_candidate" ] || continue
-      printf -- '%s\n' "$manual_owner" || exit 1
+      printf -- '%s\n' "$manual_owner" || return 1
     done
-  )" || return 1
-
-  [ -n "$manual_ambiguity_unsorted" ] || return 0
-
-  manual_ambiguity_sorted="$(
-    printf -- '%s\n' "$manual_ambiguity_unsorted" |
-      LC_ALL=C command -p -- sort
-  )" || return 1
-
-  while IFS= read -r manual_owner
+  } | LC_ALL=C command -p -- sort | while IFS= read -r manual_owner
   do
-    printf -- 'manual %s %s\n' "$manual_owner" "$manual_ambiguity_topic" >&2 || return 1
-  done <<EOF_MANUAL_AMBIGUITY
-$manual_ambiguity_sorted
-EOF_MANUAL_AMBIGUITY
+    printf -- 'manual %s %s\n' "$manual_owner" "$manual_ambiguity_topic" >&2 || exit 1
+  done
 }
 
 manual_no_pager=0

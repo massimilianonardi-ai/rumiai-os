@@ -1,10 +1,5 @@
 #!/usr/bin/env m
 
-if (set -o pipefail) 2>/dev/null
-then
-  set -o pipefail || exit 1
-fi
-
 testlab_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -69,19 +64,15 @@ testlab_scenario_find()
 testlab_scenarios_print()
 {
   [ -d "$testlab_scenario_dir" ] && [ ! -L "$testlab_scenario_dir" ] || return 0
-  testlab_scenarios_unsorted="$(
+  {
     for testlab_candidate in "$testlab_scenario_dir"/*
     do
       [ -f "$testlab_candidate" ] && [ ! -L "$testlab_candidate" ] && [ -x "$testlab_candidate" ] || continue
       testlab_candidate_name=${testlab_candidate##*/}
       testlab_name_valid "$testlab_candidate_name" || continue
-      printf '%s\n' "$testlab_candidate_name" || exit 1
+      printf '%s\n' "$testlab_candidate_name" || return 1
     done
-  )" || return 1
-
-  [ -n "$testlab_scenarios_unsorted" ] || return 0
-  printf '%s\n' "$testlab_scenarios_unsorted" |
-    LC_ALL=C command -p sort
+  } | LC_ALL=C command -p sort
 }
 
 testlab_check()
@@ -293,19 +284,15 @@ testlab_context_command()
 
   if [ "$#" -eq 1 ]
   then
-    testlab_context_unsorted="$(
+    {
       for testlab_context_path in "$testlab_context_dir"/*
       do
         [ -f "$testlab_context_path" ] && [ ! -L "$testlab_context_path" ] || continue
         testlab_context_key=${testlab_context_path##*/}
         testlab_name_valid "$testlab_context_key" || continue
-        printf '%s\n' "$testlab_context_key" || exit 1
+        printf '%s\n' "$testlab_context_key" || return 1
       done
-    )" || return 1
-
-    [ -n "$testlab_context_unsorted" ] || return 0
-    printf '%s\n' "$testlab_context_unsorted" |
-      LC_ALL=C command -p sort
+    } | LC_ALL=C command -p sort
     return $?
   fi
 

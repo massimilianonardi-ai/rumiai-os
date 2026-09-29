@@ -1,10 +1,5 @@
 #!/usr/bin/env m
 
-if (set -o pipefail) 2>/dev/null
-then
-  set -o pipefail || exit 1
-fi
-
 loadsyslib "pkg/pkg-provider"
 loadsyslib "pkg/facility/pkg-facility"
 loadsyslib "pkg/facility/pkg-dependency"
@@ -400,7 +395,7 @@ srv_host_systemd_prepare()
   srv_host_account_prepare
   srv_host_home="$(
     "$srv_getent" passwd "$srv_host_uid" 2>/dev/null |
-      command -p -- awk -F: -v uid="$srv_host_uid" '$3 == uid && !found { print $6; found=1 }'
+      command -p -- awk -F: -v uid="$srv_host_uid" '$3 == uid { print $6; exit }'
   )" || fatal 1 execution execution-failed operation srv reason host-home-unavailable service "$srv_name"
   srv_host_home_validate
 

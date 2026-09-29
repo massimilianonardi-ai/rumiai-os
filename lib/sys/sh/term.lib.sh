@@ -126,14 +126,9 @@ _term_hex_of()
   command -v od >/dev/null 2>&1 || return 1
   command -v tr >/dev/null 2>&1 || return 1
 
-  (
-    (set -o pipefail) 2>/dev/null || exit 1
-    set -o pipefail || exit 1
-
-    printf '%s' "$1" |
-      od -An -tx1 2>/dev/null |
-      tr -d '[:space:]'
-  )
+  printf '%s' "$1" |
+    od -An -tx1 2>/dev/null |
+    tr -d '[:space:]'
 }
 
 _term_cap_hex()
@@ -145,14 +140,7 @@ _term_cap_hex()
   [ -n "${TERM-}" ] || return 1
   [ "$TERM" != "dumb" ] || return 1
 
-  (
-    (set -o pipefail) 2>/dev/null || exit 1
-    set -o pipefail || exit 1
-
-    tput "$1" 2>/dev/null |
-      od -An -tx1 |
-      tr -d '[:space:]'
-  )
+  tput "$1" 2>/dev/null | od -An -tx1 | tr -d '[:space:]'
 }
 
 _term_key_name()
@@ -495,9 +483,6 @@ term_read_byte()
   command -v od >/dev/null 2>&1 || return 1
 
   term_byte_dec=$(
-    (set -o pipefail) 2>/dev/null || exit 1
-    set -o pipefail || exit 1
-
     dd if="$term_tty_device" bs=1 count=1 2>/dev/null |
       od -An -tu1 2>/dev/null
   ) || return 1

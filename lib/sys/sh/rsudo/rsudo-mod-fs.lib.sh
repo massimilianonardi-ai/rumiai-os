@@ -1,107 +1,5 @@
 #------------------------------------------------------------------------------
 
-_rsudo_fs_stream_fifo_create()
-(
-  _rsudo_fs_stream_base="${TMPDIR:-/tmp}"
-
-  case "$_rsudo_fs_stream_base" in
-    /*) ;;
-    *) exit 1 ;;
-  esac
-
-  [ -d "$_rsudo_fs_stream_base" ] &&
-  [ -w "$_rsudo_fs_stream_base" ] ||
-    exit 1
-
-  _rsudo_fs_stream_try=0
-
-  while [ "$_rsudo_fs_stream_try" -lt 10 ]
-  do
-    _rsudo_fs_stream_token="$(randhex 16)" || exit 1
-    [ "${#_rsudo_fs_stream_token}" -eq 32 ] || exit 1
-    [ "$_rsudo_fs_stream_token" = "${_rsudo_fs_stream_token%%[!0123456789abcdef]*}" ] ||
-      exit 1
-
-    _rsudo_fs_stream_dir="${_rsudo_fs_stream_base%/}/rsudo-fs-stream.$_rsudo_fs_stream_token"
-
-    if (umask 077; mkdir "$_rsudo_fs_stream_dir" 2>/dev/null)
-    then
-      _rsudo_fs_stream_fifo="$_rsudo_fs_stream_dir/data"
-
-      if (umask 077; mkfifo "$_rsudo_fs_stream_fifo") &&
-         chmod 600 "$_rsudo_fs_stream_fifo"
-      then
-        printf '%s\n' "$_rsudo_fs_stream_fifo"
-        exit 0
-      fi
-
-      rm -f -- "$_rsudo_fs_stream_fifo" 2>/dev/null || :
-      rmdir -- "$_rsudo_fs_stream_dir" 2>/dev/null || :
-      exit 1
-    fi
-
-    _rsudo_fs_stream_try="$((_rsudo_fs_stream_try + 1))"
-  done
-
-  exit 1
-)
-
-#------------------------------------------------------------------------------
-
-_rsudo_fs_stream_fifo_clear()
-(
-  [ "$#" -eq 1 ] || exit 1
-
-  _rsudo_fs_stream_fifo="$1"
-  _rsudo_fs_stream_dir="${_rsudo_fs_stream_fifo%/*}"
-
-  if [ -e "$_rsudo_fs_stream_fifo" ] || [ -L "$_rsudo_fs_stream_fifo" ]
-  then
-    [ -p "$_rsudo_fs_stream_fifo" ] && [ ! -L "$_rsudo_fs_stream_fifo" ] ||
-      exit 1
-    rm -f -- "$_rsudo_fs_stream_fifo" || exit 1
-  fi
-
-  if [ -e "$_rsudo_fs_stream_dir" ] || [ -L "$_rsudo_fs_stream_dir" ]
-  then
-    [ -d "$_rsudo_fs_stream_dir" ] && [ ! -L "$_rsudo_fs_stream_dir" ] ||
-      exit 1
-    rmdir -- "$_rsudo_fs_stream_dir" || exit 1
-  fi
-)
-
-#------------------------------------------------------------------------------
-
-_rsudo_fs_stream_cleanup()
-{
-  if [ -n "${RSUDO_FS_PRODUCER_PID-}" ]
-  then
-    kill "$RSUDO_FS_PRODUCER_PID" 2>/dev/null || :
-    wait "$RSUDO_FS_PRODUCER_PID" 2>/dev/null || :
-    RSUDO_FS_PRODUCER_PID=""
-  fi
-
-  if [ -n "${RSUDO_FS_STREAM_FIFO-}" ]
-  then
-    _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" 2>/dev/null || :
-    RSUDO_FS_STREAM_FIFO=""
-  fi
-}
-
-#------------------------------------------------------------------------------
-
-_rsudo_fs_stream_terminate()
-{
-  _rsudo_fs_stream_signal="$1"
-
-  trap - 0 "$_rsudo_fs_stream_signal"
-  _rsudo_fs_stream_cleanup
-
-  kill -s "$_rsudo_fs_stream_signal" "$$"
-}
-
-#------------------------------------------------------------------------------
-
 rsudo_mod_fs_rm()
 (
   [ "$#" -gt 0 ] || exit 1
@@ -123,11 +21,9 @@ rsudo_mod_fs_delete()
 rsudo_mod_fs_get()
 (
   # Transfer errors from either side of the tar stream must fail the operation.
-  # Capture producer and consumer status explicitly through a private FIFO so
-  # correctness does not depend on shell pipefail support.
-  #
   # Disable pathname expansion in this function so an accidental unquoted token
   # cannot turn external pathname data into a filesystem glob.
+  set -o pipefail
   set -f
 
   [ "$#" -eq 2 ] || exit 1
@@ -154,18 +50,16 @@ rsudo_mod_fs_get()
   esac
 
   # Estimate the allocated size of the remote source before transferring it.
-  # Observe du status before parsing. awk drains the completed finite output, so
-  # this parsing pipeline has no early-consumer SIGPIPE hazard.
+  # pipefail makes a remote du failure visible even though awk is the final
+  # parser in the pipeline.
   REMOTE_SIZE_KB="$(
     rsudo -- sh -c '
-      set -f
+      set -o pipefail
 
       path="$1"
       [ -e "$path" ] || [ -L "$path" ] || exit 1
 
-      du_output="$(du -sk "$path")" || exit 1
-      printf "%s\n" "$du_output" |
-        awk "NR == 1 { value = \$1 } END { if (NR < 1) exit 1; print value }"
+      du -sk "$path" | awk "NR == 1 { print \$1; exit }"
     ' sh "$REMOTE_PATH"
   )" || {
     log error rsudo-fs remote-preflight-failed operation get path "$REMOTE_PATH"
@@ -184,22 +78,12 @@ rsudo_mod_fs_get()
     esac
   done
 
-  LOCAL_DF_OUTPUT="$(df -Pk "$LOCAL_PROBE")" || exit 1
-  LOCAL_FREE_KB="$(
-    printf '%s\n' "$LOCAL_DF_OUTPUT" |
-      awk 'NR == 2 { value = $4 } END { if (NR < 2) exit 1; print value }'
-  )" || exit 1
-  unset LOCAL_DF_OUTPUT
+  LOCAL_FREE_KB="$(df -Pk "$LOCAL_PROBE" | awk 'NR == 2 { print $4; exit }')" || exit 1
 
   if [ -e "$LOCAL_PATH" ] || [ -L "$LOCAL_PATH" ]
   then
     LOCAL_EXISTS=1
-    LOCAL_DU_OUTPUT="$(du -sk "$LOCAL_PATH")" || exit 1
-    LOCAL_OLD_SIZE_KB="$(
-      printf '%s\n' "$LOCAL_DU_OUTPUT" |
-        awk 'NR == 1 { value = $1 } END { if (NR < 1) exit 1; print value }'
-    )" || exit 1
-    unset LOCAL_DU_OUTPUT
+    LOCAL_OLD_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1; exit }')" || exit 1
   else
     LOCAL_EXISTS=0
     LOCAL_OLD_SIZE_KB=0
@@ -273,24 +157,7 @@ rsudo_mod_fs_get()
   # directories are likewise represented by the same single archive operation.
   # TAR_OPTIONS is unset so caller environment cannot silently enable
   # dereferencing or otherwise change this transfer contract.
-  #
-  # A private FIFO replaces the shell pipeline so producer and consumer status
-  # are independently observable on every supported host shell.
-  RSUDO_FS_STREAM_FIFO=""
-  RSUDO_FS_PRODUCER_PID=""
-
-  trap '_rsudo_fs_stream_cleanup' 0
-  trap '_rsudo_fs_stream_terminate HUP' HUP
-  trap '_rsudo_fs_stream_terminate INT' INT
-  trap '_rsudo_fs_stream_terminate QUIT' QUIT
-  trap '_rsudo_fs_stream_terminate TERM' TERM
-
-  RSUDO_FS_STREAM_FIFO="$(_rsudo_fs_stream_fifo_create)" || {
-    rm -rf -- "$LOCAL_EXTRACT"
-    exit 1
-  }
-
-  rsudo -- sh -c '
+  if ! rsudo -- sh -c '
     path="$1"
     parent="$2"
     name="$3"
@@ -300,38 +167,17 @@ rsudo_mod_fs_get()
 
     unset TAR_OPTIONS
     tar -cf - "./$name"
-  ' sh "$REMOTE_PATH" "$REMOTE_PARENT" "$REMOTE_NAME" > "$RSUDO_FS_STREAM_FIFO" &
-  RSUDO_FS_PRODUCER_PID="$!"
-
+  ' sh "$REMOTE_PATH" "$REMOTE_PARENT" "$REMOTE_NAME" |
   (
     cd "$LOCAL_EXTRACT" || exit 1
     unset TAR_OPTIONS
-    tar -xf - < "$RSUDO_FS_STREAM_FIFO"
+    tar -xf -
   )
-  RSUDO_FS_CONSUMER_STATUS="$?"
-
-  wait "$RSUDO_FS_PRODUCER_PID"
-  RSUDO_FS_PRODUCER_STATUS="$?"
-  RSUDO_FS_PRODUCER_PID=""
-
-  _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" || {
-    rm -rf -- "$LOCAL_EXTRACT"
-    exit 1
-  }
-  RSUDO_FS_STREAM_FIFO=""
-
-  trap - 0 HUP INT QUIT TERM
-
-  if [ "$RSUDO_FS_PRODUCER_STATUS" -ne 0 ] ||
-     [ "$RSUDO_FS_CONSUMER_STATUS" -ne 0 ]
   then
-    unset RSUDO_FS_PRODUCER_STATUS RSUDO_FS_CONSUMER_STATUS
     rm -rf -- "$LOCAL_EXTRACT"
     log error rsudo-fs transfer-failed operation get path "$REMOTE_PATH"
     exit 1
   fi
-
-  unset RSUDO_FS_PRODUCER_STATUS RSUDO_FS_CONSUMER_STATUS
 
   # Extraction produced exactly one top-level source object. Move that object
   # from the extraction directory to either the final path or the sibling stage.
@@ -380,9 +226,9 @@ rsudo_mod_fs_get()
 
 rsudo_mod_fs_put()
 (
-  # The local tar producer and remote tar consumer are one operation. Capture
-  # their statuses explicitly through a private FIFO so a producer failure
-  # cannot be hidden by a successful consumer on a shell without pipefail.
+  # The local tar producer and remote tar consumer are one operation. pipefail
+  # prevents a producer failure from being hidden by a successful consumer.
+  set -o pipefail
   set -f
 
   [ "$#" -ge 2 ] && [ "$#" -le 4 ] || exit 1
@@ -409,12 +255,7 @@ rsudo_mod_fs_put()
   # du/df values can represent multi-terabyte filesystems. Keep awk for parsing
   # and comparison instead of relying on the minimum integer width guaranteed to
   # POSIX shell arithmetic. valid_integer protects the values before use.
-  LOCAL_DU_OUTPUT="$(du -sk "$LOCAL_PATH")" || exit 1
-  LOCAL_SIZE_KB="$(
-    printf '%s\n' "$LOCAL_DU_OUTPUT" |
-      awk 'NR == 1 { value = $1 } END { if (NR < 1) exit 1; print value }'
-  )" || exit 1
-  unset LOCAL_DU_OUTPUT
+  LOCAL_SIZE_KB="$(du -sk "$LOCAL_PATH" | awk 'NR == 1 { print $1; exit }')" || exit 1
   valid_integer "$LOCAL_SIZE_KB" || exit 1
 
   # The transfer id is controlled data. Staging names are siblings of the final
@@ -430,6 +271,7 @@ rsudo_mod_fs_put()
   # existing ancestor; newly-created descendants will belong to that filesystem.
   REMOTE_INFO="$(
     rsudo -- sh -c '
+      set -o pipefail
       set -f
 
       path="$1"
@@ -455,20 +297,12 @@ rsudo_mod_fs_put()
         esac
       done
 
-      df_output="$(df -Pk "$probe")" || exit 1
-      free="$(
-        printf "%s\n" "$df_output" |
-          awk "NR == 2 { value = \$4 } END { if (NR < 2) exit 1; print value }"
-      )" || exit 1
+      free="$(df -Pk "$probe" | awk "NR == 2 { print \$4; exit }")" || exit 1
 
       if [ -e "$path" ] || [ -L "$path" ]
       then
         exists=1
-        du_output="$(du -sk "$path")" || exit 1
-        old="$(
-          printf "%s\n" "$du_output" |
-            awk "NR == 1 { value = \$1 } END { if (NR < 1) exit 1; print value }"
-        )" || exit 1
+        old="$(du -sk "$path" | awk "NR == 1 { print \$1; exit }")" || exit 1
       else
         exists=0
         old=0
@@ -540,27 +374,11 @@ rsudo_mod_fs_put()
   # is used, therefore symlinks are archived as symlinks. Extract into a unique
   # sibling directory first and only then rename the complete top-level object
   # to its copy/staging pathname.
-  #
-  # Use the same explicit-status FIFO topology as get so both local producer and
-  # remote consumer failures are visible without relying on pipefail.
-  RSUDO_FS_STREAM_FIFO=""
-  RSUDO_FS_PRODUCER_PID=""
-
-  trap '_rsudo_fs_stream_cleanup' 0
-  trap '_rsudo_fs_stream_terminate HUP' HUP
-  trap '_rsudo_fs_stream_terminate INT' INT
-  trap '_rsudo_fs_stream_terminate QUIT' QUIT
-  trap '_rsudo_fs_stream_terminate TERM' TERM
-
-  RSUDO_FS_STREAM_FIFO="$(_rsudo_fs_stream_fifo_create)" || exit 1
-
-  (
+  if ! (
     cd "$LOCAL_PARENT" || exit 1
     unset TAR_OPTIONS
-    tar -cf - "./$LOCAL_NAME" > "$RSUDO_FS_STREAM_FIFO"
-  ) &
-  RSUDO_FS_PRODUCER_PID="$!"
-
+    tar -cf - "./$LOCAL_NAME"
+  ) |
   rsudo -- sh -c '
     target="$1"
     extract="$2"
@@ -584,28 +402,12 @@ rsudo_mod_fs_put()
     mv -- "$name" "$target" || exit 1
     cd .. || exit 1
     rmdir -- "$extract" || exit 1
-  ' sh "$REMOTE_COPY_PATH" "$REMOTE_EXTRACT" "$LOCAL_NAME" < "$RSUDO_FS_STREAM_FIFO"
-  RSUDO_FS_CONSUMER_STATUS="$?"
-
-  wait "$RSUDO_FS_PRODUCER_PID"
-  RSUDO_FS_PRODUCER_STATUS="$?"
-  RSUDO_FS_PRODUCER_PID=""
-
-  _rsudo_fs_stream_fifo_clear "$RSUDO_FS_STREAM_FIFO" || exit 1
-  RSUDO_FS_STREAM_FIFO=""
-
-  trap - 0 HUP INT QUIT TERM
-
-  if [ "$RSUDO_FS_PRODUCER_STATUS" -ne 0 ] ||
-     [ "$RSUDO_FS_CONSUMER_STATUS" -ne 0 ]
+  ' sh "$REMOTE_COPY_PATH" "$REMOTE_EXTRACT" "$LOCAL_NAME"
   then
-    unset RSUDO_FS_PRODUCER_STATUS RSUDO_FS_CONSUMER_STATUS
     rsudo -- rm -rf -- "$REMOTE_COPY_PATH" "$REMOTE_EXTRACT" 2>/dev/null || :
     log error rsudo-fs transfer-failed operation put path "$REMOTE_PATH"
     exit 1
   fi
-
-  unset RSUDO_FS_PRODUCER_STATUS RSUDO_FS_CONSUMER_STATUS
 
   # Apply requested metadata before commit. A metadata failure therefore removes
   # only the new copy/stage and leaves an existing destination untouched.

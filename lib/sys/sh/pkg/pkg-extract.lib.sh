@@ -234,12 +234,7 @@ _pkg_extract_move_contents()
 _pkg_extract_payload_paths_valid()
 {
   [ "$#" -eq 1 ] || return 2
-
-  (
-    (set -o pipefail) 2>/dev/null || exit 1
-    set -o pipefail || exit 1
-
-    command -- cpio -it < "$1" 2>/dev/null | LC_ALL=C command -p -- awk '
+  command -- cpio -it < "$1" 2>/dev/null | LC_ALL=C command -p -- awk '
 {
   name=$0
   if (name == "" || substr(name, 1, 1) == "/") exit 1
@@ -250,7 +245,6 @@ _pkg_extract_payload_paths_valid()
 }
 END { if (NR == 0) exit 1 }
 '
-  )
 }
 
 _pkg_extract_payload_prepare()

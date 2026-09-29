@@ -403,9 +403,10 @@ _menu_safe_item_text()
 
   printf '%s\n' "$1" |
     command -p awk -v width="$2" '
-      NR == 1 {
+      {
         gsub(/[[:cntrl:]]/, "?")
         printf "%s", substr($0, 1, width)
+        exit
       }
     '
 }
