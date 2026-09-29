@@ -10,7 +10,14 @@ set +x
 if [ -n "${m_SSH_ASKPASS_FIFO-}" ]
 then
   [ -z "${m_SSH_ASKPASS_ID-}" ] || exit 1
+
+  case "$m_SSH_ASKPASS_FIFO" in
+    /*) ;;
+    *) exit 1 ;;
+  esac
+
   [ -p "$m_SSH_ASKPASS_FIFO" ] && [ ! -L "$m_SSH_ASKPASS_FIFO" ] || exit 1
+
   IFS= read -r _ssh_askpass_secret < "$m_SSH_ASKPASS_FIFO" || exit 1
   printf '%s\n' "$_ssh_askpass_secret"
   unset _ssh_askpass_secret
