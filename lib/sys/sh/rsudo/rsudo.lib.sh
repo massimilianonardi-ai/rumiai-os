@@ -213,6 +213,7 @@ rsudo()
 {
   RSUDO_NO_PRESERVE_QUOTES=""
   RSUDO_ASKPASS=""
+  RSUDO_SSH_AUTH_CHECK=""
 
   while [ "$#" -gt "0" ]
   do
