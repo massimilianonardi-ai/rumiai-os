@@ -28,9 +28,14 @@ DESCRIPTION
     stdin, stdout, stderr and final status are preserved according to the
     selected interactive or non-interactive mode.
 
-    Authentication details are internal to the implementation. Callers should
-    rely on the functional behavior documented here rather than on a particular
-    SSH/sudo call sequence, process topology or temporary-resource layout.
+    Normal SSH transport uses ssh_auth with RSUDO_PASSWORD as the repeatable
+    candidate secret. OpenSSH keeps its configured authentication-method
+    selection and ordering; rsudo does not perform host enrollment during normal
+    execution.
+
+    Other SSH/sudo process-topology details remain internal. Callers should rely
+    on the functional behavior documented here rather than on a particular
+    temporary-resource layout.
 
 FUNCTIONS
     rsudo [options] [submodule] [--] [args...]
@@ -212,9 +217,9 @@ ENVIRONMENT
         available.
 
     RSUDO_PASSWORD
-        Non-empty password value available to the remote authentication process.
-        The remote environment may or may not need it for each authentication
-        step.
+        Non-empty authentication value used by normal rsudo as the ssh_auth
+        candidate secret and made available to remote sudo when needed. OpenSSH
+        may try it for any secret-entry request permitted by ssh_auth.
 
     RSUDO_AS_USER
         Optional reusable rsudo/rsudo_core caller state selecting the sudo target
@@ -302,4 +307,4 @@ SECURITY
 
 SEE ALSO
     rsudo
-    ipc.lib.sh
+    ssh.lib.sh
