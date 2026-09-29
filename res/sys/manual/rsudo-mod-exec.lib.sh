@@ -29,6 +29,13 @@ FUNCTIONS
         acquisition is consumed by loadlib_inject_stream and appended as shell
         source after the generated libraries and optional command-source.
 
+        Combining an optional command-source with subsequent input source follows
+        ordinary POSIX shell semantics. If the command-source executes exit,
+        exec, or otherwise terminates or replaces the shell, the later input
+        source is not executed. exec inject does not impose a compatibility
+        convention on arbitrary command sources; the caller is responsible for
+        composing sources whose control flow permits the intended continuation.
+
         The recursive rsudo invocation reuses current connection and credential
         state and inherits current RSUDO_AS_USER and RSUDO_INTERACTIVE state.
         Invocation-local askpass and no-preserve-quotes modes are handled by

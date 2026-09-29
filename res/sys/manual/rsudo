@@ -123,6 +123,12 @@ EXEC INJECT SUBMODULE
     libraries and optional command-source. It is therefore source code, not
     runtime stdin for command-source.
 
+    When both command-source and input source are supplied, their compatibility
+    is a caller responsibility. They execute as one ordinary shell program in
+    that order. If command-source terminates or replaces the shell, for example
+    through exit or exec, the later input source is not reached. rsudo does not
+    reinterpret or suppress normal shell control flow to guarantee continuation.
+
     The recursive rsudo call inherits current target-user and interactive state.
     Pipeline failure propagation uses the POSIX pipefail option so a generator or
     transport failure produces a non-zero module result.
