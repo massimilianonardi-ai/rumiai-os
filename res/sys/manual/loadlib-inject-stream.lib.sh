@@ -69,6 +69,15 @@ FUNCTIONS
         the same shell environment and therefore can use injected functions and
         observe shell state left by the preceding command source.
 
+        When command-source and standard-input source are both present, ordinary
+        POSIX shell control flow applies across the combined program. The
+        standard-input source is reached only if execution of command-source
+        returns or falls through to it. A command-source that executes exit,
+        exec, or otherwise terminates or replaces the shell prevents subsequent
+        input source from running. The generator does not alter, isolate, or
+        compensate for those shell semantics; callers composing both components
+        are responsible for their compatibility.
+
 OUTPUT
     Successful execution writes exactly one generated POSIX-sh program to
     standard output.

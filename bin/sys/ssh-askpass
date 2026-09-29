@@ -1,0 +1,12 @@
+#!/usr/bin/env m
+
+loadsyslib "ipc"
+
+set +x
+
+[ "$#" -eq 0 ] || exit 2
+[ -n "${m_SSH_ASKPASS_ID-}" ] || exit 1
+
+ipc_once_get "$m_SSH_ASKPASS_ID" || exit 1
+
+printf '\n'
