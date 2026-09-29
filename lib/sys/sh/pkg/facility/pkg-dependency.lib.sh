@@ -317,7 +317,7 @@ _pkg_dependency_compatible_providers()
     then
       continue
     fi
-    _pkg_facility_file_validate "$pkg_dependency_candidate_facility_file" || continue
+    _pkg_facility_file_validate "$pkg_dependency_candidate_facility_file" || return 1
 
     pkg_dependency_candidate_matches=0
     while IFS= read -r pkg_dependency_candidate_line

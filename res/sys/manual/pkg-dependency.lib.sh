@@ -18,6 +18,11 @@ DESCRIPTION
     Explicit binding/default intent never silently falls back: if configured intent
     is unavailable, invalid or incompatible, resolution fails with that reason.
 
+    Installed concrete provider declarations are managed state, not best-effort hints.
+    If a concrete that declares provider metadata has an invalid facility file,
+    implicit discovery fails as invalid rather than silently hiding the corrupted
+    concrete and pretending that no provider exists.
+
 FUNCTIONS
     pkg_dependency_default_resolve <facility> <constraint>...
         Resolve the configured system facility default through normal global
