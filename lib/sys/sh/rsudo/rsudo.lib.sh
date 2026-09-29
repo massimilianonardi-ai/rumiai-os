@@ -333,7 +333,7 @@ rsudo()
 
     [ -t 0 ] || { log fatal execution execution-failed operation ssh-auth-check reason tty-required; return 254; }
 
-    log info rsudo ssh-auth-check start user "$RSUDO_USER" host "$RSUDO_HOST"
+    log info rsudo ssh-auth-check action start user "$RSUDO_USER" host "$RSUDO_HOST"
 
     SSH_ASKPASS_REQUIRE="never" ssh \
     -o BatchMode=no -o StrictHostKeyChecking=ask -o AddKeysToAgent=yes -o ControlPath=none \
@@ -342,7 +342,7 @@ rsudo()
 
     [ "$?" -ne "0" ] && { log fatal execution authentication-failed ssh-host "$RSUDO_HOST" ssh-user "$RSUDO_USER"; return 255; }
 
-    log info rsudo ssh-auth-check end user "$RSUDO_USER" host "$RSUDO_HOST" status 0
+    log info rsudo ssh-auth-check action end user "$RSUDO_USER" host "$RSUDO_HOST" status 0
 
     return 0
   fi
