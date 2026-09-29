@@ -335,10 +335,15 @@ encoded_file_edit()
       "$_encoded_file_edit_tmp" ||
         return 1
 
-    decode < "$_encoded_file_edit_file" |
-      command -- vsed |
-      encode > "$_encoded_file_edit_tmp" ||
-        return 1
+    (
+      (set -o pipefail) 2>/dev/null || exit 1
+      set -o pipefail || exit 1
+
+      decode < "$_encoded_file_edit_file" |
+        command -- vsed |
+        encode > "$_encoded_file_edit_tmp"
+    ) ||
+      return 1
 
     [ "$_encoded_file_edit_checksum" = "$(
       command -p cksum < "$_encoded_file_edit_file"
