@@ -85,6 +85,23 @@ pkg_install_validate()
   done
 )
 
+_pkg_install_catalog_init()
+{
+  [ "$#" -eq 0 ] || return 1
+
+  pkg_install_catalog_work="$pkg_install_work/catalog"
+  rm -rf -- "$pkg_install_catalog_work" && mkdir -p -- "$pkg_install_catalog_work" || return 2
+
+  pkg_install_catalog_cache="$pkg_install_cache_root/catalog"
+
+  if [ ! -d "$pkg_install_catalog_cache" ]
+  then
+    true
+  else
+    true
+  fi
+}
+
 _pkg_install_init()
 {
   [ "$#" -eq 0 ] || return 1
@@ -100,17 +117,10 @@ _pkg_install_init()
   pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 4
   mkdir -p -- "$pkg_install_cache_root" || return 5
 
-  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 6
-  mkdir -p -- "$pkg_install_run_root" || return 7
-
   pkg_install_work="$pkg_install_tmp_root/install2-$$"
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 8
-  mkdir -p -- "$pkg_install_work" || return 9
+  mkdir -p -- "$pkg_install_work" || return 6
 
-  pkg_install_catalog="$pkg_install_work/catalog"
-  mkdir -p -- "$pkg_install_catalog" || return 10
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || return 11
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 12
+  _pkg_install_catalog_init || return 7
 }
 
 _pkg_install_end()
