@@ -209,6 +209,10 @@ pkg_facility_compatibility_read()
   _pkg_facility_name_valid "$3" || return 2
 
   pkg_facility_query_file="$2/facility"
+  if [ ! -e "$pkg_facility_query_file" ] && [ ! -L "$pkg_facility_query_file" ]
+  then
+    return 3
+  fi
   _pkg_facility_file_validate "$pkg_facility_query_file" || return 1
 
   while IFS= read -r pkg_facility_query_line
