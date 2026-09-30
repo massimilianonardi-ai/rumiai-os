@@ -226,10 +226,8 @@ pkg_install()
   _pkg_install_list_dependency_resolved=$(pkg depend "$@") || fatal 5 execution invalid-arguments operation pkg-install reason dependency-unresolvable
   eval "set -- $_pkg_install_list_dependency_resolved $_pkg_install_list_resolved"
 
-  _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
-
   for _pkg_install_pkg
   do
-    pkg_install_one "$_pkg_install_pkg" || fatal 4 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
+    pkg_install_one "$_pkg_install_pkg" || fatal 6 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
   done
 )
