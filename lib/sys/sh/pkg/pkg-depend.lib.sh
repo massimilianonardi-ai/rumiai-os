@@ -193,13 +193,19 @@ _pkg_depend_candidate_compatible()
   pkg_concrete_read pkg_depend_candidate_pkg pkg_depend_candidate_version pkg_depend_candidate_osarch "$pkg_depend_candidate" || return 1
   if [ -n "$pkg_depend_candidate_osarch" ] && [ "$pkg_depend_candidate_osarch" != "$pkg_depend_candidate_target" ]
   then
-    return 1
+    return 3
   fi
 
   _pkg_depend_concrete_compatibility "$pkg_depend_catalog" "$pkg_depend_candidate" "$pkg_depend_candidate_facility"
   pkg_depend_candidate_status=$?
-  [ "$pkg_depend_candidate_status" -eq 0 ] || return "$pkg_depend_candidate_status"
-  pkg_dependency_satisfied "$pkg_depend_provider_compatibility" "$pkg_depend_candidate_constraints"
+  case "$pkg_depend_candidate_status" in
+    0) : ;;
+    3) return 3 ;;
+    *) return 1 ;;
+  esac
+
+  pkg_dependency_satisfied "$pkg_depend_provider_compatibility" "$pkg_depend_candidate_constraints" && return 0
+  return 4
 }
 
 _pkg_depend_candidate_choose()
@@ -266,10 +272,13 @@ _pkg_depend_planned_candidates()
   do
     [ -z "$pkg_depend_context_extra" ] || return 1
     [ "$pkg_depend_context_target" = "$pkg_depend_target" ] || continue
-    if _pkg_depend_candidate_compatible "$pkg_depend_catalog" "$pkg_depend_context_concrete" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints"
-    then
-      _pkg_depend_candidate_add "$pkg_depend_context_concrete" || return 1
-    fi
+    _pkg_depend_candidate_compatible "$pkg_depend_catalog" "$pkg_depend_context_concrete" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints"
+    pkg_depend_candidate_status=$?
+    case "$pkg_depend_candidate_status" in
+      0) _pkg_depend_candidate_add "$pkg_depend_context_concrete" || return 1 ;;
+      3|4) : ;;
+      *) return 1 ;;
+    esac
   done <<EOF_PKG_DEPEND_PLANNED
 $pkg_depend_contexts
 EOF_PKG_DEPEND_PLANNED
@@ -296,10 +305,13 @@ _pkg_depend_installed_candidates()
     [ -d "$pkg_depend_installed_path" ] && [ ! -L "$pkg_depend_installed_path" ] || continue
     pkg_depend_installed=${pkg_depend_installed_path##*/}
 
-    if _pkg_depend_candidate_compatible "$pkg_depend_catalog" "$pkg_depend_installed" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints"
-    then
-      _pkg_depend_candidate_add "$pkg_depend_installed" || return 1
-    fi
+    _pkg_depend_candidate_compatible "$pkg_depend_catalog" "$pkg_depend_installed" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints"
+    pkg_depend_candidate_status=$?
+    case "$pkg_depend_candidate_status" in
+      0) _pkg_depend_candidate_add "$pkg_depend_installed" || return 1 ;;
+      3|4) : ;;
+      *) return 1 ;;
+    esac
   done
 }
 
