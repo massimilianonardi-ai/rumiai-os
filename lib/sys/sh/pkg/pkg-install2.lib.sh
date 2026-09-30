@@ -101,7 +101,8 @@ _pkg_install_catalog_init()
   then
     git clone -- "$pkg_install_catalog_url" "$pkg_install_catalog_cache" || return 5
   else
-    git -C "$pkg_install_catalog_cache" pull --ff-only || return 6
+    git -C "$pkg_install_catalog_cache" remote set-url origin "$pkg_install_catalog_url" || return 6
+    git -C "$pkg_install_catalog_cache" pull --ff-only || return 7
   fi
 
   pkg_install_catalog_head="$(git -C "$pkg_install_catalog_cache" rev-parse HEAD)" || return 7
