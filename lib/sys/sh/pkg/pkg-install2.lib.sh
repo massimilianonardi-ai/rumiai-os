@@ -182,26 +182,7 @@ pkg_install_resolve_one()
   [ "$#" -eq 1 ] || exit 1
 
   pkg_install_request=$1
-  pkg_install_left=$pkg_install_request
-  pkg_install_requested_osarch=
-  pkg_install_requested_version=
-
-  case "$pkg_install_left" in
-    *!*)
-      pkg_install_requested_osarch=${pkg_install_left##*!}
-      pkg_install_left=${pkg_install_left%!"$pkg_install_requested_osarch"}
-      ;;
-  esac
-
-  case "$pkg_install_left" in
-    *@*)
-      pkg_install_requested_version=${pkg_install_left##*@}
-      pkg_install_pkg=${pkg_install_left%@"$pkg_install_requested_version"}
-      ;;
-    *)
-      pkg_install_pkg=$pkg_install_left
-      ;;
-  esac
+  pkg_request_read pkg_install_pkg pkg_install_requested_version pkg_install_requested_osarch "$pkg_install_request" || exit 2
 
   if [ -n "$pkg_install_requested_osarch" ]
   then
@@ -304,42 +285,7 @@ pkg_install_validate()
 
   for pkg_install_operand
   do
-    pkg_install_left=$pkg_install_operand
-
-    # [!<osarch>]
-    case "$pkg_install_left" in
-      *!*)
-        pkg_install_osarch=${pkg_install_left##*!}
-        pkg_install_left=${pkg_install_left%!"$pkg_install_osarch"}
-
-        case "$pkg_install_left" in
-          *!*) exit 1 ;;
-        esac
-
-        pkg_osarch_valid "$pkg_install_osarch" ||
-          exit 2
-        ;;
-    esac
-
-    # <package>[@<version>]
-    case "$pkg_install_left" in
-      *@*)
-        pkg_install_version=${pkg_install_left##*@}
-        pkg_install_pkg=${pkg_install_left%@"$pkg_install_version"}
-
-        case "$pkg_install_pkg" in
-          *@*) exit 3 ;;
-        esac
-
-        pkg_version_valid "$pkg_install_version" || exit 4
-      ;;
-
-      *)
-        pkg_install_pkg=$pkg_install_left
-      ;;
-    esac
-
-    pkg_name_valid "$pkg_install_pkg" || exit 5
+    pkg_request_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_operand" || exit 2
   done
 )
 
