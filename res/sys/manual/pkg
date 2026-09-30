@@ -5,6 +5,7 @@ SYNOPSIS
     pkg install <package-spec>...
     pkg uninstall <package-spec>...
     pkg versions <package-class>
+    pkg depend <package-spec>...
     pkg default [-u] [--] <package-spec>
     pkg provider default <facility> [<provider-selector>]
     pkg provider default -u [--] <facility>
@@ -67,6 +68,24 @@ COMMANDS
     versions <package-class>
         List installed concrete package identities for one package/platform class.
         A version suffix is not accepted for this query.
+
+    depend <package-spec>...
+        Resolve the requested packages and their recursive facility dependencies
+        without installing anything. The command evaluates one catalog snapshot,
+        current installed package state and explicit provider configuration, then
+        prints the complete concrete package plan one identity per line in
+        dependency-first order.
+
+        Consumer binding has precedence over the system facility default. Without
+        either selector, an already planned compatible provider is preferred,
+        followed by an unambiguous compatible installed provider. Only when no
+        compatible planned or installed provider exists may the planner add a
+        catalog provider; multiple compatible provider packages are ambiguous and
+        fail rather than being ranked silently.
+
+        The command is read-only with respect to package/provider state. Catalog
+        cache refresh and invocation-private temporary snapshot materialization are
+        allowed.
 
     default <package-spec>
         With an explicit version, select that installed version as the current

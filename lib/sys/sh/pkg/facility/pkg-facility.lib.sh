@@ -207,8 +207,21 @@ pkg_facility_compatibility_read()
   [ "$#" -eq 3 ] || return 2
   valid_shell_identifier "$1" || return 2
   _pkg_facility_name_valid "$3" || return 2
-  _pkg_facility_declared_compatibility "$2" "$3" || return 1
-  _pkg_facility_assign "$1" "$pkg_facility_declared_compatibility"
+
+  pkg_facility_query_file="$2/facility"
+  _pkg_facility_file_validate "$pkg_facility_query_file" || return 1
+
+  while IFS= read -r pkg_facility_query_line
+  do
+    _pkg_facility_line_parse "$pkg_facility_query_line" || return 1
+    if [ "$pkg_facility_name" = "$3" ]
+    then
+      _pkg_facility_assign "$1" "$pkg_facility_compatibility"
+      return
+    fi
+  done < "$pkg_facility_query_file"
+
+  return 3
 }
 
 _pkg_facility_provider_part_validate()

@@ -38,6 +38,13 @@ FUNCTIONS
         a non-match or invalid compatibility/constraint expression and 2 for invalid
         invocation.
 
+    pkg_dependency_validate <dependency-file>
+        Validate one complete dependency declaration file, including file shape,
+        ordering, unique facility declarations and constraint syntax.
+
+        Returns 0 for a valid non-empty dependency file, 1 for invalid metadata and
+        2 for invalid invocation.
+
     pkg_dependency_default_resolve <facility> <constraint>...
         Resolve the configured system facility default through normal global
         package-class/osarch semantics and require the selected installed concrete

@@ -7,34 +7,23 @@ DESCRIPTION
     reconstructed. It is not currently wired as the canonical pkg install
     command path.
 
-    The pipeline validates explicit requests, resolves them to concrete package
-    identities, resolves an ordered dependency closure and installs each
-    concrete in dependency-first order. Intermediate list stages emit
-    shell-safe quoted argument lists.
+    The pipeline validates explicit request syntax, materializes one catalog
+    snapshot, delegates complete request/dependency planning to
+    pkg_depend_resolve, then installs each returned concrete in dependency-first
+    order. The planner emits a shell-safe quoted argument list.
 
 FUNCTIONS
     pkg_install_validate <package-spec>...
         Validate explicit install request syntax without catalog or package-store
         resolution.
 
-    pkg_install_resolve_one <package-spec>
-        Resolve one validated explicit request to one concrete package identity.
-
-    pkg_install_resolve <package-spec>...
-        Resolve each explicit request and emit one shell-safe quoted concrete
-        argument list.
-
-    pkg_install_dependency_resolve <concrete>...
-        Resolve the dependency closure and emit the ordered full concrete list.
-        This stage is still under active reconstruction.
-
     pkg_install_one <concrete>
         Install one already-resolved concrete identity. An already-installed
         valid concrete is accepted without reinstallation.
 
     pkg_install2 <package-spec>...
-        Run the experimental validation, explicit-resolution,
-        dependency-resolution and installation pipeline.
+        Run the experimental validation, shared pkg-depend planning and
+        installation pipeline against one catalog snapshot.
 
 RETURN STATUS
     0   Requested operation succeeded.

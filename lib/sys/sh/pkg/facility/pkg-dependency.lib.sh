@@ -81,6 +81,12 @@ pkg_dependency_satisfied()
   _pkg_dependency_constraints_satisfied "$1" "$2"
 }
 
+pkg_dependency_validate()
+{
+  [ "$#" -eq 1 ] || return 2
+  _pkg_dependency_file_validate "$1"
+}
+
 _pkg_dependency_file_validate()
 {
   [ "$#" -eq 1 ] || return 2
