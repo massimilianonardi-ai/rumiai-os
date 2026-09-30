@@ -87,30 +87,35 @@ pkg_install_validate()
 
 _pkg_install_init()
 {
-  umask 077
-
-  pkg_install_work="$(command -- state-path system sys pkg tmp)/install2-$$" || return 1
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 2 execution execution-failed operation pkg-install reason work-path-collision
-  mkdir -- "$pkg_install_work" || return 3 execution execution-failed operation pkg-install reason work-path-failed
-
-  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 1
-  mkdir -- "$pkg_install_cache_root" || return 3 execution execution-failed operation pkg-install reason cache-path-failed
-
-  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 1
-  mkdir -- "$pkg_install_run_root" || return 3 execution execution-failed operation pkg-install reason run-path-failed
+  [ "$#" -eq 0 ] || return 1
 
   trap '_pkg_install_end' 0
   trap 'exit 130' HUP INT TERM
 
+  umask 077
+
+  pkg_install_tmp_root="$(command -- state-path system sys pkg tmp)/install2-$$" || return 2
+  mkdir -p -- "$pkg_install_work" || return 3
+
+  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 4
+  mkdir -p -- "$pkg_install_cache_root" || return 5
+
+  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 6
+  mkdir -p -- "$pkg_install_run_root" || return 7
+
+  pkg_install_work="$pkg_install_tmp_root/install2-$$"
+  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 8
+  mkdir -p -- "$pkg_install_work" || return 9
+
   pkg_install_catalog="$pkg_install_work/catalog"
-  mkdir -- "$pkg_install_catalog" || return 1 execution execution-failed operation pkg-install reason catalog-snapshot-failed
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || return 2 execution execution-failed operation pkg-install reason catalog-snapshot-failed
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 3 execution execution-failed operation pkg-install reason catalog-snapshot-invalid
+  mkdir -p -- "$pkg_install_catalog" || return 10
+  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || return 11
+  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 12
 }
 
 _pkg_install_end()
 {
-  rm -rf -- "$pkg_install_work" "$pkg_install_cache_root" "$pkg_install_run_root"
+  rm -rf -- "$pkg_install_work"
 }
 
 pkg_install2()
