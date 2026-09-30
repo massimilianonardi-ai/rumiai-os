@@ -29,23 +29,11 @@ pkg_install_resolve()
 
 pkg_install_validate()
 (
-  for pkg
-  do
-    # todo
-  done
-)
-
-
-pkg_install_validate()
-(
   [ "$#" -ge 1 ] || exit 1
 
   for pkg_install_operand
   do
     pkg_install_left=$pkg_install_operand
-    pkg_install_osarch=
-    pkg_install_version=
-    pkg_install_pkg=
 
     # [!<osarch>]
     case "$pkg_install_left" in
@@ -62,9 +50,7 @@ pkg_install_validate()
         ;;
     esac
 
-    #
     # <package>[@<version>]
-    #
     case "$pkg_install_left" in
       *@*)
         pkg_install_version=${pkg_install_left##*@}
@@ -85,7 +71,6 @@ pkg_install_validate()
     pkg_name_valid "$pkg_install_pkg" || exit 5
   done
 )
-
 
 pkg_install2()
 (
