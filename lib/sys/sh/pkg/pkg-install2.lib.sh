@@ -1,4 +1,5 @@
 loadsyslib "pkg/pkg-common"
+loadsyslib "pkg/pkg-catalog"
 loadsyslib "pkg/pkg-local"
 loadsyslib "pkg/pkg-download"
 loadsyslib "pkg/pkg-extract2"
@@ -17,19 +18,9 @@ pkg_install_one()
     exit 0
   fi
 
-  if [ -n "$pkg_install_osarch" ]
-  then
-    pkg_install_stream="$pkg_install_catalog_work/pkg/$pkg_install_pkg/$pkg_install_osarch"
-  else
-    pkg_install_stream="$pkg_install_catalog_work/pkg/$pkg_install_pkg/all"
-  fi
+  pkg_catalog_range_resolve pkg_install_range "$pkg_install_catalog_work" "$pkg_install_concrete" || exit 7
 
-  [ -d "$pkg_install_stream" ] || exit 7
-
-  _pkg_install_dependency_range_resolve "$pkg_install_concrete" || exit 8
-  pkg_install_range=$pkg_install_dependency_range
-
-  pkg_install_repository="$pkg_install_stream/repository"
+  pkg_install_repository="${pkg_install_range%/*}/repository"
   pkg_install_repository_type="$(cat "$pkg_install_repository/type")" || exit 9
   pkg_install_repository_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
 
@@ -71,7 +62,7 @@ _pkg_install_dependency_source()
     return 0
   fi
 
-  _pkg_install_dependency_range_resolve "$1" || return 1
+  pkg_catalog_range_resolve pkg_install_dependency_range "$pkg_install_catalog_work" "$1" || return 1
 
   if [ -f "$pkg_install_dependency_range/dependency" ]
   then
@@ -157,21 +148,7 @@ pkg_install_resolve_one()
     pkg_install_target=$m_OSARCH
   fi
 
-  pkg_install_package="$pkg_install_catalog_work/pkg/$pkg_install_pkg"
-
-  if [ -d "$pkg_install_package/$pkg_install_target" ]
-  then
-    pkg_install_stream="$pkg_install_package/$pkg_install_target"
-    pkg_install_identity_osarch=$pkg_install_target
-
-  elif [ -d "$pkg_install_package/all" ]
-  then
-    pkg_install_stream="$pkg_install_package/all"
-    pkg_install_identity_osarch=
-
-  else
-    exit 2
-  fi
+  pkg_catalog_stream_resolve pkg_install_stream pkg_install_identity_osarch "$pkg_install_catalog_work" "$pkg_install_pkg" "$pkg_install_target" || exit 2
 
   if [ -n "$pkg_install_requested_version" ]
   then
@@ -255,30 +232,6 @@ pkg_install_validate()
   done
 )
 
-_pkg_install_catalog_init()
-{
-  [ "$#" -eq 0 ] || return 1
-
-  pkg_install_catalog_conf="$(state-path system sys pkg conf)/catalog" || return 2
-  pkg_install_catalog_url="$(cat "$pkg_install_catalog_conf")" || return 3
-
-  pkg_install_catalog_work="$pkg_install_work/catalog"
-  rm -rf -- "$pkg_install_catalog_work" && mkdir -p -- "$pkg_install_catalog_work" || return 4
-
-  pkg_install_catalog_cache="$pkg_install_cache_root/catalog"
-
-  if [ ! -d "$pkg_install_catalog_cache/.git" ]
-  then
-    git clone -- "$pkg_install_catalog_url" "$pkg_install_catalog_cache" || return 5
-  else
-    git -C "$pkg_install_catalog_cache" remote set-url origin "$pkg_install_catalog_url" || return 6
-    git -C "$pkg_install_catalog_cache" pull --ff-only || return 7
-  fi
-
-  pkg_install_catalog_head="$(git -C "$pkg_install_catalog_cache" rev-parse HEAD)" || return 7
-  git -C "$pkg_install_catalog_cache" archive "$pkg_install_catalog_head" | tar -x -C "$pkg_install_catalog_work" || return 8
-}
-
 _pkg_install_init()
 {
   [ "$#" -eq 0 ] || return 1
@@ -299,7 +252,7 @@ _pkg_install_init()
   pkg_install_work="$pkg_install_tmp_root/install2-$$"
   mkdir -p -- "$pkg_install_work" || return 6
 
-  _pkg_install_catalog_init || return 7
+  pkg_catalog_init pkg_install_catalog_work pkg_install_catalog_head "$pkg_install_work" "$pkg_install_cache_root" || return 7
 }
 
 _pkg_install_end()
