@@ -101,8 +101,11 @@ _pkg_install_catalog_init()
   then
     git clone -- "$pkg_install_catalog_url" "$pkg_install_catalog_cache" || return 5
   else
-    git pull -C "$pkg_install_catalog_cache" || return 6
+    git -C "$pkg_install_catalog_cache" pull --ff-only || return 6
   fi
+
+  pkg_install_catalog_head="$(git -C "$pkg_install_catalog_cache" rev-parse HEAD)" || return 7
+  git -C "$pkg_install_catalog_cache" archive "$pkg_install_catalog_head" | tar -x -C "$pkg_install_catalog_work" || return 8
 }
 
 _pkg_install_init()
@@ -114,8 +117,8 @@ _pkg_install_init()
 
   umask 077
 
-  pkg_install_tmp_root="$(state-path system sys pkg tmp)/install2-$$" || return 2
-  mkdir -p -- "$pkg_install_work" || return 3
+  pkg_install_tmp_root="$(state-path system sys pkg tmp)" || return 2
+  mkdir -p -- "$pkg_install_tmp_root" || return 3
 
   pkg_install_cache_root="$(state-path system sys pkg cache)" || return 4
   mkdir -p -- "$pkg_install_cache_root" || return 5
