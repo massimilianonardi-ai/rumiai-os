@@ -41,9 +41,12 @@ PACKAGE OPERANDS
 
 COMMANDS
     install <package-spec>...
-        Discover recursive dependencies with pkg depend, prepend the returned exact
-        dependency concretes to the original request list, and install the resulting
-        sequence dependency-first.
+        Validate the complete request list before dependency planning. If any
+        package specification is syntactically invalid, fail before catalog
+        resolution or package installation. Otherwise discover recursive
+        dependencies with pkg depend, prepend the returned exact dependency
+        concretes to the original request list, and install the resulting sequence
+        dependency-first.
 
         The original requested package specifications remain requests and are
         resolved by the installer when reached. Dependency operands are already
@@ -146,18 +149,17 @@ STATE
 
 FILES
     $m_PKG_DIR
-        Managed package store root. pkg install creates this directory on demand
-        when the first syntactically valid install operand is processed.
+        Managed package store root. pkg install does not create this directory for
+        an invocation whose request list contains a syntactically invalid operand.
 
 EXIT STATUS
     0   The requested operation succeeded.
-    1   The requested package operation could not be completed, at least one
-        install operand failed in a best-effort batch, or the requested installed
-        class/default could not be resolved where required. Successful operands in
-        a partially failed install batch remain installed.
-    2   The command or subcommand invocation itself is invalid. For pkg install,
-        an invalid package operand inside a non-empty batch is reported per
-        operand and contributes to status 1 rather than aborting the batch.
+    1   The requested package operation could not be completed after a valid
+        invocation, or the requested installed class/default could not be resolved
+        where required.
+    2   The command or subcommand invocation is invalid. For pkg install, this
+        includes any syntactically invalid package specification in the original
+        request list; no dependency planning or installation is attempted.
 
     Individual package execution launched after integration has its own exit status;
     that is not the exit status of this pkg management command.
