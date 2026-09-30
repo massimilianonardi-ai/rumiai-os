@@ -78,13 +78,13 @@ pkg_install()
 (
   [ "$#" -ge 1 ] || exit 1
 
-  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
+  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 2 execution invalid-arguments operation pkg-install reason dependency-unresolvable
   set -- $_pkg_install_list_resolved
 
   _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
 
   for _pkg_install_pkg
   do
-    pkg_install_one "$_pkg_install_pkg" || fatal 6 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
+    pkg_install_one "$_pkg_install_pkg" || fatal 4 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
   done
 )
