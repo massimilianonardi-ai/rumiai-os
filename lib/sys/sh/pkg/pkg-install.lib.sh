@@ -10,6 +10,16 @@ pkg_install_one()
   [ "$#" -eq 1 ] || exit 1
 
   pkg_install_request=$1
+
+  if pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_request"
+  then
+    if [ -e "$m_PKG_DIR/$pkg_install_request" ] || [ -L "$m_PKG_DIR/$pkg_install_request" ]
+    then
+      [ -d "$m_PKG_DIR/$pkg_install_request" ] && [ ! -L "$m_PKG_DIR/$pkg_install_request" ] || exit 3
+      exit 0
+    fi
+  fi
+
   pkg_catalog_request_resolve pkg_install_concrete pkg_install_target "$pkg_install_catalog_work" "$pkg_install_request" "$m_OSARCH" || exit 2
   pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_concrete" || exit 2
 
