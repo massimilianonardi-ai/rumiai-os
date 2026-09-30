@@ -93,10 +93,10 @@ pkg_catalog_init()
 
   if [ ! -d "$pkg_catalog_cache/.git" ]
   then
-    git clone -- "$pkg_catalog_url" "$pkg_catalog_cache" || return 1
+    git clone -- "$pkg_catalog_url" "$pkg_catalog_cache" >&2 || return 1
   else
     git -C "$pkg_catalog_cache" remote set-url origin "$pkg_catalog_url" || return 1
-    git -C "$pkg_catalog_cache" pull --ff-only || return 1
+    git -C "$pkg_catalog_cache" pull --ff-only >&2 || return 1
   fi
 
   pkg_catalog_head="$(git -C "$pkg_catalog_cache" rev-parse HEAD)" || return 1
