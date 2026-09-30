@@ -85,23 +85,32 @@ pkg_install_validate()
   done
 )
 
-pkg_install_catalog_snapshot()
+_pkg_install_init()
 {
   umask 077
 
-  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || fatal 1 execution execution-failed operation pkg-install reason work-path-failed
-  _pkg_install_mkdir "$pkg_install_work_parent" || fatal 2 execution execution-failed operation pkg-install reason work-path-failed
-  pkg_install_work="$pkg_install_work_parent/install2-$$"
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || fatal 3 execution execution-failed operation pkg-install reason work-path-collision
-  command -p -- mkdir -- "$pkg_install_work" || fatal 4 execution execution-failed operation pkg-install reason work-path-failed
+  pkg_install_work="$(command -- state-path system sys pkg tmp)/install2-$$" || return 1
+  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 2 execution execution-failed operation pkg-install reason work-path-collision
+  mkdir -- "$pkg_install_work" || return 3 execution execution-failed operation pkg-install reason work-path-failed
 
-  trap '_pkg_install_cleanup' 0
+  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 1
+  mkdir -- "$pkg_install_cache_root" || return 3 execution execution-failed operation pkg-install reason cache-path-failed
+
+  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 1
+  mkdir -- "$pkg_install_run_root" || return 3 execution execution-failed operation pkg-install reason run-path-failed
+
+  trap '_pkg_install_end' 0
   trap 'exit 130' HUP INT TERM
 
   pkg_install_catalog="$pkg_install_work/catalog"
-  command -p -- mkdir -- "$pkg_install_catalog" || fatal 1 execution execution-failed operation pkg-install reason catalog-snapshot-failed
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || fatal 1 execution execution-failed operation pkg-install reason catalog-snapshot-failed
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || fatal 1 execution execution-failed operation pkg-install reason catalog-snapshot-invalid
+  mkdir -- "$pkg_install_catalog" || return 1 execution execution-failed operation pkg-install reason catalog-snapshot-failed
+  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || return 2 execution execution-failed operation pkg-install reason catalog-snapshot-failed
+  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 3 execution execution-failed operation pkg-install reason catalog-snapshot-invalid
+}
+
+_pkg_install_end()
+{
+  rm -rf -- "$pkg_install_work" "$pkg_install_cache_root" "$pkg_install_run_root"
 }
 
 pkg_install2()
@@ -110,7 +119,7 @@ pkg_install2()
 
   pkg_install_validate "$@" || fatal 2 execution invalid-arguments operation pkg-install
 
-  pkg_install_catalog_snapshot || fatal 3 execution execution-failed operation pkg-install reason catalog-snapshot-invalid
+  _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
 
   _pkg_install_list_resolved=$(pkg_install_resolve "$@") || fatal 4 execution invalid-arguments operation pkg-install reason request-unresolvable
   eval "set -- $_pkg_install_list_resolved"
