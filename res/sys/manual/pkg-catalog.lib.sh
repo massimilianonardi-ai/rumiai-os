@@ -27,6 +27,12 @@ FUNCTIONS
         <identity-osarch-variable> receives <target-osarch> for a platform
         specific stream or the empty string for an all stream.
 
+    pkg_catalog_version_resolve <version-variable> <stream> [<requested-version>]
+        Resolve a repository version through the adapter owned by one catalog
+        stream. With <requested-version>, resolution must return that exact version;
+        without it, the repository adapter selects its normal current/latest
+        version. On success <version-variable> receives the validated version.
+
     pkg_catalog_range_resolve <range-variable> <catalog> <concrete>
         Resolve an already concrete package identity to its applicable catalog
         range directory in the supplied snapshot.

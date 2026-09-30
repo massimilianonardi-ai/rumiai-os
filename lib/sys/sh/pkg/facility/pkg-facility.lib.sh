@@ -193,6 +193,24 @@ _pkg_facility_declared_compatibility()
   return 1
 }
 
+_pkg_facility_assign()
+{
+  [ "$#" -eq 2 ] || return 2
+  valid_shell_identifier "$1" || return 2
+  IFS= read -r "$1" <<EOF_PKG_FACILITY_ASSIGN
+$2
+EOF_PKG_FACILITY_ASSIGN
+}
+
+pkg_facility_compatibility_read()
+{
+  [ "$#" -eq 3 ] || return 2
+  valid_shell_identifier "$1" || return 2
+  _pkg_facility_name_valid "$3" || return 2
+  _pkg_facility_declared_compatibility "$2" "$3" || return 1
+  _pkg_facility_assign "$1" "$pkg_facility_declared_compatibility"
+}
+
 _pkg_facility_provider_part_validate()
 {
   [ "$#" -eq 5 ] || return 2

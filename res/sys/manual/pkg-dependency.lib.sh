@@ -24,6 +24,20 @@ DESCRIPTION
     concrete and pretending that no provider exists.
 
 FUNCTIONS
+    pkg_dependency_read <facility-variable> <constraints-variable> <dependency-line>
+        Parse one dependency declaration line and assign its facility name and
+        complete constraint expression to caller-selected variables. Destination
+        names must be distinct valid shell identifiers.
+
+        Returns 0 on success, 1 for invalid dependency syntax and 2 for invalid
+        invocation.
+
+    pkg_dependency_satisfied <compatibility> <constraints>
+        Return success when one facility compatibility value satisfies every
+        constraint in the supplied dependency constraint expression. Returns 1 for
+        a non-match or invalid compatibility/constraint expression and 2 for invalid
+        invocation.
+
     pkg_dependency_default_resolve <facility> <constraint>...
         Resolve the configured system facility default through normal global
         package-class/osarch semantics and require the selected installed concrete

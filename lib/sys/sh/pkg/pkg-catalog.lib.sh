@@ -146,6 +146,40 @@ pkg_catalog_stream_resolve()
   _pkg_catalog_assign "$pkg_catalog_output_identity_osarch" "$pkg_catalog_identity_osarch"
 }
 
+pkg_catalog_version_resolve()
+{
+  [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
+  valid_shell_identifier "$1" || return 2
+
+  pkg_catalog_output_version=$1
+  pkg_catalog_stream=$2
+  pkg_catalog_requested_version=${3-}
+
+  [ -d "$pkg_catalog_stream" ] && [ ! -L "$pkg_catalog_stream" ] || return 1
+  pkg_catalog_repository="$pkg_catalog_stream/repository"
+  [ -d "$pkg_catalog_repository" ] && [ ! -L "$pkg_catalog_repository" ] || return 1
+  _pkg_catalog_repository_adapter "$pkg_catalog_repository" || return 1
+  pkg_catalog_adapter=$pkg_catalog_repository_adapter
+
+  if [ -n "$pkg_catalog_requested_version" ]
+  then
+    pkg_version_valid "$pkg_catalog_requested_version" || return 2
+    pkg_catalog_version="$(
+      . "$pkg_catalog_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_catalog_repository" "$pkg_catalog_requested_version"
+    )" || return 1
+    [ "$pkg_catalog_version" = "$pkg_catalog_requested_version" ] || return 1
+  else
+    pkg_catalog_version="$(
+      . "$pkg_catalog_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_catalog_repository"
+    )" || return 1
+  fi
+
+  pkg_version_valid "$pkg_catalog_version" || return 1
+  _pkg_catalog_assign "$pkg_catalog_output_version" "$pkg_catalog_version"
+}
+
 pkg_catalog_range_resolve()
 {
   [ "$#" -eq 3 ] || return 2

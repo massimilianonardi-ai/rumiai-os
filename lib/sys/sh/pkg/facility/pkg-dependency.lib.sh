@@ -52,6 +52,35 @@ _pkg_dependency_line_parse()
   done
 }
 
+_pkg_dependency_assign()
+{
+  [ "$#" -eq 2 ] || return 2
+  valid_shell_identifier "$1" || return 2
+  IFS= read -r "$1" <<EOF_PKG_DEPENDENCY_ASSIGN
+$2
+EOF_PKG_DEPENDENCY_ASSIGN
+}
+
+pkg_dependency_read()
+{
+  [ "$#" -eq 3 ] || return 2
+  valid_shell_identifier "$1" "$2" || return 2
+  [ "$1" != "$2" ] || return 2
+
+  pkg_dependency_output_facility=$1
+  pkg_dependency_output_constraints=$2
+  _pkg_dependency_line_parse "$3" || return 1
+
+  _pkg_dependency_assign "$pkg_dependency_output_facility" "$pkg_dependency_facility" || return 1
+  _pkg_dependency_assign "$pkg_dependency_output_constraints" "$pkg_dependency_constraints"
+}
+
+pkg_dependency_satisfied()
+{
+  [ "$#" -eq 2 ] || return 2
+  _pkg_dependency_constraints_satisfied "$1" "$2"
+}
+
 _pkg_dependency_file_validate()
 {
   [ "$#" -eq 1 ] || return 2

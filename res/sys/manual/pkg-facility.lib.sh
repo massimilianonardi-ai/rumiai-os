@@ -21,6 +21,13 @@ DESCRIPTION
     Unknown part types and unknown provider realization surfaces are rejected.
 
 FUNCTIONS
+    pkg_facility_compatibility_read <compatibility-variable> <definition-dir> <facility>
+        Validate the facility declaration in <definition-dir>/facility and assign
+        the declared compatibility for <facility> to the caller-selected variable.
+
+        Returns 0 when the facility is declared, 1 when the declaration is absent
+        or invalid and 2 for invalid invocation or facility syntax.
+
     pkg_facility_contract_validate <contract-dir>
         Validate one exact provider-independent facility contract directory and all
         of its supported typed parts.
