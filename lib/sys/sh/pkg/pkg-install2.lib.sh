@@ -89,16 +89,19 @@ _pkg_install_catalog_init()
 {
   [ "$#" -eq 0 ] || return 1
 
+  pkg_install_catalog_conf="$(state-path system sys pkg conf)/catalog" || return 2
+  pkg_install_catalog_url="$(cat "$pkg_install_catalog_conf")" || return 3
+
   pkg_install_catalog_work="$pkg_install_work/catalog"
-  rm -rf -- "$pkg_install_catalog_work" && mkdir -p -- "$pkg_install_catalog_work" || return 2
+  rm -rf -- "$pkg_install_catalog_work" && mkdir -p -- "$pkg_install_catalog_work" || return 4
 
   pkg_install_catalog_cache="$pkg_install_cache_root/catalog"
 
-  if [ ! -d "$pkg_install_catalog_cache" ]
+  if [ ! -d "$pkg_install_catalog_cache/.git" ]
   then
-    true
+    git clone -- "$pkg_install_catalog_url" "$pkg_install_catalog_cache" || return 5
   else
-    true
+    git pull -C "$pkg_install_catalog_cache" || return 6
   fi
 }
 
@@ -111,10 +114,10 @@ _pkg_install_init()
 
   umask 077
 
-  pkg_install_tmp_root="$(command -- state-path system sys pkg tmp)/install2-$$" || return 2
+  pkg_install_tmp_root="$(state-path system sys pkg tmp)/install2-$$" || return 2
   mkdir -p -- "$pkg_install_work" || return 3
 
-  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 4
+  pkg_install_cache_root="$(state-path system sys pkg cache)" || return 4
   mkdir -p -- "$pkg_install_cache_root" || return 5
 
   pkg_install_work="$pkg_install_tmp_root/install2-$$"
