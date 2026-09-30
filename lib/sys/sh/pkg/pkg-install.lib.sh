@@ -6,14 +6,19 @@ loadsyslib "pkg/pkg-extract2"
 loadsyslib "pkg/pkg-integration"
 
 _pkg_install_validate()
-(
+{
   [ "$#" -ge 1 ] || return 2
+  pkg_install_invalid_request=
 
   for pkg_install_request
   do
-    pkg_request_read pkg_install_validate_pkg pkg_install_validate_version pkg_install_validate_osarch "$pkg_install_request" || return 2
+    if ! pkg_request_read pkg_install_validate_pkg pkg_install_validate_version pkg_install_validate_osarch "$pkg_install_request"
+    then
+      pkg_install_invalid_request=$pkg_install_request
+      return 2
+    fi
   done
-)
+}
 
 pkg_install_one()
 (
@@ -99,7 +104,7 @@ pkg_install()
 (
   [ "$#" -ge 1 ] || exit 1
 
-  _pkg_install_validate "$@" || fatal 2 execution invalid-arguments operation pkg-install
+  _pkg_install_validate "$@" || fatal 2 execution invalid-arguments operation pkg-install package "$pkg_install_invalid_request"
   _pkg_install_request_list="$(quote "$@")" || fatal 2 execution invalid-arguments operation pkg-install
   _pkg_install_dependency_list="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
   eval "set -- $_pkg_install_dependency_list $_pkg_install_request_list"
