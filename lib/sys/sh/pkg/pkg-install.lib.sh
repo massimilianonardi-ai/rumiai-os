@@ -9,7 +9,18 @@ pkg_install_one()
 (
   [ "$#" -eq 1 ] || exit 1
 
-  pkg_install_concrete=$1
+  pkg_install_request=$1
+
+  if pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_request"
+  then
+    if [ -e "$m_PKG_DIR/$pkg_install_request" ] || [ -L "$m_PKG_DIR/$pkg_install_request" ]
+    then
+      [ -d "$m_PKG_DIR/$pkg_install_request" ] && [ ! -L "$m_PKG_DIR/$pkg_install_request" ] || exit 3
+      exit 0
+    fi
+  fi
+
+  pkg_catalog_request_resolve pkg_install_concrete pkg_install_target "$pkg_install_catalog_work" "$pkg_install_request" "$m_OSARCH" || exit 2
   pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_concrete" || exit 2
 
   if [ -e "$m_PKG_DIR/$pkg_install_concrete" ] || [ -L "$m_PKG_DIR/$pkg_install_concrete" ]
@@ -46,6 +57,118 @@ pkg_install_one()
   fi
 )
 
+pkg_install_resolve_one()
+(
+  [ "$#" -eq 1 ] || exit 1
+
+  pkg_install_request=$1
+  pkg_request_read pkg_install_pkg pkg_install_requested_version pkg_install_requested_osarch "$pkg_install_request" || exit 2
+
+  if [ -n "$pkg_install_requested_osarch" ]
+  then
+    pkg_install_target=$pkg_install_requested_osarch
+  else
+    pkg_install_target=$m_OSARCH
+  fi
+
+  pkg_install_package="$pkg_install_catalog_work/pkg/$pkg_install_pkg"
+
+  if [ -d "$pkg_install_package/$pkg_install_target" ]
+  then
+    pkg_install_stream="$pkg_install_package/$pkg_install_target"
+    pkg_install_identity_osarch=$pkg_install_target
+
+  elif [ -d "$pkg_install_package/all" ]
+  then
+    pkg_install_stream="$pkg_install_package/all"
+    pkg_install_identity_osarch=
+
+  else
+    exit 2
+  fi
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_requested_version" "$pkg_install_identity_osarch" || exit 3
+
+    if [ -e "$pkg_integration_concrete" ] || [ -L "$pkg_integration_concrete" ]
+    then
+      [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || exit 4
+
+      printf -- '%s\n' "$pkg_integration_concrete_name"
+      exit 0
+    fi
+
+  else
+    _pkg_local_class_scan "$pkg_install_pkg" "$pkg_install_identity_osarch" || exit 5
+
+    if [ -n "$pkg_local_class_current_name" ]
+    then
+      printf -- '%s\n' "$pkg_local_class_current_name"
+      exit 0
+    fi
+  fi
+
+  pkg_install_repository="$pkg_install_stream/repository"
+
+  pkg_install_repository_type="$(cat "$pkg_install_repository/type")" || exit 6
+
+  case "$pkg_install_repository_type" in
+    "" | [!a-z0-9]* | *[!a-z0-9-]* | *-)
+      exit 7
+    ;;
+  esac
+
+  pkg_install_repository_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    pkg_install_version="$(
+      . "$pkg_install_repository_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_install_repository" "$pkg_install_requested_version"
+    )" || exit 8
+
+    [ "$pkg_install_version" = "$pkg_install_requested_version" ] || exit 9
+  else
+    pkg_install_version="$(
+      . "$pkg_install_repository_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_install_repository"
+    )" || exit 8
+  fi
+
+  pkg_version_valid "$pkg_install_version" || exit 10
+
+  _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || exit 11
+
+  printf -- '%s\n' "$pkg_integration_concrete_name"
+)
+
+pkg_install_resolve()
+(
+  [ "$#" -ge 1 ] || exit 1
+
+  _pkg_install_resolve_separator=""
+
+  for pkg_install_request
+  do
+    pkg_install_concrete="$(pkg_install_resolve_one "$pkg_install_request")" || exit 2
+    pkg_install_quoted="$(quote "$pkg_install_concrete")" || exit 3
+
+    printf -- '%s' "${_pkg_install_resolve_separator}${pkg_install_quoted}"
+    _pkg_install_resolve_separator=" "
+  done
+)
+
+pkg_install_validate()
+(
+  [ "$#" -ge 1 ] || exit 1
+
+  for pkg_install_operand
+  do
+    pkg_request_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_operand" || exit 2
+  done
+)
+
 _pkg_install_init()
 {
   [ "$#" -eq 0 ] || return 1
@@ -78,8 +201,15 @@ pkg_install()
 (
   [ "$#" -ge 1 ] || exit 1
 
-  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 2 execution invalid-arguments operation pkg-install reason dependency-unresolvable
-  set -- $_pkg_install_list_resolved
+  pkg_install_validate "$@" || fatal 2 execution invalid-arguments operation pkg-install
+
+  _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
+
+  _pkg_install_list_resolved=$(pkg_install_resolve "$@") || fatal 4 execution invalid-arguments operation pkg-install reason request-unresolvable
+  eval "set -- $_pkg_install_list_resolved"
+
+  _pkg_install_list_dependency_resolved=$(pkg depend "$@") || fatal 5 execution invalid-arguments operation pkg-install reason dependency-unresolvable
+  eval "set -- $_pkg_install_list_dependency_resolved $_pkg_install_list_resolved"
 
   _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
 

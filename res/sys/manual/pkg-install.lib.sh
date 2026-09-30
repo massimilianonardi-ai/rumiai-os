@@ -1,57 +1,40 @@
 NAME
-    pkg-install.lib.sh - orchestrate package installation
+    pkg-install.lib.sh - orchestrate recursive package installation
 
 DESCRIPTION
-    pkg-install.lib.sh implements the installation orchestration used by the
-    public pkg install command. It processes package operands independently where
-    possible, materializes the managed package store on demand, snapshots the
-    package catalog, selects an exact target stream when present and otherwise the
-    platform-independent `all` stream, resolves repository metadata and artifacts, downloads
-    and verifies artifacts, extracts/materializes them, validates any provider
-    realization against facility contracts from that exact catalog snapshot, and
-    delegates final package integration to the package integration facilities.
-    Dependency declaration syntax is validated from catalog metadata before artifact
-    download. Current provider availability/selection is not an installation gate.
-    After the artifact descriptor is resolved but before artifact transfer, currently
-    unsatisfied dependencies are reported as warnings with facility, constraints and
-    resolution reason. The warning is informational and never suppresses the
-    download/integration attempt. A package resolved
-    from `all` keeps a platform-independent concrete identity.
+    pkg-install.lib.sh implements the public pkg install command. Before package
+    installation begins, it calls pkg depend for the original request list.
+    Dependency concrete identities returned by pkg depend are prepended to the
+    original requests, so dependencies are installed before the requested roots.
+
+    pkg install owns request installation, not dependency discovery. Each operand
+    is resolved against the installation catalog snapshot to one exact concrete,
+    then the artifact is resolved, downloaded, extracted, provider conformance is
+    validated and the package is integrated.
 
 FUNCTIONS
     pkg_install <package-spec>...
-        Install one or more package specifications through the real package
-        pipeline. Processing is best-effort per operand: invalid, unavailable,
-        already-installed or otherwise failed operands emit an error while later
-        independently installable operands continue to be attempted.
+        Resolve recursive dependencies through pkg depend, prepend those dependency
+        concretes to the original package specifications, and install the resulting
+        sequence.
 
-        If the resolved concrete already exists, pkg_install does not reinstall
-        it. The error reports the already-installed concrete identity and the
-        current/default concrete identity for that class when present.
+        Dependencies are exact concrete identities. Original requested operands
+        retain their package-spec form and are resolved by the installer when they
+        are reached. An already installed concrete is not reinstalled.
 
-        Missing or ambiguous runtime providers do not fail artifact installation and
-        are never auto-installed. They remain runtime resolution state and are
-        reported as pre-download warnings before the artifact transfer begins.
-
-        $m_PKG_DIR and temporary installation state are materialized only when the
-        first syntactically valid operand is processed. An invocation containing
-        only invalid operands therefore creates neither.
-
-        Returns 0 when every requested operand succeeds, 1 when at least one
-        operand fails (including a partially successful batch), and 2 when the
-        invocation itself is invalid.
-
-    pkg_install_requirement_list <package-spec>
-        Resolve the same current catalog stream/version/range used by installation
-        and print the selected definition's dependency declarations. This query
-        validates dependency metadata but does not resolve an artifact descriptor,
-        download/extract an artifact or create an installed package concrete.
+    pkg_install_one <package-spec>
+        Resolve one package specification against the current installation catalog
+        snapshot and install its concrete identity unless it is already installed.
 
 DEPENDENCIES
-    The library runs inside the m bootstrap environment and uses the package
-    download, extraction and integration libraries together with state-path,
-    repository adapters and the external pkg-catalog source.
+    pkg-common.lib.sh
+    pkg-catalog.lib.sh
+    pkg-depend.lib.sh
+    pkg-download.lib.sh
+    pkg-extract2.lib.sh
+    pkg-integration.lib.sh
 
 SEE ALSO
     pkg
-    state-path
+    pkg-depend.lib.sh
+    pkg-catalog.lib.sh
