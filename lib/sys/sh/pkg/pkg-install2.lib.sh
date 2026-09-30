@@ -9,36 +9,13 @@ pkg_install_one()
   [ "$#" -eq 1 ] || exit 1
 
   pkg_install_concrete=$1
+  pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_concrete" || exit 2
 
   if [ -e "$m_PKG_DIR/$pkg_install_concrete" ] || [ -L "$m_PKG_DIR/$pkg_install_concrete" ]
   then
-    [ -d "$m_PKG_DIR/$pkg_install_concrete" ] && [ ! -L "$m_PKG_DIR/$pkg_install_concrete" ] || exit 2
+    [ -d "$m_PKG_DIR/$pkg_install_concrete" ] && [ ! -L "$m_PKG_DIR/$pkg_install_concrete" ] || exit 3
     exit 0
   fi
-
-  pkg_install_left=$pkg_install_concrete
-  pkg_install_osarch=
-
-  case "$pkg_install_left" in
-    *!*)
-      pkg_install_osarch=${pkg_install_left##*!}
-      pkg_install_left=${pkg_install_left%!"$pkg_install_osarch"}
-      pkg_osarch_valid "$pkg_install_osarch" || exit 3
-      ;;
-  esac
-
-  case "$pkg_install_left" in
-    *@*)
-      pkg_install_version=${pkg_install_left##*@}
-      pkg_install_pkg=${pkg_install_left%@"$pkg_install_version"}
-      ;;
-    *)
-      exit 4
-      ;;
-  esac
-
-  pkg_name_valid "$pkg_install_pkg" || exit 5
-  pkg_version_valid "$pkg_install_version" || exit 6
 
   if [ -n "$pkg_install_osarch" ]
   then

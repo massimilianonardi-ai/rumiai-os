@@ -1,3 +1,5 @@
+loadsyslib "pkg/pkg-common"
+
 _pkg_provider_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -397,31 +399,7 @@ _pkg_provider_concrete_parse()
 {
   [ "$#" -eq 1 ] || return 2
   pkg_provider_concrete=$1
-  pkg_provider_concrete_left=$pkg_provider_concrete
-  pkg_provider_concrete_osarch=
-
-  case "$pkg_provider_concrete_left" in
-    *!*)
-      pkg_provider_concrete_osarch=${pkg_provider_concrete_left##*!}
-      pkg_provider_concrete_left=${pkg_provider_concrete_left%!"$pkg_provider_concrete_osarch"}
-      case "$pkg_provider_concrete_left" in *!*) return 1 ;; esac
-      _pkg_provider_osarch_valid "$pkg_provider_concrete_osarch" || return 1
-      ;;
-  esac
-
-  case "$pkg_provider_concrete_left" in
-    *@*)
-      pkg_provider_concrete_version=${pkg_provider_concrete_left##*@}
-      pkg_provider_concrete_pkg=${pkg_provider_concrete_left%@"$pkg_provider_concrete_version"}
-      case "$pkg_provider_concrete_pkg" in *@*) return 1 ;; esac
-      ;;
-    *)
-      return 1
-      ;;
-  esac
-
-  _pkg_provider_name_valid "$pkg_provider_concrete_pkg" || return 1
-  _pkg_provider_version_valid "$pkg_provider_concrete_version"
+  pkg_concrete_read pkg_provider_concrete_pkg pkg_provider_concrete_version pkg_provider_concrete_osarch "$pkg_provider_concrete"
 }
 
 _pkg_provider_resolved_validate()
