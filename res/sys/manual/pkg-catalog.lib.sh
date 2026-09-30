@@ -16,7 +16,8 @@ FUNCTIONS
         <head-variable> receives the exact Git revision. The destination variable
         names must be distinct valid shell identifiers. <work-root> and
         <cache-root> must be existing real directories and <work-root>/catalog
-        must not already exist.
+        must not already exist. Catalog refresh command output is kept off standard
+        output; results are returned through the assigned variables.
 
     pkg_catalog_stream_resolve <stream-variable> <identity-osarch-variable> <catalog> <package> <target-osarch>
         Resolve one package stream from an already materialized catalog snapshot.
