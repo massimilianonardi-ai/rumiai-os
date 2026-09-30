@@ -2,10 +2,10 @@ NAME
     pkg-extract2.lib.sh - normalize package artifacts using catalog metadata
 
 DESCRIPTION
-    pkg-extract2.lib.sh is the experimental package-materialization layer used by
-    install2. Physical extraction is delegated exclusively to extract2. This
-    library owns package-specific interpretation of range metadata and useful-root
-    normalization.
+    pkg-extract2.lib.sh is the temporary experimental filename for the future
+    pkg-extract library used by install2. Physical extraction is delegated
+    exclusively to extract2. This library owns package-specific interpretation of
+    range metadata and useful-root normalization.
 
     Ordinary package formats call extract2 once using the range format. flat-pkg
     calls extract2 with physical format pkg and then selects the catalog component
@@ -14,7 +14,7 @@ DESCRIPTION
     then applies component, payload-root and optional overlay metadata.
 
 FUNCTIONS
-    pkg_extract2 <artifact> <range-dir> <staging-dir>
+    pkg_extract <artifact> <range-dir> <staging-dir>
         Materialize one verified package artifact into an existing empty staging
         directory using metadata from <range-dir>.
 
