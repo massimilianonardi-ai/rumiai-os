@@ -1,4 +1,5 @@
 loadsyslib "pkg/pkg-common"
+loadsyslib "pkg/pkg-local"
 loadsyslib "pkg/pkg-download"
 loadsyslib "pkg/pkg-extract"
 loadsyslib "pkg/pkg-integration"
@@ -21,7 +22,107 @@ pkg_install_dependency_resolve()
 
 pkg_install_resolve_one()
 (
-  true
+  [ "$#" -eq 1 ] || exit 1
+
+  pkg_install_request=$1
+  pkg_install_left=$pkg_install_request
+  pkg_install_requested_osarch=
+  pkg_install_requested_version=
+
+  case "$pkg_install_left" in
+    *!*)
+      pkg_install_requested_osarch=${pkg_install_left##*!}
+      pkg_install_left=${pkg_install_left%!"$pkg_install_requested_osarch"}
+      ;;
+  esac
+
+  case "$pkg_install_left" in
+    *@*)
+      pkg_install_requested_version=${pkg_install_left##*@}
+      pkg_install_pkg=${pkg_install_left%@"$pkg_install_requested_version"}
+      ;;
+    *)
+      pkg_install_pkg=$pkg_install_left
+      ;;
+  esac
+
+  if [ -n "$pkg_install_requested_osarch" ]
+  then
+    pkg_install_target=$pkg_install_requested_osarch
+  else
+    pkg_install_target=$m_OSARCH
+  fi
+
+  pkg_install_package="$pkg_install_catalog_work/pkg/$pkg_install_pkg"
+
+  if [ -d "$pkg_install_package/$pkg_install_target" ]
+  then
+    pkg_install_stream="$pkg_install_package/$pkg_install_target"
+    pkg_install_identity_osarch=$pkg_install_target
+
+  elif [ -d "$pkg_install_package/all" ]
+  then
+    pkg_install_stream="$pkg_install_package/all"
+    pkg_install_identity_osarch=
+
+  else
+    exit 2
+  fi
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_requested_version" "$pkg_install_identity_osarch" || exit 3
+
+    if [ -e "$pkg_integration_concrete" ] || [ -L "$pkg_integration_concrete" ]
+    then
+      [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || exit 4
+
+      printf -- '%s\n' "$pkg_integration_concrete_name"
+      exit 0
+    fi
+
+  else
+    _pkg_local_class_scan "$pkg_install_pkg" "$pkg_install_identity_osarch" || exit 5
+
+    if [ -n "$pkg_local_class_current_name" ]
+    then
+      printf -- '%s\n' "$pkg_local_class_current_name"
+      exit 0
+    fi
+  fi
+
+  pkg_install_repository="$pkg_install_stream/repository"
+
+  pkg_install_repository_type="$(cat "$pkg_install_repository/type")" || exit 6
+
+  case "$pkg_install_repository_type" in
+    "" | [!a-z0-9]* | *[!a-z0-9-]* | *-)
+      exit 7
+    ;;
+  esac
+
+  pkg_install_repository_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    pkg_install_version="$(
+      . "$pkg_install_repository_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_install_repository" "$pkg_install_requested_version"
+    )" || exit 8
+
+    [ "$pkg_install_version" = "$pkg_install_requested_version" ] || exit 9
+  else
+    pkg_install_version="$(
+      . "$pkg_install_repository_adapter" || exit 1
+      pkg_repository_resolve_version "$pkg_install_repository"
+    )" || exit 8
+  fi
+
+  pkg_version_valid "$pkg_install_version" || exit 10
+
+  _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || exit 11
+
+  printf -- '%s\n' "$pkg_integration_concrete_name"
 )
 
 pkg_install_resolve()
