@@ -44,7 +44,18 @@ _pkg_depend_request_resolve()
   pkg_depend_default_target=$3
   pkg_depend_request_mode=$4
 
-  case "$pkg_depend_request_mode" in request|selector) : ;; *) return 2 ;; esac
+  case "$pkg_depend_request_mode" in
+    request)
+      pkg_catalog_request_resolve pkg_depend_concrete pkg_depend_target "$pkg_depend_catalog" "$pkg_depend_request" "$pkg_depend_default_target"
+      return
+      ;;
+    selector)
+      :
+      ;;
+    *)
+      return 2
+      ;;
+  esac
 
   pkg_request_read pkg_depend_pkg pkg_depend_requested_version pkg_depend_requested_osarch "$pkg_depend_request" || return 2
 
@@ -87,7 +98,7 @@ _pkg_depend_request_resolve()
         pkg_depend_concrete=$pkg_depend_current
         return
       fi
-    elif [ "$pkg_depend_request_mode" = selector ] && _pkg_depend_class_present "$pkg_depend_pkg" "$pkg_depend_identity_osarch"
+    elif _pkg_depend_class_present "$pkg_depend_pkg" "$pkg_depend_identity_osarch"
     then
       return 1
     fi
@@ -555,6 +566,22 @@ $pkg_depend_keys
 EOF_PKG_DEPEND_KEYS
 }
 
+_pkg_depend_selected_concrete()
+{
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$pkg_depend_selections" ] || return 1
+
+  while IFS='|' read -r pkg_depend_selection_key pkg_depend_selection_concrete pkg_depend_selection_target pkg_depend_selection_extra
+  do
+    [ -z "$pkg_depend_selection_extra" ] || return 1
+    [ "$pkg_depend_selection_concrete" = "$1" ] && return 0
+  done <<EOF_PKG_DEPEND_SELECTED_CONCRETE
+$pkg_depend_selections
+EOF_PKG_DEPEND_SELECTED_CONCRETE
+
+  return 1
+}
+
 _pkg_depend_selection_find()
 {
   [ "$#" -eq 1 ] || return 2
@@ -697,6 +724,7 @@ EOF_PKG_DEPEND_ROOT_VISIT
   pkg_depend_separator=
   for pkg_depend_concrete in $pkg_depend_order
   do
+    _pkg_depend_selected_concrete "$pkg_depend_concrete" || continue
     pkg_depend_quoted="$(quote "$pkg_depend_concrete")" || return 1
     printf -- '%s' "$pkg_depend_separator$pkg_depend_quoted"
     pkg_depend_separator=" "

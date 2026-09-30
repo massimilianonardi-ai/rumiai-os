@@ -9,7 +9,8 @@ pkg_install_one()
 (
   [ "$#" -eq 1 ] || exit 1
 
-  pkg_install_concrete=$1
+  pkg_install_request=$1
+  pkg_catalog_request_resolve pkg_install_concrete pkg_install_target "$pkg_install_catalog_work" "$pkg_install_request" "$m_OSARCH" || exit 2
   pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_concrete" || exit 2
 
   if [ -e "$m_PKG_DIR/$pkg_install_concrete" ] || [ -L "$m_PKG_DIR/$pkg_install_concrete" ]
@@ -78,8 +79,9 @@ pkg_install()
 (
   [ "$#" -ge 1 ] || exit 1
 
-  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
-  set -- $_pkg_install_list_resolved
+  _pkg_install_request_list="$(quote "$@")" || fatal 2 execution invalid-arguments operation pkg-install
+  _pkg_install_dependency_list="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
+  eval "set -- $_pkg_install_dependency_list $_pkg_install_request_list"
 
   _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
 

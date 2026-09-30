@@ -146,6 +146,46 @@ pkg_catalog_stream_resolve()
   _pkg_catalog_assign "$pkg_catalog_output_identity_osarch" "$pkg_catalog_identity_osarch"
 }
 
+pkg_catalog_request_resolve()
+{
+  [ "$#" -eq 5 ] || return 2
+  valid_shell_identifier "$1" "$2" || return 2
+  [ "$1" != "$2" ] || return 2
+
+  pkg_catalog_output_concrete=$1
+  pkg_catalog_output_target=$2
+  pkg_catalog_root=$3
+  pkg_catalog_request=$4
+  pkg_catalog_default_target=$5
+
+  [ -d "$pkg_catalog_root" ] && [ ! -L "$pkg_catalog_root" ] || return 1
+  pkg_request_read pkg_catalog_package pkg_catalog_requested_version pkg_catalog_requested_osarch "$pkg_catalog_request" || return 2
+
+  if [ -n "$pkg_catalog_requested_osarch" ]
+  then
+    pkg_catalog_target=$pkg_catalog_requested_osarch
+  else
+    pkg_catalog_target=$pkg_catalog_default_target
+  fi
+  pkg_osarch_valid "$pkg_catalog_target" || return 1
+
+  pkg_catalog_stream_resolve pkg_catalog_request_stream pkg_catalog_identity_osarch "$pkg_catalog_root" "$pkg_catalog_package" "$pkg_catalog_target" || return 1
+
+  if [ -n "$pkg_catalog_requested_version" ]
+  then
+    pkg_catalog_version_resolve pkg_catalog_request_version "$pkg_catalog_request_stream" "$pkg_catalog_requested_version" || return 1
+  else
+    pkg_catalog_version_resolve pkg_catalog_request_version "$pkg_catalog_request_stream" || return 1
+  fi
+
+  pkg_catalog_concrete="$pkg_catalog_package@$pkg_catalog_request_version"
+  [ -z "$pkg_catalog_identity_osarch" ] || pkg_catalog_concrete="$pkg_catalog_concrete!$pkg_catalog_identity_osarch"
+  pkg_concrete_read pkg_catalog_check_package pkg_catalog_check_version pkg_catalog_check_osarch "$pkg_catalog_concrete" || return 1
+
+  _pkg_catalog_assign "$pkg_catalog_output_concrete" "$pkg_catalog_concrete" || return 1
+  _pkg_catalog_assign "$pkg_catalog_output_target" "$pkg_catalog_target"
+}
+
 pkg_catalog_version_resolve()
 {
   [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2

@@ -41,24 +41,13 @@ PACKAGE OPERANDS
 
 COMMANDS
     install <package-spec>...
-        Install one or more requested packages through the current catalog and
-        package integration pipeline. Processing is best-effort per operand: a
-        failed operand emits an error and does not prevent later independently
-        installable operands from being attempted.
+        Discover recursive dependencies with pkg depend, prepend the returned exact
+        dependency concretes to the original request list, and install the resulting
+        sequence dependency-first.
 
-        An already installed concrete is not reinstalled. Its error diagnostic
-        identifies the installed concrete and the current/default concrete for
-        the same package/platform class when one exists.
-
-        Dependency declarations are validated from the selected catalog definition
-        before artifact download. Runtime dependency satisfiability is not an
-        installation precondition: after artifact metadata is resolved, missing or
-        ambiguous providers are reported as warnings before artifact transfer and
-        are resolved again when the package is launched.
-
-        $m_PKG_DIR is materialized on demand when the first syntactically valid
-        install operand is processed. An invocation containing only invalid
-        package operands does not create the package store.
+        The original requested package specifications remain requests and are
+        resolved by the installer when reached. Dependency operands are already
+        concrete. An already installed concrete is not reinstalled.
 
     uninstall <package-spec>...
         Remove one or more installed package versions. When a version is omitted,
@@ -70,25 +59,22 @@ COMMANDS
         A version suffix is not accepted for this query.
 
     depend <package-spec>...
-        Resolve the requested packages and their recursive facility dependencies
-        without installing anything. The command evaluates one catalog snapshot,
-        current installed package state and explicit provider configuration, then
-        prints the complete concrete package plan one identity per line in
-        dependency-first order.
+        Discover and resolve only the recursive facility dependencies of the
+        requested packages without installing anything. Requested root packages are
+        not printed unless the same concrete is also selected as a dependency of
+        another request.
 
-        Consumer binding has precedence over the system facility default. Without
-        either selector, an already planned compatible provider is preferred,
-        followed by an unambiguous compatible installed provider. Only when no
-        compatible planned or installed provider exists may the planner add a
-        catalog provider; multiple compatible provider packages are ambiguous and
-        fail rather than being ranked silently.
+        Dependency output is one exact concrete identity per line in
+        dependency-first order. Consumer binding has precedence over the system
+        facility default. Without either selector, an already planned compatible
+        provider is preferred, followed by an unambiguous compatible installed
+        provider. Only when no compatible planned or installed provider exists may
+        the planner add a catalog provider; multiple compatible provider packages
+        are ambiguous and fail rather than being ranked silently.
 
         The command is read-only with respect to package/provider state. Catalog
         cache refresh and invocation-private temporary snapshot materialization are
-        allowed. Each output line is an exact package operand and may be passed
-        directly to pkg install, for example:
-
-            pkg install $(pkg depend keycloak)
+        allowed.
 
     default <package-spec>
         With an explicit version, select that installed version as the current

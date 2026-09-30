@@ -28,6 +28,18 @@ FUNCTIONS
         <identity-osarch-variable> receives <target-osarch> for a platform
         specific stream or the empty string for an all stream.
 
+    pkg_catalog_request_resolve <concrete-variable> <target-variable> <catalog> <package-spec> <default-target>
+        Resolve one package request against an already materialized catalog
+        snapshot. An explicit osarch in <package-spec> overrides <default-target>;
+        otherwise <default-target> selects the target stream and may fall back to
+        the platform-independent all stream.
+
+        The requested version is resolved exactly when present; otherwise the
+        repository adapter selects its normal current/latest version. On success
+        <concrete-variable> receives the exact concrete identity and
+        <target-variable> receives the effective target osarch used for dependency
+        planning.
+
     pkg_catalog_version_resolve <version-variable> <stream> [<requested-version>]
         Resolve a repository version through the adapter owned by one catalog
         stream. With <requested-version>, resolution must return that exact version;
