@@ -53,7 +53,7 @@ _pkg_extract_normalize_root()
 
   [ "$pkg_extract_useful_root" != "$pkg_extract_output" ] || return 0
 
-  pkg_extract_swap="$pkg_extract_output/.pkg-extract2-normalize-$$"
+  pkg_extract_swap="$pkg_extract_output/.pkg-extract-normalize-$$"
   [ ! -e "$pkg_extract_swap" ] && [ ! -L "$pkg_extract_swap" ] || return 1
   command -p -- mv -- "$pkg_extract_top_wrapper" "$pkg_extract_swap" || return 1
 
@@ -255,7 +255,7 @@ _pkg_extract_work_create()
   [ "$#" -eq 1 ] || return 2
   pkg_extract_work_parent=${1%/*}
   [ "$pkg_extract_work_parent" != "$1" ] || return 1
-  pkg_extract_work="$pkg_extract_work_parent/.pkg-extract2-${1##*/}-$$"
+  pkg_extract_work="$pkg_extract_work_parent/.pkg-extract-${1##*/}-$$"
   [ ! -e "$pkg_extract_work" ] && [ ! -L "$pkg_extract_work" ] || return 1
   command -p -- mkdir "$pkg_extract_work"
 }
@@ -342,5 +342,4 @@ pkg_extract()
   esac
 
   _pkg_extract_normalize_root "$pkg_extract_staging" || return 1
-  return 0
 )
