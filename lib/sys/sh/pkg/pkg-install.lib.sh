@@ -57,7 +57,7 @@ pkg_install_one()
   fi
 )
 
-pkg_install_resolve_one()
+___pkg_install_resolve_one()
 (
   [ "$#" -eq 1 ] || exit 1
 
@@ -139,6 +139,51 @@ pkg_install_resolve_one()
   _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || exit 11
 
   printf -- '%s\n' "$pkg_integration_concrete_name"
+)
+
+pkg_install_resolve_one()
+(
+  [ "$#" -eq 1 ] || exit 1
+
+  pkg_install_request=$1
+  pkg_request_read pkg_install_pkg pkg_install_requested_version pkg_install_requested_osarch "$pkg_install_request" || exit 2
+
+  if [ -n "$pkg_install_requested_osarch" ]
+  then
+    pkg_install_target=$pkg_install_requested_osarch
+  else
+    pkg_install_target=$m_OSARCH
+  fi
+
+  pkg_catalog_stream_resolve pkg_install_stream pkg_install_identity_osarch "$pkg_install_catalog_work" "$pkg_install_pkg" "$pkg_install_target" || exit 3
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    pkg_install_concrete="$pkg_install_pkg@$pkg_install_requested_version"
+    [ -z "$pkg_install_identity_osarch" ] || pkg_install_concrete="$pkg_install_concrete!$pkg_install_identity_osarch"
+
+    if [ -d "$m_PKG_DIR/$pkg_install_concrete" ]
+    then
+      printf -- '%s\n' "$pkg_install_concrete"
+      exit 0
+    fi
+  elif pkg_local_current pkg_install_concrete "$pkg_install_pkg" "$pkg_install_identity_osarch"
+  then
+    printf -- '%s\n' "$pkg_install_concrete"
+    exit 0
+  fi
+
+  if [ -n "$pkg_install_requested_version" ]
+  then
+    pkg_catalog_version_resolve pkg_install_version "$pkg_install_stream" "$pkg_install_requested_version" || exit 4
+  else
+    pkg_catalog_version_resolve pkg_install_version "$pkg_install_stream" || exit 4
+  fi
+
+  pkg_install_concrete="$pkg_install_pkg@$pkg_install_version"
+  [ -z "$pkg_install_identity_osarch" ] || pkg_install_concrete="$pkg_install_concrete!$pkg_install_identity_osarch"
+
+  printf -- '%s\n' "$pkg_install_concrete"
 )
 
 pkg_install_resolve()
