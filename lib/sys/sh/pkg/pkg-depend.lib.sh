@@ -639,7 +639,7 @@ EOF_PKG_DEPEND_VISIT_EDGES
   pkg_depend_order="$pkg_depend_order $pkg_depend_visit_concrete"
 }
 
-pkg_depend_resolve()
+_pkg_depend_resolve()
 (
   [ "$#" -ge 2 ] || return 2
   pkg_depend_catalog=$1
@@ -737,7 +737,7 @@ pkg_depend()
 
   pkg_catalog_init pkg_depend_catalog_work pkg_depend_catalog_head "$pkg_depend_work" "$pkg_depend_cache_root" || return 1
 
-  pkg_depend_result="$(pkg_depend_resolve "$pkg_depend_catalog_work" "$@")" || return $?
+  pkg_depend_result="$(_pkg_depend_resolve "$pkg_depend_catalog_work" "$@")" || return $?
   eval "set -- $pkg_depend_result"
 
   for pkg_depend_concrete

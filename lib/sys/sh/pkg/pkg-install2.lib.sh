@@ -46,16 +46,6 @@ pkg_install_one()
   fi
 )
 
-pkg_install_validate()
-(
-  [ "$#" -ge 1 ] || exit 1
-
-  for pkg_install_operand
-  do
-    pkg_request_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_operand" || exit 2
-  done
-)
-
 _pkg_install_init()
 {
   [ "$#" -eq 0 ] || return 1
@@ -88,12 +78,10 @@ pkg_install2()
 (
   [ "$#" -ge 1 ] || exit 1
 
-  pkg_install_validate "$@" || fatal 2 execution invalid-arguments operation pkg-install
+  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
+  set -- $_pkg_install_list_resolved
 
   _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
-
-  _pkg_install_list_resolved=$(pkg_depend_resolve "$pkg_install_catalog_work" "$@") || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
-  eval "set -- $_pkg_install_list_resolved"
 
   for _pkg_install_pkg
   do

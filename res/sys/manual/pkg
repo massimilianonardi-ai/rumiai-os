@@ -85,7 +85,10 @@ COMMANDS
 
         The command is read-only with respect to package/provider state. Catalog
         cache refresh and invocation-private temporary snapshot materialization are
-        allowed.
+        allowed. Each output line is an exact package operand and may be passed
+        directly to pkg install, for example:
+
+            pkg install $(pkg depend keycloak)
 
     default <package-spec>
         With an explicit version, select that installed version as the current
