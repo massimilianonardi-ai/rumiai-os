@@ -6,10 +6,110 @@ loadsyslib "pkg/pkg-integration"
 
 pkg_install_one()
 (
-  for pkg
-  do
-    true
-  done
+  [ "$#" -eq 1 ] || exit 1
+
+  pkg_install_concrete=$1
+
+  if [ -e "$m_PKG_DIR/$pkg_install_concrete" ] || [ -L "$m_PKG_DIR/$pkg_install_concrete" ]
+  then
+    [ -d "$m_PKG_DIR/$pkg_install_concrete" ] && [ ! -L "$m_PKG_DIR/$pkg_install_concrete" ] || exit 2
+    exit 0
+  fi
+
+  pkg_install_left=$pkg_install_concrete
+  pkg_install_osarch=
+
+  case "$pkg_install_left" in
+    *!*)
+      pkg_install_osarch=${pkg_install_left##*!}
+      pkg_install_left=${pkg_install_left%!"$pkg_install_osarch"}
+      pkg_osarch_valid "$pkg_install_osarch" || exit 3
+      ;;
+  esac
+
+  case "$pkg_install_left" in
+    *@*)
+      pkg_install_version=${pkg_install_left##*@}
+      pkg_install_pkg=${pkg_install_left%@"$pkg_install_version"}
+      ;;
+    *)
+      exit 4
+      ;;
+  esac
+
+  pkg_name_valid "$pkg_install_pkg" || exit 5
+  pkg_version_valid "$pkg_install_version" || exit 6
+
+  if [ -n "$pkg_install_osarch" ]
+  then
+    pkg_install_stream="$pkg_install_catalog_work/pkg/$pkg_install_pkg/$pkg_install_osarch"
+  else
+    pkg_install_stream="$pkg_install_catalog_work/pkg/$pkg_install_pkg/all"
+  fi
+
+  [ -d "$pkg_install_stream" ] || exit 7
+
+  _pkg_install_dependency_range_resolve "$pkg_install_concrete" || exit 8
+  pkg_install_range=$pkg_install_dependency_range
+
+  pkg_install_repository="$pkg_install_stream/repository"
+  pkg_install_repository_type="$(cat "$pkg_install_repository/type")" || exit 9
+  pkg_install_repository_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
+
+  pkg_install_item="$pkg_install_work/$pkg_install_concrete"
+  mkdir -- "$pkg_install_item" || exit 10
+
+  pkg_install_download_dir="$pkg_install_item/download"
+  pkg_install_extract_dir="$pkg_install_item/extract"
+  mkdir -- "$pkg_install_download_dir" "$pkg_install_extract_dir" || exit 11
+
+  pkg_install_artifact="$( ( . "$pkg_install_repository_adapter" || exit 1; pkg_repository_resolve_artifact "$pkg_install_repository" "$pkg_install_range" "$pkg_install_version" ) | pkg_download "$pkg_install_download_dir" )" || exit 12
+
+  pkg_install_format="$(cat "$pkg_install_range/format")" || exit 13
+
+  case "$pkg_install_format" in
+    flat-pkg)
+      pkg_install_component="$(cat "$pkg_install_range/component")" || exit 14
+
+      if [ -f "$pkg_install_range/payload-root" ]
+      then
+        pkg_install_payload_root="$(cat "$pkg_install_range/payload-root")" || exit 15
+        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || exit 16
+      else
+        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || exit 16
+      fi
+      ;;
+
+    dmg-pkg)
+      pkg_install_component="$(cat "$pkg_install_range/component")" || exit 14
+      pkg_install_payload_root=
+      [ ! -f "$pkg_install_range/payload-root" ] || pkg_install_payload_root="$(cat "$pkg_install_range/payload-root")" || exit 15
+
+      if [ -d "$pkg_install_range/overlay" ]
+      then
+        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" "$pkg_install_range/overlay" || exit 16
+      elif [ -n "$pkg_install_payload_root" ]
+      then
+        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || exit 16
+      else
+        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || exit 16
+      fi
+      ;;
+
+    *)
+      pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || exit 16
+      ;;
+  esac
+
+  pkg_facility_provider_validate "$pkg_install_catalog_work" "$pkg_install_range" "$pkg_install_extract_dir" || exit 17
+  pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_range" "$pkg_install_extract_dir" "$pkg_install_osarch" || exit 18
+
+  if [ -n "$pkg_install_osarch" ]
+  then
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_osarch" || exit 19
+  else
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" || exit 19
+  fi
 )
 
 _pkg_install_dependency_source()
@@ -294,6 +394,8 @@ _pkg_install_init()
 {
   [ "$#" -eq 0 ] || return 1
 
+  mkdir -p $m_PKG_DIR
+  
   trap '_pkg_install_end' 0
   trap 'exit 130' HUP INT TERM
 
