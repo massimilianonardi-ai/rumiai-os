@@ -395,7 +395,7 @@ extract2_pkg()
   extract2_require pkgutil
   readpathce extract2_pkg_destination "$extract2_destination" || fatal execution execution-failed operation extract2 reason destination-resolution-failed format "$extract2_format"
   extract2_pkg_parent=${extract2_pkg_destination%/*}
-  extract2_pkg_work="$extract2_pkg_parent/.extract2-pkg-${extract2_pkg_destination##*/}-$"
+  extract2_pkg_work="$extract2_pkg_parent/.extract2-pkg-${extract2_pkg_destination##*/}-$$"
   [ ! -e "$extract2_pkg_work" ] && [ ! -L "$extract2_pkg_work" ] || fatal execution execution-failed operation extract2 reason temporary-target-exists format "$extract2_format"
 
   if ! command -- pkgutil --expand-full "$extract2_artifact" "$extract2_pkg_work"
