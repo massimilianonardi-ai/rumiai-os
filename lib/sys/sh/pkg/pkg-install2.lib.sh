@@ -7,7 +7,7 @@ pkg_install_one()
 (
   for pkg
   do
-    # todo
+    true
   done
 )
 
@@ -15,15 +15,28 @@ pkg_install_dependency_resolve()
 (
   for pkg
   do
-    # todo
+    true
   done
+)
+
+pkg_install_resolve_one()
+(
+  true
 )
 
 pkg_install_resolve()
 (
-  for pkg
+  [ "$#" -ge 1 ] || exit 1
+
+  _pkg_install_resolve_separator=""
+
+  for pkg_install_request
   do
-    # todo
+    pkg_install_concrete="$(pkg_install_resolve_one "$pkg_install_request")" || exit 2
+    pkg_install_quoted="$(quote "$pkg_install_concrete")" || exit 3
+
+    printf -- '%s' "${_pkg_install_resolve_separator}${pkg_install_quoted}"
+    _pkg_install_resolve_separator=" "
   done
 )
 
