@@ -62,9 +62,8 @@ _pkg_spec_read()
 
   pkg_name_valid "$pkg_spec_name" || return 1
 
-  pkg_spec_tab="$(printf '\t')" || return 1
-  IFS="$pkg_spec_tab" read -r "$1" "$2" "$3" <<EOF_PKG_SPEC
-$pkg_spec_name	$pkg_spec_version	$pkg_spec_osarch
+  IFS='|' read -r "$1" "$2" "$3" <<EOF_PKG_SPEC
+$pkg_spec_name|$pkg_spec_version|$pkg_spec_osarch
 EOF_PKG_SPEC
 }
 
