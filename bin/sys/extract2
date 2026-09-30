@@ -1,0 +1,484 @@
+#!/usr/bin/env m
+
+extract2_have()
+{
+  [ "$#" -eq 1 ] || return 2
+  command -v -- "$1" >/dev/null 2>&1
+}
+
+extract2_require()
+{
+  [ "$#" -eq 1 ] || return 2
+  extract2_have "$1" && return 0
+  fatal execution command-not-found operation extract2 command "$1" format "$extract2_format"
+}
+
+extract2_stream_target()
+{
+  [ "$#" -eq 2 ] || return 2
+  extract2_stream_name=$1
+  extract2_stream_format=$2
+
+  case "$extract2_stream_format:$extract2_stream_name" in
+    gzip:*.gz|gz:*.gz) extract2_stream_name=${extract2_stream_name%.gz};;
+    gzip:*.gzip|gz:*.gzip) extract2_stream_name=${extract2_stream_name%.gzip};;
+    bzip:*.bz2|bzip2:*.bz2|bz2:*.bz2) extract2_stream_name=${extract2_stream_name%.bz2};;
+    bzip:*.bz|bzip2:*.bz|bz2:*.bz) extract2_stream_name=${extract2_stream_name%.bz};;
+    bzip:*.bzip2|bzip2:*.bzip2|bz2:*.bzip2) extract2_stream_name=${extract2_stream_name%.bzip2};;
+    xz:*.xz) extract2_stream_name=${extract2_stream_name%.xz};;
+    zstd:*.zst|zst:*.zst) extract2_stream_name=${extract2_stream_name%.zst};;
+    zstd:*.zstd|zst:*.zstd) extract2_stream_name=${extract2_stream_name%.zstd};;
+    *) return 1;;
+  esac
+
+  [ -n "$extract2_stream_name" ] && [ "$extract2_stream_name" != . ] && [ "$extract2_stream_name" != .. ] || return 1
+  printf -- '%s\n' "$extract2_stream_name"
+}
+
+extract2_tar_stream()
+{
+  extract2_require tar
+  (
+    cd -- "$extract2_destination" || exit 1
+    TAR_OPTIONS= command -- tar -xf -
+  ) < "$extract2_artifact"
+}
+
+extract2_compressed_tar()
+{
+  extract2_compressor=$1
+  extract2_bzip2_method=
+
+  if [ "$extract2_compressor" = bzip2 ]
+  then
+    extract2_bzip2_method="$(extract2_bzip2_method)" || fatal execution command-not-found operation extract2 command python3 format "$extract2_format"
+  else
+    extract2_require "$extract2_compressor"
+  fi
+  extract2_require tar
+
+  extract2_tmp="$extract2_destination/.extract2-$$.tar"
+  [ ! -e "$extract2_tmp" ] && [ ! -L "$extract2_tmp" ] || fatal execution execution-failed operation extract2 reason temporary-target-exists format "$extract2_format"
+
+  case "$extract2_compressor" in
+    gzip)
+      GZIP= command -- gzip -dc < "$extract2_artifact" > "$extract2_tmp"
+      ;;
+    bzip2)
+      extract2_bzip2_decompress "$extract2_bzip2_method" > "$extract2_tmp"
+      ;;
+    xz)
+      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract2_artifact" > "$extract2_tmp"
+      ;;
+    zstd)
+      command -- zstd -dcq < "$extract2_artifact" > "$extract2_tmp"
+      ;;
+    *)
+      fatal 2 execution invalid-arguments operation extract2
+      ;;
+  esac
+  extract2_status=$?
+  if [ "$extract2_status" -ne 0 ]
+  then
+    command -p -- rm -f -- "$extract2_tmp" 2>/dev/null
+    fatal execution execution-failed operation extract2 reason decompression-failed format "$extract2_format"
+  fi
+
+  exec 3< "$extract2_tmp" || {
+    command -p -- rm -f -- "$extract2_tmp" 2>/dev/null
+    fatal execution execution-failed operation extract2 reason temporary-read-failed format "$extract2_format"
+  }
+  command -p -- rm -f -- "$extract2_tmp" || {
+    exec 3<&-
+    fatal execution execution-failed operation extract2 reason temporary-cleanup-failed format "$extract2_format"
+  }
+
+  (
+    cd -- "$extract2_destination" || exit 1
+    TAR_OPTIONS= command -- tar -xf - <&3
+  )
+  extract2_status=$?
+  exec 3<&-
+  [ "$extract2_status" -eq 0 ] || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+extract2_stream()
+{
+  extract2_compressor=$1
+  extract2_bzip2_method=
+
+  if [ "$extract2_compressor" = bzip2 ]
+  then
+    extract2_bzip2_method="$(extract2_bzip2_method)" || fatal execution command-not-found operation extract2 command python3 format "$extract2_format"
+  else
+    extract2_require "$extract2_compressor"
+  fi
+
+  extract2_stream_base=${extract2_artifact##*/}
+  extract2_stream_name="$(extract2_stream_target "$extract2_stream_base" "$extract2_format")" || fatal execution execution-failed operation extract2 reason output-name-invalid format "$extract2_format"
+  extract2_stream_output="$extract2_destination/$extract2_stream_name"
+  [ ! -e "$extract2_stream_output" ] && [ ! -L "$extract2_stream_output" ] || fatal execution execution-failed operation extract2 reason output-exists format "$extract2_format"
+
+  case "$extract2_compressor" in
+    gzip)
+      GZIP= command -- gzip -dc < "$extract2_artifact" > "$extract2_stream_output"
+      ;;
+    bzip2)
+      extract2_bzip2_decompress "$extract2_bzip2_method" > "$extract2_stream_output"
+      ;;
+    xz)
+      XZ_OPT= XZ_DEFAULTS= command -- xz -dc < "$extract2_artifact" > "$extract2_stream_output"
+      ;;
+    zstd)
+      command -- zstd -dcq < "$extract2_artifact" > "$extract2_stream_output"
+      ;;
+    *)
+      fatal 2 execution invalid-arguments operation extract2
+      ;;
+  esac
+  extract2_status=$?
+  if [ "$extract2_status" -ne 0 ]
+  then
+    command -p -- rm -f -- "$extract2_stream_output" 2>/dev/null
+    fatal execution execution-failed operation extract2 reason decompression-failed format "$extract2_format"
+  fi
+}
+
+extract2_zip()
+{
+  extract2_require unzip
+  UNZIP= UNZIPOPT= command -- unzip -qq -d "$extract2_destination" "$extract2_artifact" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+extract2_7z_command()
+{
+  for extract2_candidate in 7zz 7z 7za
+  do
+    if extract2_have "$extract2_candidate"
+    then
+      printf -- '%s\n' "$extract2_candidate"
+      return 0
+    fi
+  done
+  return 1
+}
+
+extract2_bzip2_method()
+{
+  if extract2_have bzip2
+  then
+    printf -- '%s\n' bzip2
+    return 0
+  fi
+
+  extract2_7z_command && return 0
+
+  if extract2_have python3
+  then
+    printf -- '%s\n' python3
+    return 0
+  fi
+
+  return 1
+}
+
+extract2_bzip2_decompress()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  case "$1" in
+    bzip2)
+      BZIP2= BZIP= command -- bzip2 -dc < "$extract2_artifact"
+      ;;
+    7zz|7z|7za)
+      command -- "$1" x -so -- "$extract2_artifact"
+      ;;
+    python3)
+      command -- python3 -c 'import bz2, shutil, sys; source=bz2.open(sys.argv[1], "rb"); shutil.copyfileobj(source, sys.stdout.buffer); source.close()' "$extract2_artifact"
+      ;;
+    *)
+      return 2
+      ;;
+  esac
+}
+
+extract2_7z()
+{
+  extract2_command="$(extract2_7z_command)" || fatal execution command-not-found operation extract2 command 7z format "$extract2_format"
+  command -- "$extract2_command" x -y "-o$extract2_destination" -- "$extract2_artifact" >/dev/null || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+extract2_dmg_diskutil_available()
+{
+  extract2_have diskutil || return 1
+  command -- diskutil image attach -help >/dev/null 2>&1
+}
+
+extract2_dmg_plist_resolve()
+{
+  [ "$#" -eq 1 ] || return 2
+  extract2_dmg_plist=$1
+
+  extract2_dmg_entity_count="$(command -- plutil -extract system-entities raw -expect array "$extract2_dmg_plist" 2>/dev/null)" || return 1
+  case "$extract2_dmg_entity_count" in
+    ""|*[!0-9]*) return 1 ;;
+  esac
+  [ "$extract2_dmg_entity_count" -gt 0 ] || return 1
+
+  extract2_dmg_first_device=
+  extract2_dmg_mount=
+  extract2_dmg_mount_device=
+  extract2_dmg_mount_count=0
+  extract2_dmg_entity_index=0
+
+  while [ "$extract2_dmg_entity_index" -lt "$extract2_dmg_entity_count" ]
+  do
+    extract2_dmg_entity_device="$(command -- plutil -extract "system-entities.$extract2_dmg_entity_index.dev-entry" raw -expect string "$extract2_dmg_plist" 2>/dev/null)" || extract2_dmg_entity_device=
+    if [ -z "$extract2_dmg_first_device" ] && [ -n "$extract2_dmg_entity_device" ]
+    then
+      extract2_dmg_first_device=$extract2_dmg_entity_device
+    fi
+
+    extract2_dmg_entity_mount="$(command -- plutil -extract "system-entities.$extract2_dmg_entity_index.mount-point" raw -expect string "$extract2_dmg_plist" 2>/dev/null)" || extract2_dmg_entity_mount=
+    if [ -n "$extract2_dmg_entity_mount" ]
+    then
+      [ -n "$extract2_dmg_entity_device" ] || return 1
+      extract2_dmg_mount_count=$((extract2_dmg_mount_count + 1))
+      extract2_dmg_mount=$extract2_dmg_entity_mount
+      extract2_dmg_mount_device=$extract2_dmg_entity_device
+    fi
+
+    extract2_dmg_entity_index=$((extract2_dmg_entity_index + 1))
+  done
+
+  extract2_dmg_device=$extract2_dmg_first_device
+  [ "$extract2_dmg_mount_count" -eq 1 ] || return 1
+  [ -n "$extract2_dmg_mount_device" ] || return 1
+  extract2_dmg_device=$extract2_dmg_mount_device
+
+  case "$extract2_dmg_mount" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+  [ -d "$extract2_dmg_mount" ] && [ ! -L "$extract2_dmg_mount" ] || return 1
+}
+
+extract2_dmg_detach()
+{
+  [ "$#" -eq 0 ] || return 2
+  [ -n "$extract2_dmg_device" ] || return 1
+
+  case "$extract2_dmg_backend" in
+    diskutil)
+      command -- diskutil eject "$extract2_dmg_device" >/dev/null
+      ;;
+    hdiutil)
+      command -- hdiutil detach "$extract2_dmg_device" >/dev/null
+      ;;
+    *)
+      return 1
+      ;;
+  esac
+}
+
+extract2_dmg_cleanup()
+{
+  extract2_cleanup_status=$?
+  trap - 0 HUP INT TERM
+
+  if [ "$extract2_dmg_attached" -eq 1 ] && [ -n "$extract2_dmg_device" ]
+  then
+    if extract2_dmg_detach >/dev/null 2>&1
+    then
+      extract2_dmg_attached=0
+    fi
+  fi
+
+  if [ -n "${extract2_dmg_work-}" ] && [ -d "$extract2_dmg_work" ] && [ ! -L "$extract2_dmg_work" ]
+  then
+    command -p -- rm -rf -- "$extract2_dmg_work" 2>/dev/null || :
+  fi
+  if [ -n "${extract2_dmg_tmp_root-}" ] && [ -d "$extract2_dmg_tmp_root" ] && [ ! -L "$extract2_dmg_tmp_root" ]
+  then
+    command -p -- rmdir "$extract2_dmg_tmp_root" 2>/dev/null || :
+  fi
+
+  exit "$extract2_cleanup_status"
+}
+
+extract2_dmg_native()
+{
+  readpathce extract2_dmg_artifact "$extract2_artifact" || fatal execution execution-failed operation extract2 reason artifact-resolution-failed format "$extract2_format"
+  readpathce extract2_dmg_destination "$extract2_destination" || fatal execution execution-failed operation extract2 reason destination-resolution-failed format "$extract2_format"
+
+  extract2_dmg_tmp_root="$(command -- state-path user sys extract2 tmp)" || fatal execution execution-failed operation extract2 reason temporary-state-invalid format "$extract2_format"
+  umask 077
+  command -p -- mkdir -p -- "$extract2_dmg_tmp_root" || fatal execution execution-failed operation extract2 reason temporary-state-create-failed format "$extract2_format"
+  [ -d "$extract2_dmg_tmp_root" ] && [ ! -L "$extract2_dmg_tmp_root" ] || fatal execution execution-failed operation extract2 reason temporary-state-invalid format "$extract2_format"
+
+  extract2_dmg_work="$extract2_dmg_tmp_root/.extract2-dmg-$$"
+  [ ! -e "$extract2_dmg_work" ] && [ ! -L "$extract2_dmg_work" ] || fatal execution execution-failed operation extract2 reason temporary-target-exists format "$extract2_format"
+  command -p -- mkdir "$extract2_dmg_work" || fatal execution execution-failed operation extract2 reason temporary-create-failed format "$extract2_format"
+  extract2_dmg_attach_plist="$extract2_dmg_work/attach.plist"
+
+  extract2_dmg_attached=0
+  extract2_dmg_backend=
+  extract2_dmg_device=
+  extract2_dmg_mount=
+  trap extract2_dmg_cleanup 0
+  trap 'exit 129' HUP
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+
+  if extract2_dmg_diskutil_available
+  then
+    extract2_dmg_backend=diskutil
+    command -- diskutil image -plist attach -readOnly -nobrowse "$extract2_dmg_artifact" > "$extract2_dmg_attach_plist" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+  else
+    extract2_dmg_backend=hdiutil
+    command -- hdiutil attach -readonly -nobrowse -plist "$extract2_dmg_artifact" > "$extract2_dmg_attach_plist" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+  fi
+  extract2_dmg_attached=1
+
+  extract2_dmg_plist_resolve "$extract2_dmg_attach_plist" || fatal execution execution-failed operation extract2 reason mount-resolution-failed format "$extract2_format"
+
+  command -- ditto "$extract2_dmg_mount" "$extract2_dmg_destination" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+
+  extract2_dmg_detach || fatal execution execution-failed operation extract2 reason detach-failed format "$extract2_format"
+  extract2_dmg_attached=0
+
+  command -p -- rm -rf -- "$extract2_dmg_work" || fatal execution execution-failed operation extract2 reason temporary-cleanup-failed format "$extract2_format"
+  command -p -- rmdir "$extract2_dmg_tmp_root" 2>/dev/null || :
+  trap - 0 HUP INT TERM
+}
+
+extract2_dmg()
+{
+  if extract2_have ditto && extract2_have plutil && { extract2_dmg_diskutil_available || extract2_have hdiutil; }
+  then
+    extract2_dmg_native
+  else
+    extract2_7z
+  fi
+}
+
+extract2_move_contents()
+{
+  [ "$#" -eq 2 ] || return 2
+  extract2_move_source=$1
+  extract2_move_destination=$2
+
+  for extract2_move_item in "$extract2_move_source"/* "$extract2_move_source"/.[!.]* "$extract2_move_source"/..?*
+  do
+    [ -e "$extract2_move_item" ] || [ -L "$extract2_move_item" ] || continue
+    extract2_move_target="$extract2_move_destination/${extract2_move_item##*/}"
+    [ ! -e "$extract2_move_target" ] && [ ! -L "$extract2_move_target" ] || return 1
+    command -p -- mv -- "$extract2_move_item" "$extract2_move_destination/" || return 1
+  done
+}
+
+extract2_copy()
+{
+  extract2_copy_target="$extract2_destination/${extract2_artifact##*/}"
+  [ ! -e "$extract2_copy_target" ] && [ ! -L "$extract2_copy_target" ] || fatal execution execution-failed operation extract2 reason output-exists format "$extract2_format"
+  command -p -- cp -p -- "$extract2_artifact" "$extract2_copy_target" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+extract2_executable()
+{
+  extract2_copy
+  command -p -- chmod +x "$extract2_copy_target" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+extract2_pkg()
+{
+  extract2_require pkgutil
+  readpathce extract2_pkg_destination "$extract2_destination" || fatal execution execution-failed operation extract2 reason destination-resolution-failed format "$extract2_format"
+  extract2_pkg_parent=${extract2_pkg_destination%/*}
+  extract2_pkg_work="$extract2_pkg_parent/.extract2-pkg-${extract2_pkg_destination##*/}-$"
+  [ ! -e "$extract2_pkg_work" ] && [ ! -L "$extract2_pkg_work" ] || fatal execution execution-failed operation extract2 reason temporary-target-exists format "$extract2_format"
+
+  if ! command -- pkgutil --expand-full "$extract2_artifact" "$extract2_pkg_work"
+  then
+    command -p -- rm -rf -- "$extract2_pkg_work" 2>/dev/null
+    fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+  fi
+
+  if ! extract2_move_contents "$extract2_pkg_work" "$extract2_pkg_destination"
+  then
+    command -p -- rm -rf -- "$extract2_pkg_work" 2>/dev/null
+    fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+  fi
+
+  command -p -- rm -rf -- "$extract2_pkg_work" || fatal execution execution-failed operation extract2 reason temporary-cleanup-failed format "$extract2_format"
+}
+
+extract2_deb()
+{
+  extract2_require dpkg-deb
+  command -- dpkg-deb -x "$extract2_artifact" "$extract2_destination" || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+}
+
+[ "$#" -eq 3 ] || fatal 2 execution invalid-arguments operation extract2
+extract2_format=$1
+extract2_artifact=$2
+extract2_destination=$3
+
+[ -f "$extract2_artifact" ] && [ -r "$extract2_artifact" ] || fatal execution execution-failed operation extract2 reason artifact-invalid format "$extract2_format"
+[ -d "$extract2_destination" ] && [ ! -L "$extract2_destination" ] || fatal execution execution-failed operation extract2 reason destination-invalid format "$extract2_format"
+
+case "$extract2_format" in
+  appimage)
+    extract2_copy
+    ;;
+  executable)
+    extract2_executable
+    ;;
+  pkg)
+    extract2_pkg
+    ;;
+  tar)
+    extract2_tar_stream || fatal execution execution-failed operation extract2 reason extraction-failed format "$extract2_format"
+    ;;
+  tar.gz|tgz)
+    extract2_compressed_tar gzip
+    ;;
+  tar.bz2|tar.bzip2|tbz|tbz2)
+    extract2_compressed_tar bzip2
+    ;;
+  tar.xz|txz)
+    extract2_compressed_tar xz
+    ;;
+  tar.zst|tzst)
+    extract2_compressed_tar zstd
+    ;;
+  gzip|gz)
+    extract2_stream gzip
+    ;;
+  bzip|bzip2|bz2)
+    extract2_stream bzip2
+    ;;
+  xz)
+    extract2_stream xz
+    ;;
+  zstd|zst)
+    extract2_stream zstd
+    ;;
+  zip|jar|war)
+    extract2_zip
+    ;;
+  7z|7zip)
+    extract2_7z
+    ;;
+  dmg)
+    extract2_dmg
+    ;;
+  deb)
+    extract2_deb
+    ;;
+  *)
+    fatal 2 execution invalid-arguments operation extract2
+    ;;
+esac
+
+exit 0

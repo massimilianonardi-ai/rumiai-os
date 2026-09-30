@@ -1,7 +1,7 @@
 loadsyslib "pkg/pkg-common"
 loadsyslib "pkg/pkg-local"
 loadsyslib "pkg/pkg-download"
-loadsyslib "pkg/pkg-extract"
+loadsyslib "pkg/pkg-extract2"
 loadsyslib "pkg/pkg-integration"
 
 pkg_install_one()
@@ -42,41 +42,7 @@ pkg_install_one()
 
   pkg_install_artifact="$( ( . "$pkg_install_repository_adapter" || exit 1; pkg_repository_resolve_artifact "$pkg_install_repository" "$pkg_install_range" "$pkg_install_version" ) | pkg_download "$pkg_install_download_dir" )" || exit 12
 
-  pkg_install_format="$(cat "$pkg_install_range/format")" || exit 13
-
-  case "$pkg_install_format" in
-    flat-pkg)
-      pkg_install_component="$(cat "$pkg_install_range/component")" || exit 14
-
-      if [ -f "$pkg_install_range/payload-root" ]
-      then
-        pkg_install_payload_root="$(cat "$pkg_install_range/payload-root")" || exit 15
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || exit 16
-      else
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || exit 16
-      fi
-      ;;
-
-    dmg-pkg)
-      pkg_install_component="$(cat "$pkg_install_range/component")" || exit 14
-      pkg_install_payload_root=
-      [ ! -f "$pkg_install_range/payload-root" ] || pkg_install_payload_root="$(cat "$pkg_install_range/payload-root")" || exit 15
-
-      if [ -d "$pkg_install_range/overlay" ]
-      then
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" "$pkg_install_range/overlay" || exit 16
-      elif [ -n "$pkg_install_payload_root" ]
-      then
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || exit 16
-      else
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || exit 16
-      fi
-      ;;
-
-    *)
-      pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || exit 16
-      ;;
-  esac
+  pkg_extract2 "$pkg_install_artifact" "$pkg_install_range" "$pkg_install_extract_dir" || exit 13
 
   pkg_facility_provider_validate "$pkg_install_catalog_work" "$pkg_install_range" "$pkg_install_extract_dir" || exit 17
   pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_range" "$pkg_install_extract_dir" "$pkg_install_osarch" || exit 18
