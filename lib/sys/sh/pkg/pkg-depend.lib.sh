@@ -614,20 +614,19 @@ EOF_PKG_DEPEND_EDGE_REQUIREMENTS
 _pkg_depend_visit()
 {
   [ "$#" -eq 1 ] || return 2
-  pkg_depend_visit_concrete=$1
 
-  case " $pkg_depend_done " in *" $pkg_depend_visit_concrete "*) return 0 ;; esac
-  case " $pkg_depend_stack " in *" $pkg_depend_visit_concrete "*) return 1 ;; esac
+  case " $pkg_depend_done " in *" $1 "*) return 0 ;; esac
+  case " $pkg_depend_stack " in *" $1 "*) return 1 ;; esac
 
   pkg_depend_stack_saved=$pkg_depend_stack
-  pkg_depend_stack="$pkg_depend_stack $pkg_depend_visit_concrete"
+  pkg_depend_stack="$pkg_depend_stack $1"
 
   if [ -n "$pkg_depend_edges" ]
   then
     while IFS='|' read -r pkg_depend_edge_consumer pkg_depend_edge_provider pkg_depend_edge_extra
     do
       [ -z "$pkg_depend_edge_extra" ] || return 1
-      [ "$pkg_depend_edge_consumer" = "$pkg_depend_visit_concrete" ] || continue
+      [ "$pkg_depend_edge_consumer" = "$1" ] || continue
       _pkg_depend_visit "$pkg_depend_edge_provider" || return 1
     done <<EOF_PKG_DEPEND_VISIT_EDGES
 $pkg_depend_edges
@@ -635,8 +634,8 @@ EOF_PKG_DEPEND_VISIT_EDGES
   fi
 
   pkg_depend_stack=$pkg_depend_stack_saved
-  pkg_depend_done="$pkg_depend_done $pkg_depend_visit_concrete"
-  pkg_depend_order="$pkg_depend_order $pkg_depend_visit_concrete"
+  pkg_depend_done="$pkg_depend_done $1"
+  pkg_depend_order="$pkg_depend_order $1"
 }
 
 _pkg_depend_resolve()
