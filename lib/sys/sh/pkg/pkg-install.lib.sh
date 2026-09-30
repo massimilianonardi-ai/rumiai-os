@@ -5,21 +5,6 @@ loadsyslib "pkg/pkg-download"
 loadsyslib "pkg/pkg-extract2"
 loadsyslib "pkg/pkg-integration"
 
-_pkg_install_validate()
-{
-  [ "$#" -ge 1 ] || return 2
-  pkg_install_invalid_request=
-
-  for pkg_install_request
-  do
-    if ! pkg_request_read pkg_install_validate_pkg pkg_install_validate_version pkg_install_validate_osarch "$pkg_install_request"
-    then
-      pkg_install_invalid_request=$pkg_install_request
-      return 2
-    fi
-  done
-}
-
 pkg_install_one()
 (
   [ "$#" -eq 1 ] || exit 1
@@ -92,12 +77,10 @@ pkg_install_resolve_one()
   then
     pkg_install_stream="$pkg_install_package/$pkg_install_target"
     pkg_install_identity_osarch=$pkg_install_target
-
   elif [ -d "$pkg_install_package/all" ]
   then
     pkg_install_stream="$pkg_install_package/all"
     pkg_install_identity_osarch=
-
   else
     exit 2
   fi
