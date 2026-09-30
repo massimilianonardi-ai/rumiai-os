@@ -1,710 +1,90 @@
+loadsyslib "pkg/pkg-common"
+loadsyslib "pkg/pkg-catalog"
+loadsyslib "pkg/pkg-depend"
 loadsyslib "pkg/pkg-download"
-loadsyslib "pkg/pkg-extract"
+loadsyslib "pkg/pkg-extract2"
 loadsyslib "pkg/pkg-integration"
 
-_pkg_install_error()
-{
-  [ "$#" -ge 1 ] || return 2
-  pkg_install_error_reason=$1
-  shift
-  log error execution execution-failed operation pkg-install reason "$pkg_install_error_reason" "$@"
-}
-
-_pkg_install_scalar()
-{
-  [ "$#" -eq 1 ] || return 2
-  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -x "$1" ] || return 1
-
-  pkg_install_scalar_value=
-  pkg_install_scalar_extra=
-  {
-    IFS= read -r pkg_install_scalar_value || return 1
-    IFS= read -r pkg_install_scalar_extra
-    pkg_install_scalar_second_status=$?
-  } < "$1"
-
-  [ "$pkg_install_scalar_second_status" -ne 0 ] || return 1
-  [ -z "$pkg_install_scalar_extra" ] || return 1
-  [ -n "$pkg_install_scalar_value" ] || return 1
-
-  pkg_install_scalar_cr="$(printf '\r')"
-  case "$pkg_install_scalar_value" in
-    *"$pkg_install_scalar_cr"*) return 1 ;;
-  esac
-
-  pkg_install_scalar_actual="$(command -p -- wc -c < "$1")" || return 1
-  pkg_install_scalar_expected="$(printf '%s\n' "$pkg_install_scalar_value" | command -p -- wc -c)" || return 1
-  [ "$pkg_install_scalar_actual" = "$pkg_install_scalar_expected" ] || return 1
-
-  printf -- '%s\n' "$pkg_install_scalar_value"
-}
-
-_pkg_install_operand_parse()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_install_operand=$1
-  pkg_install_pkg=
-  pkg_install_requested_version=
-  pkg_install_requested_osarch=
-  pkg_install_left=$pkg_install_operand
-
-  case "$pkg_install_left" in
-    *!*)
-      pkg_install_requested_osarch=${pkg_install_left##*!}
-      pkg_install_left=${pkg_install_left%!"$pkg_install_requested_osarch"}
-      case "$pkg_install_left" in *!*) return 2 ;; esac
-      _pkg_integration_osarch_valid "$pkg_install_requested_osarch" || return 2
-      ;;
-  esac
-
-  case "$pkg_install_left" in
-    *@*)
-      pkg_install_requested_version=${pkg_install_left##*@}
-      pkg_install_pkg=${pkg_install_left%@"$pkg_install_requested_version"}
-      case "$pkg_install_pkg" in *@*) return 2 ;; esac
-      _pkg_integration_version_valid "$pkg_install_requested_version" || return 2
-      ;;
-    *)
-      pkg_install_pkg=$pkg_install_left
-      ;;
-  esac
-
-  _pkg_integration_name_valid "$pkg_install_pkg" || return 2
-  return 0
-}
-
-_pkg_install_lock_acquire()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_install_lock=$1
-  pkg_install_lock_parent=${pkg_install_lock%/*}
-
-  command -p -- mkdir -p -- "$pkg_install_lock_parent" || return 1
-  [ -d "$pkg_install_lock_parent" ] && [ ! -L "$pkg_install_lock_parent" ] || return 1
-
-  if ! command -p -- mkdir -- "$pkg_install_lock" 2>/dev/null
-  then
-    [ -d "$pkg_install_lock" ] && [ ! -L "$pkg_install_lock" ] || return 1
-    [ -f "$pkg_install_lock/pid" ] && [ ! -L "$pkg_install_lock/pid" ] || return 1
-
-    pkg_install_lock_pid="$(_pkg_install_scalar "$pkg_install_lock/pid")" || return 1
-    case "$pkg_install_lock_pid" in "" | *[!0-9]*) return 1 ;; esac
-
-    if command -p -- kill -0 "$pkg_install_lock_pid" 2>/dev/null
-    then
-      return 1
-    fi
-
-    for pkg_install_lock_entry in \
-      "$pkg_install_lock"/* \
-      "$pkg_install_lock"/.[!.]* \
-      "$pkg_install_lock"/..?*
-    do
-      [ -e "$pkg_install_lock_entry" ] || [ -L "$pkg_install_lock_entry" ] || continue
-      [ "$pkg_install_lock_entry" = "$pkg_install_lock/pid" ] || return 1
-    done
-
-    command -p -- rm -f -- "$pkg_install_lock/pid" || return 1
-    command -p -- rmdir -- "$pkg_install_lock" || return 1
-    command -p -- mkdir -- "$pkg_install_lock" || return 1
-  fi
-
-  printf -- '%s\n' "$$" > "$pkg_install_lock/pid" || {
-    command -p -- rmdir -- "$pkg_install_lock" 2>/dev/null || :
-    return 1
-  }
-  return 0
-}
-
-_pkg_install_lock_release()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_install_lock=$1
-  [ -d "$pkg_install_lock" ] && [ ! -L "$pkg_install_lock" ] || return 1
-  [ -f "$pkg_install_lock/pid" ] && [ ! -L "$pkg_install_lock/pid" ] || return 1
-  pkg_install_lock_pid="$(_pkg_install_scalar "$pkg_install_lock/pid")" || return 1
-  [ "$pkg_install_lock_pid" = "$$" ] || return 1
-  command -p -- rm -f -- "$pkg_install_lock/pid" || return 1
-  command -p -- rmdir -- "$pkg_install_lock" || return 1
-}
-
-_pkg_install_git()
-{
-  command -- git \
-    -c http.sslVerify=true \
-    -c core.hooksPath=/dev/null \
-    -c core.fsmonitor=false \
-    "$@"
-}
-
-_pkg_install_git_head_valid()
-{
-  [ "$#" -eq 1 ] || return 2
-  case "$1" in "" | *[!0-9a-f]*) return 1 ;; esac
-  [ "${#1}" -eq 40 ] || [ "${#1}" -eq 64 ]
-}
-
-_pkg_install_catalog_validate()
+pkg_install_one()
 (
-  [ "$#" -eq 3 ] || return 2
-  pkg_install_catalog_validate_cache=$1
-  pkg_install_catalog_validate_remote=$2
-  pkg_install_catalog_validate_branch=$3
+  [ "$#" -eq 1 ] || exit 1
 
-  [ -d "$pkg_install_catalog_validate_cache" ] && [ ! -L "$pkg_install_catalog_validate_cache" ] || return 1
-  [ -d "$pkg_install_catalog_validate_cache/.git" ] && [ ! -L "$pkg_install_catalog_validate_cache/.git" ] || return 1
+  pkg_install_concrete=$1
+  pkg_concrete_read pkg_install_pkg pkg_install_version pkg_install_osarch "$pkg_install_concrete" || exit 2
 
-  pkg_install_catalog_validate_inside="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" rev-parse --is-inside-work-tree 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_inside" = true ] || return 1
-
-  pkg_install_catalog_validate_origin="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" remote get-url origin 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_origin" = "$pkg_install_catalog_remote" ] || return 1
-
-  pkg_install_catalog_validate_branch_actual="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" symbolic-ref --quiet --short HEAD 2>/dev/null)" || return 1
-  [ "$pkg_install_catalog_validate_branch_actual" = "$pkg_install_catalog_validate_branch" ] || return 1
-
-  pkg_install_catalog_validate_dirty="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" status --porcelain=v1 --untracked-files=all 2>/dev/null)" || return 1
-  [ -z "$pkg_install_catalog_validate_dirty" ] || return 1
-
-  pkg_install_catalog_validate_head="$(_pkg_install_git -C "$pkg_install_catalog_validate_cache" rev-parse --verify HEAD 2>/dev/null)" || return 1
-  _pkg_install_git_head_valid "$pkg_install_catalog_validate_head" || return 1
-  printf -- '%s\n' "$pkg_install_catalog_validate_head"
-)
-
-_pkg_install_catalog_snapshot_impl()
-(
-  [ "$#" -eq 5 ] || return 2
-  pkg_install_catalog_remote=$1
-  pkg_install_catalog_branch=$2
-  pkg_install_catalog_cache=$3
-  pkg_install_catalog_lock=$4
-  pkg_install_catalog_snapshot=$5
-
-  command -v -- git >/dev/null 2>&1 || return 1
-  [ -d "$pkg_install_catalog_snapshot" ] && [ ! -L "$pkg_install_catalog_snapshot" ] || return 1
-
-  for pkg_install_catalog_snapshot_entry in \
-    "$pkg_install_catalog_snapshot"/* \
-    "$pkg_install_catalog_snapshot"/.[!.]* \
-    "$pkg_install_catalog_snapshot"/..?*
-  do
-    [ -e "$pkg_install_catalog_snapshot_entry" ] || [ -L "$pkg_install_catalog_snapshot_entry" ] || continue
-    return 1
-  done
-
-  _pkg_install_lock_acquire "$pkg_install_catalog_lock" || return 1
-  trap '_pkg_install_lock_release "$pkg_install_catalog_lock" >/dev/null 2>&1 || :' 0
-  trap 'exit 130' HUP INT TERM
-
-  pkg_install_catalog_parent=${pkg_install_catalog_cache%/*}
-  command -p -- mkdir -p -- "$pkg_install_catalog_parent" || return 1
-  [ -d "$pkg_install_catalog_parent" ] && [ ! -L "$pkg_install_catalog_parent" ] || return 1
-
-  if [ ! -e "$pkg_install_catalog_cache" ] && [ ! -L "$pkg_install_catalog_cache" ]
+  if [ -e "$m_PKG_DIR/$pkg_install_concrete" ] || [ -L "$m_PKG_DIR/$pkg_install_concrete" ]
   then
-    pkg_install_catalog_clone="$pkg_install_catalog_parent/pkg-catalog-clone-$$"
-    [ ! -e "$pkg_install_catalog_clone" ] && [ ! -L "$pkg_install_catalog_clone" ] || return 1
-    if ! _pkg_install_git clone --origin origin --no-tags --single-branch --branch "$pkg_install_catalog_branch" -- "$pkg_install_catalog_remote" "$pkg_install_catalog_clone" >/dev/null 2>&1
-    then
-      command -p -- rm -rf -- "$pkg_install_catalog_clone" 2>/dev/null || :
-      return 1
-    fi
-    if ! _pkg_install_catalog_validate "$pkg_install_catalog_clone" "$pkg_install_catalog_remote" "$pkg_install_catalog_branch" >/dev/null
-    then
-      command -p -- rm -rf -- "$pkg_install_catalog_clone" 2>/dev/null || :
-      return 1
-    fi
-    if ! command -p -- mv -- "$pkg_install_catalog_clone" "$pkg_install_catalog_cache"
-    then
-      command -p -- rm -rf -- "$pkg_install_catalog_clone" 2>/dev/null || :
-      return 1
-    fi
+    [ -d "$m_PKG_DIR/$pkg_install_concrete" ] && [ ! -L "$m_PKG_DIR/$pkg_install_concrete" ] || exit 3
+    exit 0
   fi
 
-  pkg_install_catalog_before="$(_pkg_install_catalog_validate "$pkg_install_catalog_cache" "$pkg_install_catalog_remote" "$pkg_install_catalog_branch")" || return 1
-  pkg_install_catalog_head=$pkg_install_catalog_before
+  pkg_catalog_range_resolve pkg_install_range "$pkg_install_catalog_work" "$pkg_install_concrete" || exit 7
 
-  if _pkg_install_git -C "$pkg_install_catalog_cache" fetch --no-tags origin "refs/heads/$pkg_install_catalog_branch:refs/remotes/origin/$pkg_install_catalog_branch" >/dev/null 2>&1
-  then
-    _pkg_install_git -C "$pkg_install_catalog_cache" merge-base --is-ancestor "$pkg_install_catalog_before" "refs/remotes/origin/$pkg_install_catalog_branch" >/dev/null 2>&1 || return 1
-    _pkg_install_git -C "$pkg_install_catalog_cache" merge --ff-only "refs/remotes/origin/$pkg_install_catalog_branch" >/dev/null 2>&1 || return 1
-    pkg_install_catalog_head="$(_pkg_install_catalog_validate "$pkg_install_catalog_cache" "$pkg_install_catalog_remote" "$pkg_install_catalog_branch")" || return 1
-    pkg_install_catalog_remote_head="$(_pkg_install_git -C "$pkg_install_catalog_cache" rev-parse --verify "refs/remotes/origin/$pkg_install_catalog_branch" 2>/dev/null)" || return 1
-    [ "$pkg_install_catalog_head" = "$pkg_install_catalog_remote_head" ] || return 1
-  else
-    pkg_install_catalog_head="$(_pkg_install_catalog_validate "$pkg_install_catalog_cache" "$pkg_install_catalog_remote" "$pkg_install_catalog_branch")" || return 1
-    log warn execution execution-failed operation pkg-install reason catalog-refresh-failed-using-cache || :
-  fi
+  pkg_install_repository="${pkg_install_range%/*}/repository"
+  pkg_install_repository_type="$(cat "$pkg_install_repository/type")" || exit 9
+  pkg_install_repository_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
 
-  pkg_install_catalog_archive="$pkg_install_catalog_snapshot.tar"
-  [ ! -e "$pkg_install_catalog_archive" ] && [ ! -L "$pkg_install_catalog_archive" ] || return 1
-  _pkg_install_git -C "$pkg_install_catalog_cache" archive --format=tar -o "$pkg_install_catalog_archive" "$pkg_install_catalog_head" || return 1
-  (cd -- "$pkg_install_catalog_snapshot" && command -p -- tar -xf "$pkg_install_catalog_archive") || return 1
-  command -p -- rm -f -- "$pkg_install_catalog_archive" || return 1
-
-  printf -- '%s\n' "$pkg_install_catalog_head"
-)
-
-_pkg_install_catalog_snapshot()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_install_cache_root="$(command -- state-path system sys pkg cache)" || return 1
-  pkg_install_run_root="$(command -- state-path system sys pkg run)" || return 1
-  _pkg_install_catalog_snapshot_impl \
-    "https://github.com/massimilianonardi-ai/pkg-catalog.git" \
-    main \
-    "$pkg_install_cache_root/pkg-catalog" \
-    "$pkg_install_run_root/pkg-catalog.lock" \
-    "$1"
-}
-
-_pkg_install_stream_select()
-{
-  [ "$#" -eq 3 ] || return 2
-  pkg_install_catalog=$1
-  pkg_install_pkg=$2
-  pkg_install_target=$3
-  pkg_install_package_dir="$pkg_install_catalog/pkg/$pkg_install_pkg"
-  pkg_install_target_stream="$pkg_install_package_dir/$pkg_install_target"
-  pkg_install_generic_stream="$pkg_install_package_dir/all"
-  [ -d "$pkg_install_package_dir" ] && [ ! -L "$pkg_install_package_dir" ] || return 1
-
-  if [ -e "$pkg_install_target_stream" ] || [ -L "$pkg_install_target_stream" ]
-  then
-    [ -d "$pkg_install_target_stream" ] && [ ! -L "$pkg_install_target_stream" ] || return 1
-    pkg_install_stream=$pkg_install_target_stream
-    pkg_install_identity_osarch=$pkg_install_target
-  elif [ -e "$pkg_install_generic_stream" ] || [ -L "$pkg_install_generic_stream" ]
-  then
-    [ -d "$pkg_install_generic_stream" ] && [ ! -L "$pkg_install_generic_stream" ] || return 1
-    pkg_install_stream=$pkg_install_generic_stream
-    pkg_install_identity_osarch=
-  else
-    return 1
-  fi
-}
-
-_pkg_install_ranges_validate()
-{
-  [ "$#" -eq 2 ] || return 2
-  pkg_install_stream=$1
-  pkg_install_ranges_file=$2
-  : > "$pkg_install_ranges_file" || return 1
-  pkg_install_lf='
-'
-
-  [ -d "$pkg_install_stream/repository" ] && [ ! -L "$pkg_install_stream/repository" ] || return 1
-
-  for pkg_install_stream_entry in \
-    "$pkg_install_stream"/* \
-    "$pkg_install_stream"/.[!.]* \
-    "$pkg_install_stream"/..?*
-  do
-    [ -e "$pkg_install_stream_entry" ] || [ -L "$pkg_install_stream_entry" ] || continue
-    pkg_install_stream_name=${pkg_install_stream_entry##*/}
-    case "$pkg_install_stream_name" in
-      *"$pkg_install_lf"*) return 1 ;;
-      repository)
-        [ -d "$pkg_install_stream_entry" ] && [ ! -L "$pkg_install_stream_entry" ] || return 1
-        ;;
-      n[0-9][0-9][0-9][0-9]=*)
-        [ -d "$pkg_install_stream_entry" ] && [ ! -L "$pkg_install_stream_entry" ] || return 1
-        pkg_install_range_prefix=${pkg_install_stream_name%%=*}
-        pkg_install_range_anchor=${pkg_install_stream_name#*=}
-        _pkg_integration_version_valid "$pkg_install_range_anchor" || return 1
-        printf -- '%s\t%s\n' "$pkg_install_stream_name" "$pkg_install_range_anchor" >> "$pkg_install_ranges_file" || return 1
-        ;;
-      *)
-        return 1
-        ;;
-    esac
-  done
-
-  [ -s "$pkg_install_ranges_file" ] || return 1
-  LC_ALL=C command -p -- sort "$pkg_install_ranges_file" > "$pkg_install_ranges_file.sorted" || return 1
-  command -p -- mv -- "$pkg_install_ranges_file.sorted" "$pkg_install_ranges_file" || return 1
-
-  pkg_install_expected=1
-  pkg_install_tab="$(printf '\t')"
-  while IFS="$pkg_install_tab" read -r pkg_install_range_name pkg_install_range_anchor pkg_install_range_extra
-  do
-    [ -z "$pkg_install_range_extra" ] || return 1
-    pkg_install_expected_prefix="$(printf 'n%04d' "$pkg_install_expected")" || return 1
-    pkg_install_range_prefix=${pkg_install_range_name%%=*}
-    [ "$pkg_install_range_prefix" = "$pkg_install_expected_prefix" ] || return 1
-    pkg_install_expected=$((pkg_install_expected + 1))
-  done < "$pkg_install_ranges_file"
-}
-
-_pkg_install_repository_adapter()
-{
-  [ "$#" -eq 1 ] || return 2
-  pkg_install_repository_dir=$1
-  pkg_install_repository_type="$(_pkg_install_scalar "$pkg_install_repository_dir/type")" || return 1
-  case "$pkg_install_repository_type" in
-    "" | [!a-z0-9]* | *[!a-z0-9-]* | *-) return 1 ;;
-  esac
-  pkg_install_adapter="$m_LIB_DIR/sys/sh/pkg/repository/pkg-repository-$pkg_install_repository_type.lib.sh"
-  [ -f "$pkg_install_adapter" ] && [ ! -L "$pkg_install_adapter" ] && [ -r "$pkg_install_adapter" ] && [ ! -x "$pkg_install_adapter" ] || return 1
-}
-
-_pkg_install_compare_versions()
-{
-  [ "$#" -eq 4 ] || return 2
-  pkg_install_compare="$({
-    . "$1" || exit 1
-    pkg_repository_compare_versions "$2" "$3" "$4"
-  })" || return 1
-
-  case "$pkg_install_compare" in
-    -1|0|1) printf -- '%s\n' "$pkg_install_compare";;
-    *) return 1;;
-  esac
-}
-
-_pkg_install_resolve_range()
-{
-  [ "$#" -eq 4 ] || return 2
-  pkg_install_ranges_file=$1
-  pkg_install_repository_dir=$2
-  pkg_install_adapter=$3
-  pkg_install_version=$4
-
-  pkg_install_selected_range=
-  pkg_install_previous_anchor=
-  pkg_install_tab="$(printf '\t')"
-
-  while IFS="$pkg_install_tab" read -r pkg_install_range_name pkg_install_anchor pkg_install_range_extra
-  do
-    [ -z "$pkg_install_range_extra" ] || return 1
-
-    if [ -n "$pkg_install_previous_anchor" ]
-    then
-      pkg_install_anchor_order="$(_pkg_install_compare_versions \
-        "$pkg_install_adapter" \
-        "$pkg_install_repository_dir" \
-        "$pkg_install_previous_anchor" \
-        "$pkg_install_anchor")" || return 1
-      [ "$pkg_install_anchor_order" = -1 ] || return 1
-    fi
-
-    pkg_install_target_order="$(_pkg_install_compare_versions \
-      "$pkg_install_adapter" \
-      "$pkg_install_repository_dir" \
-      "$pkg_install_anchor" \
-      "$pkg_install_version")" || return 1
-    case "$pkg_install_target_order" in
-      -1|0) pkg_install_selected_range="$pkg_install_stream/$pkg_install_range_name";;
-      1) :;;
-      *) return 1;;
-    esac
-
-    pkg_install_previous_anchor=$pkg_install_anchor
-  done < "$pkg_install_ranges_file"
-
-  [ -n "$pkg_install_selected_range" ] || return 1
-}
-
-_pkg_install_definition_resolve()
-{
-  [ "$#" -eq 3 ] || return 2
-  pkg_install_catalog=$1
-  pkg_install_operand=$2
-  pkg_install_item=$3
-
-  _pkg_install_operand_parse "$pkg_install_operand" || return 2
-
-  if [ -n "$pkg_install_requested_osarch" ]
-  then
-    pkg_install_target=$pkg_install_requested_osarch
-  else
-    pkg_install_target=${m_OSARCH-}
-    _pkg_integration_osarch_valid "$pkg_install_target" || return 1
-  fi
-
-  _pkg_install_stream_select "$pkg_install_catalog" "$pkg_install_pkg" "$pkg_install_target" || return 1
-
-  pkg_install_ranges="$pkg_install_item/ranges"
-  _pkg_install_ranges_validate "$pkg_install_stream" "$pkg_install_ranges" || return 1
-  pkg_install_repository_dir="$pkg_install_stream/repository"
-  _pkg_install_repository_adapter "$pkg_install_repository_dir" || return 1
-
-  pkg_install_resolved_file="$pkg_install_item/version"
-  if [ -n "$pkg_install_requested_version" ]
-  then
-    (
-      . "$pkg_install_adapter" || exit 1
-      pkg_repository_resolve_version "$pkg_install_repository_dir" "$pkg_install_requested_version"
-    ) > "$pkg_install_resolved_file" || return 1
-  else
-    (
-      . "$pkg_install_adapter" || exit 1
-      pkg_repository_resolve_version "$pkg_install_repository_dir"
-    ) > "$pkg_install_resolved_file" || return 1
-  fi
-
-  pkg_install_version="$(_pkg_install_scalar "$pkg_install_resolved_file")" || return 1
-  _pkg_integration_version_valid "$pkg_install_version" || return 1
-  if [ -n "$pkg_install_requested_version" ]
-  then
-    [ "$pkg_install_version" = "$pkg_install_requested_version" ] || return 1
-  fi
-
-  _pkg_install_resolve_range     "$pkg_install_ranges"     "$pkg_install_repository_dir"     "$pkg_install_adapter"     "$pkg_install_version" || return 1
-
-  pkg_install_dependency="$pkg_install_selected_range/dependency"
-  if [ -e "$pkg_install_dependency" ] || [ -L "$pkg_install_dependency" ]
-  then
-    _pkg_dependency_file_validate "$pkg_install_dependency" || {
-      _pkg_install_error dependency-metadata-invalid package "$pkg_install_pkg" version "$pkg_install_version"
-      return 1
-    }
-  fi
-}
-
-_pkg_install_dependency_report()
-{
-  [ "$#" -eq 3 ] || return 2
-  pkg_install_dependency_source=$1
-  pkg_install_dependency_consumer=$2
-  pkg_install_dependency_osarch=$3
-
-  if [ ! -e "$pkg_install_dependency_source" ] && [ ! -L "$pkg_install_dependency_source" ]
-  then
-    return 0
-  fi
-  _pkg_dependency_file_validate "$pkg_install_dependency_source" || return 1
-
-  while IFS= read -r pkg_install_dependency_line
-  do
-    _pkg_dependency_line_parse "$pkg_install_dependency_line" || return 1
-    pkg_install_dependency_facility=$pkg_dependency_facility
-    pkg_install_dependency_constraints=$pkg_dependency_constraints
-
-    if ! _pkg_dependency_resolve_one       "$pkg_install_dependency_facility"       "$pkg_install_dependency_constraints"       "$pkg_install_dependency_consumer"       "$pkg_install_dependency_osarch"
-    then
-      log warn execution execution-failed operation pkg-install         reason dependency-unsatisfied package "$pkg_install_dependency_consumer"         facility "$pkg_install_dependency_facility"         constraints "$pkg_install_dependency_constraints"         resolution "${pkg_dependency_failure_reason:-dependency-resolution-failed}"         selector "${pkg_dependency_failure_selector-}"         providers "${pkg_dependency_failure_candidates-}" || :
-    fi
-  done < "$pkg_install_dependency_source"
-}
-
-_pkg_install_one()
-(
-  [ "$#" -eq 3 ] || return 2
-  pkg_install_catalog=$1
-  pkg_install_operand=$2
-  pkg_install_item=$3
-
-  _pkg_install_definition_resolve "$pkg_install_catalog" "$pkg_install_operand" "$pkg_install_item" || return $?
-
-  _pkg_integration_set_concrete "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || return 1
-  if [ -e "$pkg_integration_concrete" ] || [ -L "$pkg_integration_concrete" ]
-  then
-    [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
-    _pkg_default_read_current "$pkg_integration_selector" || return 1
-    _pkg_default_current_valid "$pkg_default_current" || return 1
-    _pkg_install_error already-installed       already-installed "$pkg_integration_concrete_name"       current-default "$pkg_default_current"
-    return 3
-  fi
-
-  pkg_install_descriptor="$pkg_install_item/artifact"
-  (
-    . "$pkg_install_adapter" || exit 1
-    pkg_repository_resolve_artifact "$pkg_install_repository_dir" "$pkg_install_selected_range" "$pkg_install_version"
-  ) > "$pkg_install_descriptor" || return 1
-
-  _pkg_install_dependency_report "$pkg_install_selected_range/dependency" "$pkg_install_pkg" "$pkg_install_target" || return 1
-
-
-  pkg_install_format="$(_pkg_install_scalar "$pkg_install_selected_range/format")" || return 1
-  pkg_install_component=
-  pkg_install_payload_root=
-  pkg_install_overlay_dir=
-  if [ -e "$pkg_install_selected_range/component" ] || [ -L "$pkg_install_selected_range/component" ]
-  then
-    pkg_install_component="$(_pkg_install_scalar "$pkg_install_selected_range/component")" || return 1
-  fi
-  if [ -e "$pkg_install_selected_range/payload-root" ] || [ -L "$pkg_install_selected_range/payload-root" ]
-  then
-    pkg_install_payload_root="$(_pkg_install_scalar "$pkg_install_selected_range/payload-root")" || return 1
-  fi
-  if [ -e "$pkg_install_selected_range/overlay" ] || [ -L "$pkg_install_selected_range/overlay" ]
-  then
-    [ -d "$pkg_install_selected_range/overlay" ] && [ ! -L "$pkg_install_selected_range/overlay" ] || return 1
-    pkg_install_overlay_dir=$pkg_install_selected_range/overlay
-  fi
-  case "$pkg_install_format" in
-    flat-pkg)
-      [ -n "$pkg_install_component" ] || return 1
-      [ -z "$pkg_install_overlay_dir" ] || return 1
-      ;;
-    dmg-pkg)
-      [ -n "$pkg_install_component" ] || return 1
-      ;;
-    *)
-      [ -z "$pkg_install_component" ] || return 1
-      [ -z "$pkg_install_payload_root" ] || return 1
-      [ -z "$pkg_install_overlay_dir" ] || return 1
-      ;;
-  esac
+  pkg_install_item="$pkg_install_work/$pkg_install_concrete"
+  mkdir -- "$pkg_install_item" || exit 10
 
   pkg_install_download_dir="$pkg_install_item/download"
   pkg_install_extract_dir="$pkg_install_item/extract"
-  command -p -- mkdir -- "$pkg_install_download_dir" "$pkg_install_extract_dir" || return 1
+  mkdir -- "$pkg_install_download_dir" "$pkg_install_extract_dir" || exit 11
 
-  pkg_install_artifact_file="$pkg_install_item/artifact-path"
-  pkg_download "$pkg_install_download_dir" < "$pkg_install_descriptor" > "$pkg_install_artifact_file" || return 1
-  pkg_install_artifact="$(_pkg_install_scalar "$pkg_install_artifact_file")" || return 1
+  pkg_install_artifact="$( ( . "$pkg_install_repository_adapter" || exit 1; pkg_repository_resolve_artifact "$pkg_install_repository" "$pkg_install_range" "$pkg_install_version" ) | pkg_download "$pkg_install_download_dir" )" || exit 12
 
-  case "$pkg_install_format" in
-    flat-pkg|dmg-pkg)
-      if [ -n "$pkg_install_overlay_dir" ]
-      then
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" "$pkg_install_overlay_dir" || return 1
-      elif [ -n "$pkg_install_payload_root" ]
-      then
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" "$pkg_install_payload_root" || return 1
-      else
-        pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" "$pkg_install_component" || return 1
-      fi
-      ;;
-    *)
-      pkg_extract "$pkg_install_artifact" "$pkg_install_format" "$pkg_install_extract_dir" || return 1
-      ;;
-  esac
+  pkg_extract "$pkg_install_artifact" "$pkg_install_range" "$pkg_install_extract_dir" || exit 13
 
-  if ! pkg_facility_provider_validate "$pkg_install_catalog" "$pkg_install_selected_range" "$pkg_install_extract_dir"
+  pkg_facility_provider_validate "$pkg_install_catalog_work" "$pkg_install_range" "$pkg_install_extract_dir" || exit 17
+  pkg_integrate "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_range" "$pkg_install_extract_dir" "$pkg_install_osarch" || exit 18
+
+  if [ -n "$pkg_install_osarch" ]
   then
-    _pkg_install_error provider-conformance-failed package "$pkg_install_pkg" version "$pkg_install_version"
-    return 1
-  fi
-
-  pkg_integrate     "$pkg_install_pkg"     "$pkg_install_version"     "$pkg_install_selected_range"     "$pkg_install_extract_dir"     "$pkg_install_identity_osarch" || return 1
-
-  if [ -n "$pkg_install_identity_osarch" ]
-  then
-    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_identity_osarch" || return 1
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" "$pkg_install_osarch" || exit 19
   else
-    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" || return 1
+    pkg_default_apply "$pkg_install_pkg" "$pkg_install_version" || exit 19
   fi
-
 )
 
-_pkg_install_cleanup()
+_pkg_install_init()
 {
-  if [ -n "${pkg_install_work-}" ] && [ -d "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ]
-  then
-    command -p -- rm -rf -- "$pkg_install_work" 2>/dev/null || :
-    command -p -- rmdir -- "$pkg_install_work_parent" 2>/dev/null || :
-  fi
+  [ "$#" -eq 0 ] || return 1
+
+  mkdir -p $m_PKG_DIR
+
+  trap '_pkg_install_end' 0
+  trap 'exit 130' HUP INT TERM
+
+  umask 077
+
+  pkg_install_tmp_root="$(state-path system sys pkg tmp)" || return 2
+  mkdir -p -- "$pkg_install_tmp_root" || return 3
+
+  pkg_install_cache_root="$(state-path system sys pkg cache)" || return 4
+  mkdir -p -- "$pkg_install_cache_root" || return 5
+
+  pkg_install_work="$pkg_install_tmp_root/install2-$$"
+  mkdir -p -- "$pkg_install_work" || return 6
+
+  pkg_catalog_init pkg_install_catalog_work pkg_install_catalog_head "$pkg_install_work" "$pkg_install_cache_root" || return 7
 }
 
-_pkg_install_mkdir()
+_pkg_install_end()
 {
-  [ "$#" -eq 1 ] || return 1
-
-  command -p -- mkdir -p -- "$1" || return 2
-  [ -d "$1" ] && [ ! -L "$1" ] || return 3
+  rm -rf -- "$pkg_install_work"
 }
 
 pkg_install()
 (
-  [ "$#" -ge 1 ] || return 2
+  [ "$#" -ge 1 ] || exit 1
 
-  umask 077
-  pkg_install_work=
-  pkg_install_work_parent=
-  pkg_install_initialized=0
-  pkg_install_failed=0
-  pkg_install_index=0
-  trap '_pkg_install_cleanup' 0
-  trap 'exit 130' HUP INT TERM
+  _pkg_install_list_resolved="$(pkg_depend "$@")" || fatal 4 execution invalid-arguments operation pkg-install reason dependency-unresolvable
+  set -- $_pkg_install_list_resolved
 
-  for pkg_install_operand
+  _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
+
+  for _pkg_install_pkg
   do
-    if ! _pkg_install_operand_parse "$pkg_install_operand"
-    then
-      _pkg_install_error invalid-operand operand "$pkg_install_operand"
-      pkg_install_failed=1
-      continue
-    fi
-
-    if [ "$pkg_install_initialized" -eq 0 ]
-    then
-      _pkg_install_mkdir "$m_PKG_DIR" || exit 1
-
-      pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || exit 1
-      _pkg_install_mkdir "$pkg_install_work_parent" || exit 1
-
-      pkg_install_work="$pkg_install_work_parent/install-$$"
-      [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || exit 1
-      command -p -- mkdir -- "$pkg_install_work" || exit 1
-
-      pkg_install_catalog="$pkg_install_work/catalog"
-      _pkg_install_mkdir "$pkg_install_catalog" || exit 1
-      pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || { _pkg_install_error catalog-snapshot-failed; exit 1; }
-      _pkg_install_git_head_valid "$pkg_install_catalog_head" || exit 1
-      pkg_install_initialized=1
-    fi
-
-    pkg_install_index=$((pkg_install_index + 1))
-    pkg_install_item="$pkg_install_work/item-$pkg_install_index"
-    command -p -- mkdir -- "$pkg_install_item" || exit 1
-    _pkg_install_one "$pkg_install_catalog" "$pkg_install_operand" "$pkg_install_item"
-    pkg_install_status=$?
-
-    case "$pkg_install_status" in
-      0)
-        ;;
-      2)
-        _pkg_install_error invalid-operand operand "$pkg_install_operand"
-        pkg_install_failed=1
-        ;;
-      3)
-        pkg_install_failed=1
-        ;;
-      *)
-        _pkg_install_error package-failed operand "$pkg_install_operand"
-        pkg_install_failed=1
-        ;;
-    esac
+    pkg_install_one "$_pkg_install_pkg" || fatal 6 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
   done
-
-  [ "$pkg_install_failed" -eq 0 ] || exit 1
-  exit 0
-)
-
-pkg_install_requirement_list()
-(
-  [ "$#" -eq 1 ] || return 2
-  umask 077
-  pkg_install_work=
-  pkg_install_work_parent=
-  trap '_pkg_install_cleanup' 0
-  trap 'exit 130' HUP INT TERM
-
-  pkg_install_work_parent="$(command -- state-path system sys pkg tmp)" || return 1
-  _pkg_install_mkdir "$pkg_install_work_parent" || return 1
-
-  pkg_install_work="$pkg_install_work_parent/requirement-$$"
-  [ ! -e "$pkg_install_work" ] && [ ! -L "$pkg_install_work" ] || return 1
-  command -p -- mkdir -- "$pkg_install_work" || return 1
-
-  pkg_install_catalog="$pkg_install_work/catalog"
-  _pkg_install_mkdir "$pkg_install_catalog" || return 1
-  pkg_install_catalog_head="$(_pkg_install_catalog_snapshot "$pkg_install_catalog")" || {
-    _pkg_install_error catalog-snapshot-failed
-    return 1
-  }
-  _pkg_install_git_head_valid "$pkg_install_catalog_head" || return 1
-
-  pkg_install_item="$pkg_install_work/item"
-  command -p -- mkdir -- "$pkg_install_item" || return 1
-  _pkg_install_definition_resolve "$pkg_install_catalog" "$1" "$pkg_install_item" || return $?
-
-  if [ ! -e "$pkg_install_selected_range/dependency" ] && [ ! -L "$pkg_install_selected_range/dependency" ]
-  then
-    return 0
-  fi
-  command -p -- cat -- "$pkg_install_selected_range/dependency"
 )
