@@ -2,8 +2,10 @@ NAME
     pkg-install.lib.sh - orchestrate recursive package installation
 
 DESCRIPTION
-    pkg-install.lib.sh implements the public pkg install command. Before package
-    installation begins, it calls pkg depend for the original request list.
+    pkg-install.lib.sh implements the public pkg install command. It validates the
+    complete original request list before dependency planning, catalog
+    initialization or package installation. Only after every request is
+    syntactically valid does it call pkg depend for the original request list.
     Dependency concrete identities returned by pkg depend are prepended to the
     original requests, so dependencies are installed before the requested roots.
 
@@ -14,9 +16,11 @@ DESCRIPTION
 
 FUNCTIONS
     pkg_install <package-spec>...
-        Resolve recursive dependencies through pkg depend, prepend those dependency
-        concretes to the original package specifications, and install the resulting
-        sequence.
+        Validate every original package specification first. If any request is
+        syntactically invalid, fail before dependency planning and install nothing.
+        Otherwise resolve recursive dependencies through pkg depend, prepend those
+        dependency concretes to the original package specifications, and install
+        the resulting sequence.
 
         Dependencies are exact concrete identities. Original requested operands
         retain their package-spec form and are resolved by the installer when they
