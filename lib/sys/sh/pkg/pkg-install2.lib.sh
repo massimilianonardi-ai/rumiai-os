@@ -12,11 +12,91 @@ pkg_install_one()
   done
 )
 
+_pkg_install_dependency_source()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  pkg_install_dependency_source=
+
+  if [ -d "$m_PKG_DIR/$1" ]
+  then
+    if [ -f "$m_PKG_DIR/$1/dependency" ]
+    then
+      pkg_install_dependency_source="$m_PKG_DIR/$1/dependency"
+    fi
+
+    return 0
+  fi
+
+  _pkg_install_dependency_range_resolve "$1" || return 1
+
+  if [ -f "$pkg_install_dependency_range/dependency" ]
+  then
+    pkg_install_dependency_source="$pkg_install_dependency_range/dependency"
+  fi
+}
+
+_pkg_install_dependency_visit()
+{
+  [ "$#" -eq 1 ] || return 2
+
+  pkg_install_dependency_visit_concrete=$1
+
+  case " $pkg_install_dependency_done " in
+    *" $pkg_install_dependency_visit_concrete "*)
+      return 0
+    ;;
+  esac
+
+  case " $pkg_install_dependency_stack " in
+    *" $pkg_install_dependency_visit_concrete "*)
+      return 1
+    ;;
+  esac
+
+  pkg_install_dependency_stack_saved=$pkg_install_dependency_stack
+  pkg_install_dependency_stack="$pkg_install_dependency_stack $pkg_install_dependency_visit_concrete"
+
+  _pkg_install_dependency_source "$pkg_install_dependency_visit_concrete" || return 1
+
+  if [ -n "$pkg_install_dependency_source" ]
+  then
+    while IFS= read -r pkg_install_dependency_line
+    do
+      _pkg_dependency_line_parse "$pkg_install_dependency_line" || return 1
+      _pkg_install_dependency_resolve_one "$pkg_install_dependency_visit_concrete" "$pkg_dependency_facility" "$pkg_dependency_constraints" || return 1
+      _pkg_install_dependency_visit "$pkg_install_dependency_resolved" || return 1
+
+    done < "$pkg_install_dependency_source"
+  fi
+
+  pkg_install_dependency_stack=$pkg_install_dependency_stack_saved
+  pkg_install_dependency_done="$pkg_install_dependency_done $pkg_install_dependency_visit_concrete"
+  pkg_install_dependency_order="$pkg_install_dependency_order $pkg_install_dependency_visit_concrete"
+}
+
 pkg_install_dependency_resolve()
 (
-  for pkg
+  [ "$#" -ge 1 ] || exit 1
+
+  pkg_install_dependency_done=
+  pkg_install_dependency_stack=
+  pkg_install_dependency_order=
+
+  for pkg_install_dependency_concrete
   do
-    true
+    _pkg_install_dependency_visit "$pkg_install_dependency_concrete" || exit 2
+  done
+
+  pkg_install_dependency_separator=
+
+  for pkg_install_dependency_concrete in $pkg_install_dependency_order
+  do
+    pkg_install_dependency_quoted="$(quote "$pkg_install_dependency_concrete")" || exit 3
+
+    printf -- '%s' "${pkg_install_dependency_separator}${pkg_install_dependency_quoted}"
+
+    pkg_install_dependency_separator=" "
   done
 )
 
