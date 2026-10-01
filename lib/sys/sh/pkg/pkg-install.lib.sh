@@ -167,10 +167,14 @@ pkg_install_resolve_one()
       printf -- '%s\n' "$pkg_install_concrete"
       exit 0
     fi
-  elif pkg_local_current pkg_install_concrete "$pkg_install_pkg" "$pkg_install_identity_osarch"
-  then
-    printf -- '%s\n' "$pkg_install_concrete"
-    exit 0
+  else
+    _pkg_local_class_scan "$pkg_install_pkg" "$pkg_install_identity_osarch" || exit 5
+
+    if [ -n "$pkg_local_class_current_name" ]
+    then
+      printf -- '%s\n' "$pkg_local_class_current_name"
+      exit 0
+    fi
   fi
 
   if [ -n "$pkg_install_requested_version" ]
