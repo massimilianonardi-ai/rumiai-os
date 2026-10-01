@@ -2,7 +2,7 @@ loadsyslib "pkg/pkg-common"
 loadsyslib "pkg/pkg-catalog"
 loadsyslib "pkg/pkg-depend"
 loadsyslib "pkg/pkg-download"
-loadsyslib "pkg/pkg-extract2"
+loadsyslib "pkg/pkg-extract"
 loadsyslib "pkg/pkg-integration"
 
 pkg_install_one()

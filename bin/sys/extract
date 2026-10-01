@@ -362,6 +362,57 @@ extract_dmg()
   fi
 }
 
+extract_move_contents()
+{
+  [ "$#" -eq 2 ] || return 2
+  extract_move_source=$1
+  extract_move_destination=$2
+
+  for extract_move_item in "$extract_move_source"/* "$extract_move_source"/.[!.]* "$extract_move_source"/..?*
+  do
+    [ -e "$extract_move_item" ] || [ -L "$extract_move_item" ] || continue
+    extract_move_target="$extract_move_destination/${extract_move_item##*/}"
+    [ ! -e "$extract_move_target" ] && [ ! -L "$extract_move_target" ] || return 1
+    command -p -- mv -- "$extract_move_item" "$extract_move_destination/" || return 1
+  done
+}
+
+extract_copy()
+{
+  extract_copy_target="$extract_destination/${extract_artifact##*/}"
+  [ ! -e "$extract_copy_target" ] && [ ! -L "$extract_copy_target" ] || fatal execution execution-failed operation extract reason output-exists format "$extract_format"
+  command -p -- cp -p -- "$extract_artifact" "$extract_copy_target" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+}
+
+extract_executable()
+{
+  extract_copy
+  command -p -- chmod +x "$extract_copy_target" || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+}
+
+extract_pkg()
+{
+  extract_require pkgutil
+  readpathce extract_pkg_destination "$extract_destination" || fatal execution execution-failed operation extract reason destination-resolution-failed format "$extract_format"
+  extract_pkg_parent=${extract_pkg_destination%/*}
+  extract_pkg_work="$extract_pkg_parent/.extract-pkg-${extract_pkg_destination##*/}-$$"
+  [ ! -e "$extract_pkg_work" ] && [ ! -L "$extract_pkg_work" ] || fatal execution execution-failed operation extract reason temporary-target-exists format "$extract_format"
+
+  if ! command -- pkgutil --expand-full "$extract_artifact" "$extract_pkg_work"
+  then
+    command -p -- rm -rf -- "$extract_pkg_work" 2>/dev/null
+    fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  fi
+
+  if ! extract_move_contents "$extract_pkg_work" "$extract_pkg_destination"
+  then
+    command -p -- rm -rf -- "$extract_pkg_work" 2>/dev/null
+    fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
+  fi
+
+  command -p -- rm -rf -- "$extract_pkg_work" || fatal execution execution-failed operation extract reason temporary-cleanup-failed format "$extract_format"
+}
+
 extract_deb()
 {
   extract_require dpkg-deb
@@ -377,6 +428,15 @@ extract_destination=$3
 [ -d "$extract_destination" ] && [ ! -L "$extract_destination" ] || fatal execution execution-failed operation extract reason destination-invalid format "$extract_format"
 
 case "$extract_format" in
+  appimage)
+    extract_copy
+    ;;
+  executable)
+    extract_executable
+    ;;
+  pkg)
+    extract_pkg
+    ;;
   tar)
     extract_tar_stream || fatal execution execution-failed operation extract reason extraction-failed format "$extract_format"
     ;;
@@ -420,5 +480,3 @@ case "$extract_format" in
     fatal 2 execution invalid-arguments operation extract
     ;;
 esac
-
-exit 0
