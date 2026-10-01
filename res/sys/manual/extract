@@ -1,14 +1,19 @@
 NAME
-    extract - extract an archive or decompress a supported artifact
+    extract - extract or materialize one physical artifact format
 
 SYNOPSIS
     extract <format> <artifact> <destination>
 
 DESCRIPTION
-    extract reads one supported artifact and materializes its contents under an
-    existing destination directory.
+    extract performs raw physical artifact extraction or materialization. It does
+    not interpret package catalog metadata, select package components, choose a
+    package useful root or apply package overlays.
 
-    Supported archive formats are:
+    <format> identifies the physical artifact format, <artifact> is the input
+    file and <destination> is an existing real directory receiving the raw
+    result.
+
+    Supported archive/container formats are:
         tar
         tar.gz  tgz
         tar.bz2 tar.bzip2 tbz tbz2
@@ -18,12 +23,24 @@ DESCRIPTION
         7z 7zip
         dmg
         deb
+        pkg
 
     Supported single-stream compression formats are:
         gzip gz
         bzip bzip2 bz2
         xz
         zstd zst
+
+    appimage and executable are opaque physical materialization formats.
+    appimage copies the artifact unchanged into the destination. executable does
+    the same and ensures the copied output is executable.
+
+    dmg extracts the DMG contents only. It does not interpret .app, .pkg or any
+    other object found inside the image.
+
+    pkg expands one Apple flat installer package into its raw expanded package
+    structure. It does not select a component or Payload and never runs installer
+    scripts.
 
     A single-stream format creates one decompressed file in the destination,
     deriving its name from the artifact basename and compression suffix. The
@@ -34,11 +51,11 @@ DESCRIPTION
 
 OPERANDS
     <format>
-        Explicit artifact format.
+        Explicit physical artifact format.
     <artifact>
         Existing readable regular file.
     <destination>
-        Existing real directory receiving extracted material.
+        Existing real directory receiving raw materialized content.
 
 EXIT STATUS
     0   Success.
