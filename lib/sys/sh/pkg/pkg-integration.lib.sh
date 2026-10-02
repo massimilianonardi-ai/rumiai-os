@@ -8,6 +8,31 @@ _pkg_integration_error()
   log error execution execution-failed operation "$1" reason "$2"
 }
 
+_pkg_integration_restore_input()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_integration_restore_concrete=$1
+  pkg_integration_restore_input=$2
+
+  for pkg_integration_restore_entry in \
+    "$pkg_integration_restore_concrete"/* \
+    "$pkg_integration_restore_concrete"/.[!.]* \
+    "$pkg_integration_restore_concrete"/..?*
+  do
+    [ -e "$pkg_integration_restore_entry" ] || [ -L "$pkg_integration_restore_entry" ] || continue
+    [ "${pkg_integration_restore_entry##*/}" = root ] && continue
+    command -p -- rm -rf -- "$pkg_integration_restore_entry" 2>/dev/null || :
+  done
+
+  if command -p -- mv -- "$pkg_integration_restore_concrete/root" "$pkg_integration_restore_input" 2>/dev/null
+  then
+    command -p -- rmdir -- "$pkg_integration_restore_concrete" 2>/dev/null || :
+    return 0
+  fi
+
+  return 1
+}
+
 _pkg_integration_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
@@ -732,66 +757,42 @@ pkg_integrate()
 
   if ! _pkg_integration_materialize_commands "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate materialization-failed
     return 1
   fi
 
   if ! _pkg_integration_materialize_env "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate env-materialization-failed
     return 1
   fi
 
   if ! _pkg_facility_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate facility-materialization-failed
     return 1
   fi
 
   if ! _pkg_integration_materialize_facility_projection "$pkg_integrate_range" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/facility-service" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate facility-projection-materialization-failed
     return 1
   fi
 
   if ! _pkg_dependency_materialize "$pkg_integrate_range/dependency" "$pkg_integration_concrete"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/facility-service" "$pkg_integration_concrete/dependency" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate dependency-materialization-failed
     return 1
   fi
 
   if ! _pkg_state_materialize "$pkg_integrate_range" "$pkg_integration_concrete" "$pkg_integrate_pkg"
   then
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/facility-service" "$pkg_integration_concrete/dependency" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate state-materialization-failed
     return 1
   fi
@@ -811,11 +812,7 @@ pkg_integrate()
     fi
     [ "$pkg_integrate_rollback_status" -eq 0 ] || return 1
 
-    command -p -- rm -rf -- "$pkg_integration_concrete/cmd" "$pkg_integration_concrete/link" "$pkg_integration_concrete/env" "$pkg_integration_concrete/facility" "$pkg_integration_concrete/facility-cmd" "$pkg_integration_concrete/facility-env" "$pkg_integration_concrete/facility-service" "$pkg_integration_concrete/dependency" 2>/dev/null
-    if command -p -- mv -- "$pkg_integration_concrete/root" "$pkg_integrate_root_input" 2>/dev/null
-    then
-      command -p -- rmdir -- "$pkg_integration_concrete" 2>/dev/null
-    fi
+    _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
     _pkg_integration_error pkg-integrate setuid-materialization-failed
     return 1
   fi
