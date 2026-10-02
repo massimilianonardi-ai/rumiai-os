@@ -46,7 +46,8 @@ RETURN STATUS
     cannot be validated or changed, and 2 for invalid invocation.
 
 DEPENDENCIES
-    The library composes package facility, dependency, state and setuid facilities.
+    The library uses the shared package identity validators from pkg-common.lib.sh
+    and composes package facility, dependency, state and setuid facilities.
 
 SEE ALSO
     pkg
