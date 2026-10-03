@@ -31,7 +31,7 @@ pkg_name_version_osarch_valid()
   pkg_version_valid "$2" || return 3
   if [ -n "$3" ]
   then
-    pkg_version_valid "$3" || return 4
+    pkg_osarch_valid "$3" || return 4
   fi
 }
 
