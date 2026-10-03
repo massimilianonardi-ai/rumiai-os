@@ -689,7 +689,7 @@ _pkg_default_create_bindings()
 pkg_integrate()
 (
   # Phase 1: validate invocation and package identity.
-  [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
+  [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 1
   pkg_integrate_pkg=$1
   pkg_integrate_version=$2
   pkg_integrate_range_input=$3
@@ -802,17 +802,12 @@ pkg_integrate()
 
 pkg_deintegrate()
 (
-  [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
+  [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 1
   pkg_deintegrate_pkg=$1
   pkg_deintegrate_version=$2
   pkg_deintegrate_osarch=${3-}
 
-  pkg_name_valid "$pkg_deintegrate_pkg" || return 2
-  pkg_version_valid "$pkg_deintegrate_version" || return 2
-  if [ -n "$pkg_deintegrate_osarch" ]
-  then
-    pkg_osarch_valid "$pkg_deintegrate_osarch" || return 2
-  fi
+  pkg_name_version_osarch_valid "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 2
 
   _pkg_integration_set_concrete "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 1
   [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
