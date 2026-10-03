@@ -1,4 +1,5 @@
 loadsyslib "pkg/pkg-local"
+loadsyslib "pkg/pkg-integration"
 
 _pkg_uninstall_error()
 {

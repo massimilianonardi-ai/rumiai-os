@@ -1,4 +1,5 @@
 loadsyslib "pkg/pkg-local"
+loadsyslib "pkg/pkg-integration"
 
 _pkg_default_apply_call()
 {
