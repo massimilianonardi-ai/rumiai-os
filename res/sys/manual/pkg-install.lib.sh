@@ -37,7 +37,7 @@ DEPENDENCIES
     pkg-catalog.lib.sh
     pkg-depend.lib.sh
     pkg-download.lib.sh
-    pkg-extract2.lib.sh
+    pkg-extract.lib.sh
     pkg-integration.lib.sh
 
 SEE ALSO
