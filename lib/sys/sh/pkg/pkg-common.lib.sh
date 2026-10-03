@@ -23,6 +23,18 @@ pkg_osarch_valid()
   esac
 }
 
+pkg_name_version_osarch_valid()
+{
+  [ "$#" -ge 2 ] || return 1
+
+  pkg_name_valid "$1" || return 2
+  pkg_version_valid "$2" || return 3
+  if [ -n "$3" ]
+  then
+    pkg_version_valid "$3" || return 4
+  fi
+}
+
 _pkg_spec_read()
 {
   [ "$#" -eq 5 ] || return 2

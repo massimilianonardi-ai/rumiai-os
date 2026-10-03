@@ -34,21 +34,6 @@ _pkg_integration_restore_input()
   return 1
 }
 
-_pkg_integration_name_valid()
-{
-  pkg_name_valid "$@"
-}
-
-_pkg_integration_version_valid()
-{
-  pkg_version_valid "$@"
-}
-
-_pkg_integration_osarch_valid()
-{
-  pkg_osarch_valid "$@"
-}
-
 _pkg_integration_set_class()
 {
   [ "$#" -eq 2 ] || return 2
@@ -97,11 +82,6 @@ _pkg_integration_dir_entries_empty()
   return 0
 }
 
-_pkg_integration_command_name_valid()
-{
-  _pkg_integration_name_valid "$1"
-}
-
 _pkg_integration_link_target_read()
 {
   [ "$#" -eq 1 ] || return 2
@@ -128,7 +108,6 @@ _pkg_integration_env_validate()
   [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] && [ ! -x "$1" ] || return 1
   command -p -- sh -n "$1" >/dev/null 2>&1
 }
-
 
 _pkg_integration_facility_declared()
 {
@@ -279,7 +258,7 @@ _pkg_integration_dmg_overlay_validate()
   do
     [ -e "$pkg_integration_overlay_entry" ] || [ -L "$pkg_integration_overlay_entry" ] || continue
     pkg_integration_overlay_name=${pkg_integration_overlay_entry##*/}
-    _pkg_integration_name_valid "$pkg_integration_overlay_name" || return 1
+    pkg_name_valid "$pkg_integration_overlay_name" || return 1
     [ -d "$pkg_integration_overlay_entry" ] && [ ! -L "$pkg_integration_overlay_entry" ] || return 1
 
     pkg_integration_overlay_component=
@@ -437,7 +416,7 @@ _pkg_integration_validate_definition()
   do
     [ -e "$pkg_integration_cmd_source" ] || [ -L "$pkg_integration_cmd_source" ] || continue
     pkg_integration_command=${pkg_integration_cmd_source##*/}
-    _pkg_integration_command_name_valid "$pkg_integration_command" || return 1
+    pkg_name_valid "$pkg_integration_command" || return 1
     [ -f "$pkg_integration_cmd_source" ] && [ ! -L "$pkg_integration_cmd_source" ] && [ -r "$pkg_integration_cmd_source" ] && [ ! -x "$pkg_integration_cmd_source" ] || return 1
     [ -f "$pkg_integration_range/link/$pkg_integration_command" ] && [ ! -L "$pkg_integration_range/link/$pkg_integration_command" ] || return 1
 
@@ -455,7 +434,7 @@ _pkg_integration_validate_definition()
   do
     [ -e "$pkg_integration_link_source" ] || [ -L "$pkg_integration_link_source" ] || continue
     pkg_integration_command=${pkg_integration_link_source##*/}
-    _pkg_integration_command_name_valid "$pkg_integration_command" || return 1
+    pkg_name_valid "$pkg_integration_command" || return 1
     [ -f "$pkg_integration_range/cmd/$pkg_integration_command" ] && [ ! -L "$pkg_integration_range/cmd/$pkg_integration_command" ] || return 1
   done
 
@@ -611,7 +590,7 @@ _pkg_default_current_valid()
     pkg_default_current_version=${1#"$pkg_default_prefix"}
   fi
 
-  _pkg_integration_version_valid "$pkg_default_current_version"
+  pkg_version_valid "$pkg_default_current_version"
 }
 
 _pkg_default_public_target()
@@ -717,12 +696,7 @@ pkg_integrate()
   pkg_integrate_root_input=$4
   pkg_integrate_osarch=${5-}
 
-  _pkg_integration_name_valid "$pkg_integrate_pkg" || return 2
-  _pkg_integration_version_valid "$pkg_integrate_version" || return 2
-  if [ -n "$pkg_integrate_osarch" ]
-  then
-    _pkg_integration_osarch_valid "$pkg_integrate_osarch" || return 2
-  fi
+  pkg_name_version_osarch_valid "$pkg_integrate_pkg" "$pkg_integrate_version" "$pkg_integrate_osarch" || return 2
 
   # Phase 2: validate and canonicalize integration inputs, then derive
   # the concrete package identity that will be created.
@@ -833,11 +807,11 @@ pkg_deintegrate()
   pkg_deintegrate_version=$2
   pkg_deintegrate_osarch=${3-}
 
-  _pkg_integration_name_valid "$pkg_deintegrate_pkg" || return 2
-  _pkg_integration_version_valid "$pkg_deintegrate_version" || return 2
+  pkg_name_valid "$pkg_deintegrate_pkg" || return 2
+  pkg_version_valid "$pkg_deintegrate_version" || return 2
   if [ -n "$pkg_deintegrate_osarch" ]
   then
-    _pkg_integration_osarch_valid "$pkg_deintegrate_osarch" || return 2
+    pkg_version_valid "$pkg_deintegrate_osarch" || return 2
   fi
 
   _pkg_integration_set_concrete "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 1
@@ -881,14 +855,14 @@ pkg_default_apply()
   pkg_default_version=$2
   pkg_default_osarch=${3-}
 
-  _pkg_integration_name_valid "$pkg_default_pkg" || return 2
+  pkg_name_valid "$pkg_default_pkg" || return 2
   if [ -n "$pkg_default_version" ]
   then
-    _pkg_integration_version_valid "$pkg_default_version" || return 2
+    pkg_version_valid "$pkg_default_version" || return 2
   fi
   if [ -n "$pkg_default_osarch" ]
   then
-    _pkg_integration_osarch_valid "$pkg_default_osarch" || return 2
+    pkg_version_valid "$pkg_default_osarch" || return 2
   fi
 
   [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
