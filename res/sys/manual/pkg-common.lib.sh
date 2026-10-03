@@ -10,12 +10,29 @@ FUNCTIONS
     pkg_name_valid <package>
         Return success when package is a valid package name.
 
+        Return 1 when the function is invoked with the wrong number of operands
+        and 2 when the supplied package name is invalid.
+
     pkg_version_valid <version>
         Return success when version is a valid package version.
+
+        Return 1 when the function is invoked with the wrong number of operands
+        and 2 when the supplied version is invalid.
 
     pkg_osarch_valid <osarch>
         Return success when osarch is one of the supported package target
         identities.
+
+        Return 1 when the function is invoked with the wrong number of operands
+        and 2 when the supplied osarch is invalid.
+
+    pkg_name_version_osarch_valid <package> <version> [<osarch>]
+        Validate the package name and version and, when non-empty, the optional
+        osarch.
+
+        Return 1 when fewer than package and version operands are supplied,
+        2 when the package name is invalid, 3 when the version is invalid and
+        4 when a non-empty osarch is invalid.
 
     pkg_request_read <name-variable> <version-variable> <osarch-variable> <request>
         Validate and split one package request of the form:
@@ -38,7 +55,9 @@ FUNCTIONS
         result to standard output.
 
 RETURN STATUS
-    0   The value is valid and the requested outputs were assigned.
-    1   The package name, version, osarch, request or concrete identity is invalid.
-    2   The invocation is invalid, including invalid or duplicate destination
-        variable names for pkg_request_read or pkg_concrete_read.
+    pkg_request_read and pkg_concrete_read return 0 on success, 1 when their
+    invocation arity or supplied package identity/request is invalid, and 2 when
+    destination variable names are invalid or duplicated.
+
+    Validator-specific non-zero statuses are documented with each validator
+    above.

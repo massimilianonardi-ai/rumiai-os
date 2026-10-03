@@ -811,7 +811,7 @@ pkg_deintegrate()
   pkg_version_valid "$pkg_deintegrate_version" || return 2
   if [ -n "$pkg_deintegrate_osarch" ]
   then
-    pkg_version_valid "$pkg_deintegrate_osarch" || return 2
+    pkg_osarch_valid "$pkg_deintegrate_osarch" || return 2
   fi
 
   _pkg_integration_set_concrete "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 1
@@ -862,7 +862,7 @@ pkg_default_apply()
   fi
   if [ -n "$pkg_default_osarch" ]
   then
-    pkg_version_valid "$pkg_default_osarch" || return 2
+    pkg_osarch_valid "$pkg_default_osarch" || return 2
   fi
 
   [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1

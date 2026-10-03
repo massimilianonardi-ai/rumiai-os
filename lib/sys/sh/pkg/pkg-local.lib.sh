@@ -1,4 +1,4 @@
-loadsyslib "pkg/pkg-integration"
+loadsyslib "pkg/pkg-common"
 
 _pkg_local_operand_parse()
 {
@@ -16,7 +16,7 @@ _pkg_local_operand_parse()
       case "$pkg_local_left" in
         *!*) return 2 ;;
       esac
-      _pkg_integration_osarch_valid "$pkg_local_requested_osarch" || return 2
+      pkg_osarch_valid "$pkg_local_requested_osarch" || return 2
       ;;
   esac
 
@@ -27,14 +27,14 @@ _pkg_local_operand_parse()
       case "$pkg_local_pkg" in
         *@*) return 2 ;;
       esac
-      _pkg_integration_version_valid "$pkg_local_requested_version" || return 2
+      pkg_version_valid "$pkg_local_requested_version" || return 2
       ;;
     *)
       pkg_local_pkg=$pkg_local_left
       ;;
   esac
 
-  _pkg_integration_name_valid "$pkg_local_pkg" || return 2
+  pkg_name_valid "$pkg_local_pkg" || return 2
 }
 
 _pkg_local_class_scan()
@@ -79,7 +79,7 @@ _pkg_local_class_scan()
           return 1
           ;;
       esac
-      _pkg_integration_version_valid "$pkg_local_class_current_version" || return 1
+      pkg_version_valid "$pkg_local_class_current_version" || return 1
       [ "$pkg_local_class_current_name" = "$pkg_local_scan_pkg@$pkg_local_class_current_version!$pkg_local_scan_osarch" ] || return 1
     else
       pkg_local_current_prefix="$pkg_local_scan_pkg@"
@@ -91,7 +91,7 @@ _pkg_local_class_scan()
           return 1
           ;;
       esac
-      _pkg_integration_version_valid "$pkg_local_class_current_version" || return 1
+      pkg_version_valid "$pkg_local_class_current_version" || return 1
       [ "$pkg_local_class_current_name" = "$pkg_local_scan_pkg@$pkg_local_class_current_version" ] || return 1
     fi
   fi
@@ -113,7 +113,7 @@ _pkg_local_class_scan()
           continue
           ;;
       esac
-      _pkg_integration_version_valid "$pkg_local_version" || return 1
+      pkg_version_valid "$pkg_local_version" || return 1
       [ "$pkg_local_name" = "$pkg_local_scan_pkg@$pkg_local_version!$pkg_local_scan_osarch" ] || return 1
     else
       case "$pkg_local_name" in
@@ -125,7 +125,7 @@ _pkg_local_class_scan()
           continue
           ;;
       esac
-      _pkg_integration_version_valid "$pkg_local_version" || return 1
+      pkg_version_valid "$pkg_local_version" || return 1
       [ "$pkg_local_name" = "$pkg_local_scan_pkg@$pkg_local_version" ] || return 1
     fi
 
@@ -167,7 +167,7 @@ _pkg_local_class_select()
     return 0
   fi
 
-  _pkg_integration_osarch_valid "$m_OSARCH" || return 1
+  pkg_osarch_valid "$m_OSARCH" || return 1
   _pkg_local_class_scan "$pkg_local_select_pkg" "$m_OSARCH" || return 1
   if [ "$pkg_local_class_present" -eq 1 ]
   then
