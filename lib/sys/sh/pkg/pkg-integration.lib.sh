@@ -709,6 +709,7 @@ _pkg_default_create_bindings()
 
 pkg_integrate()
 (
+  # Phase 1: validate invocation and package identity.
   [ "$#" -eq 4 ] || [ "$#" -eq 5 ] || return 2
   pkg_integrate_pkg=$1
   pkg_integrate_version=$2
@@ -723,6 +724,8 @@ pkg_integrate()
     _pkg_integration_osarch_valid "$pkg_integrate_osarch" || return 2
   fi
 
+  # Phase 2: validate and canonicalize integration inputs, then derive
+  # the concrete package identity that will be created.
   [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
   [ -d "$pkg_integrate_range_input" ] && [ ! -L "$pkg_integrate_range_input" ] || return 1
   [ -d "$pkg_integrate_root_input" ] && [ ! -L "$pkg_integrate_root_input" ] || return 1
@@ -732,6 +735,8 @@ pkg_integrate()
   _pkg_integration_set_concrete "$pkg_integrate_pkg" "$pkg_integrate_version" "$pkg_integrate_osarch" || return 1
   [ ! -e "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
 
+  # Phase 3: validate the complete integration plan before consuming the
+  # caller-owned staging root.
   _pkg_integration_validate_definition "$pkg_integrate_range" "$pkg_integrate_root"
   pkg_integrate_status=$?
   [ "$pkg_integrate_status" -eq 0 ] || return "$pkg_integrate_status"
@@ -739,6 +744,8 @@ pkg_integrate()
   _pkg_state_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_pkg" || return 1
   _pkg_setuid_validate "$pkg_integrate_range" "$pkg_integrate_root" "$pkg_integrate_osarch" "$pkg_state_paths" || return 1
 
+  # Phase 4: create the concrete package and move the prepared useful root
+  # into managed package storage.
   command -p -- mkdir "$pkg_integration_concrete" || return 1
   if ! command -p -- mv -- "$pkg_integrate_root" "$pkg_integration_concrete/root"
   then
@@ -746,6 +753,8 @@ pkg_integrate()
     return 1
   fi
 
+  # Phase 5: materialize package-local runtime metadata and projections.
+  # Any failure restores the caller-owned staging root.
   if ! _pkg_integration_materialize_commands "$pkg_integrate_range" "$pkg_integration_concrete"
   then
     _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
@@ -781,6 +790,7 @@ pkg_integrate()
     return 1
   fi
 
+  # Phase 6: materialize state and privileged setuid effects.
   if ! _pkg_state_materialize "$pkg_integrate_range" "$pkg_integration_concrete" "$pkg_integrate_pkg"
   then
     _pkg_integration_restore_input "$pkg_integration_concrete" "$pkg_integrate_root_input" || :
@@ -790,6 +800,8 @@ pkg_integrate()
 
   if ! _pkg_setuid_materialize "$pkg_integrate_range" "$pkg_integration_concrete"
   then
+    # Setuid failure requires specialized rollback before restoring the
+    # package-local staging root.
     pkg_integrate_rollback_status=0
     if ! _pkg_setuid_rollback "$pkg_integrate_range" "$pkg_integration_concrete"
     then
@@ -808,6 +820,7 @@ pkg_integrate()
     return 1
   fi
 
+  # Phase 7: finalize the setuid transaction and complete integration.
   _pkg_setuid_commit "$pkg_integrate_range" "$pkg_integration_concrete" || :
 
   return 0
