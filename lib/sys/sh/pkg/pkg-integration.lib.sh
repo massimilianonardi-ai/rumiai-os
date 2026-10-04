@@ -136,7 +136,7 @@ _pkg_integration_facility_cmd_validate()
     return 0
   fi
 
-  [ -d "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ] || return 1
+  valid_dir "$pkg_integration_projection_dir" || return 1
   _pkg_integration_dir_entries_empty "$pkg_integration_projection_dir" && return 1
 
   for pkg_integration_facility_dir in "$pkg_integration_projection_dir"/*
@@ -170,7 +170,7 @@ _pkg_integration_facility_env_validate()
     return 0
   fi
 
-  [ -d "$pkg_integration_projection_dir" ] && [ ! -L "$pkg_integration_projection_dir" ] || return 1
+  valid_dir "$pkg_integration_projection_dir" || return 1
   _pkg_integration_dir_entries_empty "$pkg_integration_projection_dir" && return 1
 
   for pkg_integration_env_file in "$pkg_integration_projection_dir"/*
@@ -200,7 +200,7 @@ _pkg_integration_facility_service_validate()
     return 0
   fi
 
-  [ -d "$pkg_integration_service_dir" ] && [ ! -L "$pkg_integration_service_dir" ] || return 1
+  valid_dir "$pkg_integration_service_dir" || return 1
   _pkg_integration_dir_entries_empty "$pkg_integration_service_dir" && return 1
 
   for pkg_integration_service_facility_dir in "$pkg_integration_service_dir"/*
@@ -248,7 +248,7 @@ _pkg_integration_dmg_overlay_validate()
 {
   [ "$#" -eq 1 ] || return 2
   pkg_integration_overlay_dir=$1
-  [ -d "$pkg_integration_overlay_dir" ] && [ ! -L "$pkg_integration_overlay_dir" ] || return 1
+  valid_dir "$pkg_integration_overlay_dir" || return 1
   _pkg_integration_dir_entries_empty "$pkg_integration_overlay_dir" && return 1
 
   for pkg_integration_overlay_entry in \
@@ -259,7 +259,7 @@ _pkg_integration_dmg_overlay_validate()
     [ -e "$pkg_integration_overlay_entry" ] || [ -L "$pkg_integration_overlay_entry" ] || continue
     pkg_integration_overlay_name=${pkg_integration_overlay_entry##*/}
     pkg_name_valid "$pkg_integration_overlay_name" || return 1
-    [ -d "$pkg_integration_overlay_entry" ] && [ ! -L "$pkg_integration_overlay_entry" ] || return 1
+    valid_dir "$pkg_integration_overlay_entry" || return 1
 
     pkg_integration_overlay_component=
     pkg_integration_overlay_payload_root=
@@ -335,7 +335,7 @@ _pkg_integration_validate_definition()
         pkg_integration_payload_root_file=$pkg_integration_entry
         ;;
       overlay)
-        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        valid_dir "$pkg_integration_entry" || return 1
         pkg_integration_overlay_dir=$pkg_integration_entry
         ;;
       facility)
@@ -348,20 +348,20 @@ _pkg_integration_validate_definition()
         _pkg_integration_env_validate "$pkg_integration_entry" || return 1
         ;;
       facility-cmd | facility-env | facility-service)
-        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        valid_dir "$pkg_integration_entry" || return 1
         ;;
       setuid_root)
         [ -f "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
         ;;
       var)
-        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        valid_dir "$pkg_integration_entry" || return 1
         ;;
       cmd)
-        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        valid_dir "$pkg_integration_entry" || return 1
         pkg_integration_have_cmd=1
         ;;
       link)
-        [ -d "$pkg_integration_entry" ] && [ ! -L "$pkg_integration_entry" ] || return 1
+        valid_dir "$pkg_integration_entry" || return 1
         pkg_integration_have_link=1
         ;;
       *)
@@ -605,13 +605,13 @@ _pkg_default_validate_current_bindings()
   pkg_default_old_concrete=$1
   pkg_default_old_cmd_dir="$m_PKG_DIR/$pkg_default_old_concrete/cmd"
 
-  [ -d "$m_PKG_DIR/$pkg_default_old_concrete" ] && [ ! -L "$m_PKG_DIR/$pkg_default_old_concrete" ] || return 1
+  valid_dir "$m_PKG_DIR/$pkg_default_old_concrete" || return 1
   if [ ! -e "$pkg_default_old_cmd_dir" ] && [ ! -L "$pkg_default_old_cmd_dir" ]
   then
     return 0
   fi
-  [ -d "$pkg_default_old_cmd_dir" ] && [ ! -L "$pkg_default_old_cmd_dir" ] || return 1
-  [ -d "$pkg_integration_public_dir" ] && [ ! -L "$pkg_integration_public_dir" ] || return 1
+  valid_dir "$pkg_default_old_cmd_dir" || return 1
+  valid_dir "$pkg_integration_public_dir" || return 1
 
   for pkg_default_cmd_path in "$pkg_default_old_cmd_dir"/*
   do
@@ -637,7 +637,7 @@ _pkg_default_validate_new_collisions()
   then
     return 0
   fi
-  [ -d "$pkg_default_new_cmd_dir" ] && [ ! -L "$pkg_default_new_cmd_dir" ] || return 1
+  valid_dir "$pkg_default_new_cmd_dir" || return 1
 
   for pkg_default_cmd_path in "$pkg_default_new_cmd_dir"/*
   do
@@ -810,7 +810,7 @@ pkg_deintegrate()
   pkg_name_version_osarch_valid "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 2
 
   _pkg_integration_set_concrete "$pkg_deintegrate_pkg" "$pkg_deintegrate_version" "$pkg_deintegrate_osarch" || return 1
-  [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
+  valid_dir "$pkg_integration_concrete" || return 1
 
   _pkg_default_read_current "$pkg_integration_selector" || return 1
   _pkg_default_current_valid "$pkg_default_current" || return 1
@@ -860,8 +860,8 @@ pkg_default_apply()
     pkg_osarch_valid "$pkg_default_osarch" || return 2
   fi
 
-  [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
-  [ -d "$m_BIN_DIR" ] && [ ! -L "$m_BIN_DIR" ] || return 1
+  valid_dir "$m_PKG_DIR" || return 1
+  valid_dir "$m_BIN_DIR" || return 1
   _pkg_integration_set_class "$pkg_default_pkg" "$pkg_default_osarch" || return 1
   _pkg_default_read_current "$pkg_integration_selector" || return 1
   _pkg_default_current_valid "$pkg_default_current" || return 1
@@ -891,7 +891,7 @@ pkg_default_apply()
 
   _pkg_integration_set_concrete "$pkg_default_pkg" "$pkg_default_version" "$pkg_default_osarch" || return 1
   pkg_default_new_concrete=$pkg_integration_concrete_name
-  [ -d "$pkg_integration_concrete" ] && [ ! -L "$pkg_integration_concrete" ] || return 1
+  valid_dir "$pkg_integration_concrete" || return 1
 
   if [ "$pkg_default_old_concrete" = "$pkg_default_new_concrete" ]
   then
@@ -902,7 +902,7 @@ pkg_default_apply()
   then
     command -p -- mkdir "$pkg_integration_public_dir" || return 1
   fi
-  [ -d "$pkg_integration_public_dir" ] && [ ! -L "$pkg_integration_public_dir" ] || return 1
+  valid_dir "$pkg_integration_public_dir" || return 1
 
   _pkg_default_validate_new_collisions "$pkg_default_new_concrete" "$pkg_default_old_concrete" || return 1
 
