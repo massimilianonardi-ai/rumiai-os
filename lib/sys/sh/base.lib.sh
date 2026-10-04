@@ -10,7 +10,7 @@ loadsyslib()
 
 valid_integer()
 {
-  [ "$#" -eq "0" ] && return 1
+  [ "$#" -eq 0 ] && return 1
 
   while [ "$#" -gt 0 ]
   do
@@ -21,7 +21,7 @@ valid_integer()
 
 valid_shell_identifier()
 {
-  [ "$#" -eq "0" ] && return 1
+  [ "$#" -eq 0 ] && return 1
 
   while [ "$#" -gt 0 ]
   do
@@ -32,7 +32,7 @@ valid_shell_identifier()
 
 valid_cli_name()
 {
-  [ "$#" -eq "0" ] && return 1
+  [ "$#" -eq 0 ] && return 1
 
   while [ "$#" -gt 0 ]
   do
@@ -43,13 +43,20 @@ valid_cli_name()
 
 valid_namespace_name()
 {
-  [ "$#" -eq "0" ] && return 1
+  [ "$#" -eq 0 ] && return 1
 
   while [ "$#" -gt 0 ]
   do
     case "$1" in "" | [!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ]* | *[!abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-.]* | *[_-.]) return 2 ;; esac
     shift
   done
+}
+
+valid_dir()
+{
+  [ "$#" -eq 1 ] || return 1
+
+  [ -d "$1" ] && [ ! -L "$1" ] || return 2
 }
 
 #-------------------------------------------------------------------------------
