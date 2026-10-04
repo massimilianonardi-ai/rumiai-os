@@ -42,8 +42,38 @@ FUNCTIONS
         depends on the presence or current concrete of this package/class.
 
 RETURN STATUS
-    Public functions return 0 on success, 1 when the requested integration state
-    cannot be validated or changed, and 2 for invalid invocation.
+    pkg_integrate returns 0 on success.
+
+    Its direct validation/materialization stages return:
+
+        1   invalid invocation, definition-validation failure, or failure while
+            moving the prepared root after concrete creation
+        2   invalid package identity or unsupported package-definition feature
+        3   package store is not a real directory
+        4   range directory is not a real directory
+        5   prepared root is not a real directory
+        6   range directory cannot be canonicalized
+        7   prepared root cannot be canonicalized
+        8   concrete identity/class derivation failed
+        9   concrete package already exists
+        10  package state metadata validation failed
+        11  setuid metadata validation failed
+        12  concrete package directory creation failed
+        13  command materialization failed
+        14  environment materialization failed
+        15  facility materialization failed
+        16  facility projection materialization failed
+        17  dependency materialization failed
+        18  state materialization failed
+        19  setuid/state rollback failed after setuid materialization failure
+        20  setuid materialization failed and rollback succeeded
+
+    Definition validation may also propagate its existing status 1 or 2 as
+    described above.
+
+    pkg_deintegrate and pkg_default_apply return 0 on success, 1 when the
+    requested package/default state cannot be validated or changed, and 2 for
+    invalid package identity or other invalid operands.
 
 DEPENDENCIES
     The library uses the shared package identity validators from pkg-common.lib.sh
