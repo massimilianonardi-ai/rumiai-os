@@ -71,9 +71,13 @@ RETURN STATUS
     Definition validation may also propagate its existing status 1 or 2 as
     described above.
 
-    pkg_deintegrate and pkg_default_apply return 0 on success, 1 when the
-    requested package/default state cannot be validated or changed, and 2 for
-    invalid package identity or other invalid operands.
+    pkg_deintegrate returns 0 on success, 1 for invalid invocation arity or
+    when the requested installed concrete cannot be safely removed, and 2 when
+    the supplied package identity is invalid.
+
+    pkg_default_apply returns 0 on success, 1 when the requested default state
+    cannot be validated or changed, and 2 for invalid invocation or invalid
+    package/default identity operands.
 
 DEPENDENCIES
     The library uses the shared package identity validators from pkg-common.lib.sh
