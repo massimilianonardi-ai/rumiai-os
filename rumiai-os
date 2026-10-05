@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env m
 
 if [ -n "${m_ROOT-}" ] && [ "${m_COMMAND_BIN-}" = "$m_ROOT/rumiai-os" ]
 then

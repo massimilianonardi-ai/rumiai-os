@@ -97,38 +97,11 @@ export -- m_LOG_LEVEL
 # GLOBAL EXECUTION ENVIRONMENT
 #-------------------------------------------------------------------------------
 
-m_GLOBAL_ENV_DIR="$m_STATE_SYS_DIR/sys/environment/cache"
-m_GLOBAL_ENV_FILE="$m_GLOBAL_ENV_DIR/env"
-m_GLOBAL_ENV_OSARCH="$m_GLOBAL_ENV_DIR/env-osarch"
-
-if [ -e "$m_GLOBAL_ENV_FILE" ] || [ -L "$m_GLOBAL_ENV_FILE" ]
-then
-  [ -f "$m_GLOBAL_ENV_FILE" ] && [ ! -L "$m_GLOBAL_ENV_FILE" ] && [ -r "$m_GLOBAL_ENV_FILE" ] && [ ! -x "$m_GLOBAL_ENV_FILE" ] ||
-    fatal filesystem path-invalid path "$m_GLOBAL_ENV_FILE"
-  . "$m_GLOBAL_ENV_FILE" || fatal execution execution-failed operation global-environment
-fi
-
-if [ -e "$m_GLOBAL_ENV_OSARCH" ] || [ -L "$m_GLOBAL_ENV_OSARCH" ]
-then
-  [ -L "$m_GLOBAL_ENV_OSARCH" ] || fatal filesystem path-invalid path "$m_GLOBAL_ENV_OSARCH"
-  m_GLOBAL_ENV_OSARCH_TARGET="$(command -p -- readlink "$m_GLOBAL_ENV_OSARCH" 2>/dev/null)" ||
-    fatal filesystem path-invalid path "$m_GLOBAL_ENV_OSARCH"
-  case "$m_GLOBAL_ENV_OSARCH_TARGET" in
-    env-linux-x86_64 | env-linux-arm64 | env-macos-x86_64 | env-macos-arm64 | env-windows-x86_64 | env-windows-arm64) : ;;
-    *) fatal filesystem path-invalid path "$m_GLOBAL_ENV_OSARCH" ;;
-  esac
-  m_GLOBAL_ENV_OSARCH_FILE="$m_GLOBAL_ENV_DIR/$m_GLOBAL_ENV_OSARCH_TARGET"
-  [ -f "$m_GLOBAL_ENV_OSARCH_FILE" ] && [ ! -L "$m_GLOBAL_ENV_OSARCH_FILE" ] && [ -r "$m_GLOBAL_ENV_OSARCH_FILE" ] && [ ! -x "$m_GLOBAL_ENV_OSARCH_FILE" ] ||
-    fatal filesystem path-invalid path "$m_GLOBAL_ENV_OSARCH_FILE"
-  . "$m_GLOBAL_ENV_OSARCH" || fatal execution execution-failed operation global-environment-osarch
-fi
+. "$m_STATE_SYS_DIR/sys/environment/cache/env" || fatal execution execution-failed operation global-environment
+. "$m_STATE_SYS_DIR/sys/environment/cache/env-osarch" || fatal execution execution-failed operation global-environment
 
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
-
-unset m_GLOBAL_ENV_GENERATION
-unset m_GLOBAL_ENV_OSARCH_FILE m_GLOBAL_ENV_OSARCH_TARGET
-unset m_GLOBAL_ENV_OSARCH m_GLOBAL_ENV_FILE m_GLOBAL_ENV_DIR
 
 #-------------------------------------------------------------------------------
 # EXECUTE
@@ -148,9 +121,7 @@ then
 
   m_COMMAND_HEADER=''
   IFS= read -r m_COMMAND_HEADER < "$m_COMMAND_BIN" || :
-  if [ "$m_COMMAND_HEADER" = '#!/usr/bin/env m' ] ||
-     [ "$m_COMMAND_BIN" = "$m_ROOT/rumiai-os" ] ||
-     [ "$m_COMMAND_BIN" = "$m_ROOT/rumiai-os-sh" ]
+  if [ "$m_COMMAND_HEADER" = '#!/usr/bin/env m' ]
   then
     unset m_COMMAND_HEADER
     shift
