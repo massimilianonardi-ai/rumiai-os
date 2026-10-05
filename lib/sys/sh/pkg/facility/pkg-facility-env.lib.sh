@@ -1,7 +1,6 @@
 _pkg_facility_env_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
-  [ "$1" != PATH ] || return 1
   case "$1" in
     "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
   esac
@@ -105,8 +104,20 @@ _pkg_facility_env_realization_validate()
     case "$pkg_facility_env_descriptor" in *"$pkg_facility_env_tab"*) return 1 ;; esac
 
     _pkg_facility_env_name_valid "$pkg_facility_env_name" || return 1
-    [ "$pkg_facility_env_name" != "$pkg_facility_env_previous" ] || return 1
+    if [ "$pkg_facility_env_name" = "$pkg_facility_env_previous" ] && [ "$pkg_facility_env_name" != PATH ]
+    then
+      return 1
+    fi
     pkg_facility_env_previous=$pkg_facility_env_name
+
+    if [ "$pkg_facility_env_name" = PATH ]
+    then
+      case "$pkg_facility_env_descriptor" in
+        root | "root-path "*) : ;;
+        *) return 1 ;;
+      esac
+    fi
+
     _pkg_facility_env_descriptor_validate "$pkg_facility_env_descriptor" "$pkg_facility_env_root" || return 1
     pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
   done < "$pkg_facility_env_realization"
@@ -126,11 +137,16 @@ _pkg_facility_env_provider_validate()
 
   pkg_facility_env_tab="$(printf '\t')"
   pkg_facility_env_realization_count=0
+  pkg_facility_env_previous=
   while IFS= read -r pkg_facility_env_line
   do
     pkg_facility_env_name=${pkg_facility_env_line%%"$pkg_facility_env_tab"*}
     [ -f "$pkg_facility_env_contract/$pkg_facility_env_name" ] && [ ! -L "$pkg_facility_env_contract/$pkg_facility_env_name" ] || return 1
-    pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
+    if [ "$pkg_facility_env_name" != "$pkg_facility_env_previous" ]
+    then
+      pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
+      pkg_facility_env_previous=$pkg_facility_env_name
+    fi
   done < "$pkg_facility_env_realization"
 
   pkg_facility_env_contract_count=0
