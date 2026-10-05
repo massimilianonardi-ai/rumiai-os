@@ -97,8 +97,15 @@ export -- m_LOG_LEVEL
 # GLOBAL EXECUTION ENVIRONMENT
 #-------------------------------------------------------------------------------
 
-[ -f "$m_STATE_SYS_DIR/sys/environment/cache/env" ] && . "$m_STATE_SYS_DIR/sys/environment/cache/env" || fatal execution execution-failed operation global-environment
-[ -f "$m_STATE_SYS_DIR/sys/environment/cache/env-osarch" ] && . "$m_STATE_SYS_DIR/sys/environment/cache/env-osarch" || fatal execution execution-failed operation global-environment
+if [ -f "$m_STATE_SYS_DIR/sys/environment/cache/env" ]
+then
+  . "$m_STATE_SYS_DIR/sys/environment/cache/env" || fatal execution execution-failed operation global-environment
+fi
+
+if [ -f "$m_STATE_SYS_DIR/sys/environment/cache/env-osarch" ]
+then
+  . "$m_STATE_SYS_DIR/sys/environment/cache/env-osarch" || fatal execution execution-failed operation global-environment
+fi
 
 PATH=$m_BIN_SYS_OSARCH_DIR:$m_BIN_SYS_DIR:$m_BIN_EXT_OSARCH_DIR:$m_BIN_EXT_DIR${PATH:+:$PATH}
 export -- PATH
