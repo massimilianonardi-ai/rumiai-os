@@ -12,9 +12,12 @@ DESCRIPTION
         bin/sys-osarch
         bin/ext-osarch
         bin/ai-osarch
+        state/system/current/sys/environment/cache/env-osarch
 
-    All three selectors must be relative symbolic links to existing platform
-    directories and must represent the same supported normalized osarch.
+    All four selectors must be relative symbolic links and must represent the
+    same supported normalized osarch. The first three target platform command
+    directories. env-osarch targets the generated regular environment snapshot
+    env-<osarch>.
 
     With no arguments, osarch writes only the currently selected osarch followed
     by a newline.
@@ -43,11 +46,17 @@ DESCRIPTION
         bin/sys-<osarch>
         bin/ext-<osarch>
         bin/ai-<osarch>
+        state/system/current/sys/environment/cache
 
+    They also ensure the selected environment target exists as a regular file
     and create or update these relative selector symlinks:
         bin/sys-osarch -> sys-<osarch>
         bin/ext-osarch -> ext-<osarch>
         bin/ai-osarch  -> ai-<osarch>
+        .../environment/cache/env-osarch -> env-<osarch>
+
+    Selector updates are treated as one transition. If one selector update
+    fails, osarch attempts to restore the previous selector targets.
 
     Existing non-symlink objects at selector paths are not overwritten.
 
@@ -71,6 +80,10 @@ OUTPUT
         ai-osarch:
           link: <pathname>
           target: ai-<osarch>
+          resolved: <physical-pathname>
+        env-osarch:
+          link: <pathname>
+          target: env-<osarch>
           resolved: <physical-pathname>
 
     Successful update and set operations produce no output.
