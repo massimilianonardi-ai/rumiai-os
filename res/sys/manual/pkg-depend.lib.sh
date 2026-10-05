@@ -31,6 +31,11 @@ FUNCTIONS
         roots are omitted unless they are also selected dependency nodes. Every
         emitted identity is directly valid as a package operand.
 
+        When provider resolution is ambiguous, status 1 is accompanied by an
+        execution diagnostic identifying reason=provider-ambiguous together with
+        the facility, combined compatibility constraints, target osarch and exact
+        compatible provider candidates.
+
         Returns 0 on success, 1 when the dependency plan cannot be resolved, and 2
         for invalid invocation or package-spec syntax.
 
