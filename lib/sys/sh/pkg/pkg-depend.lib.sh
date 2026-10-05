@@ -433,7 +433,12 @@ _pkg_depend_ambiguity_log()
 $pkg_depend_candidates
 EOF_PKG_DEPEND_AMBIGUITY
 
-  log error execution execution-failed operation pkg-depend     reason provider-ambiguous     facility "$pkg_depend_ambiguity_facility"     constraints "$pkg_depend_ambiguity_constraints"     target "$pkg_depend_ambiguity_target"     providers "$pkg_depend_ambiguity_providers"
+  log error execution execution-failed operation pkg-depend \
+    reason provider-ambiguous \
+    facility "$pkg_depend_ambiguity_facility" \
+    constraints "$pkg_depend_ambiguity_constraints" \
+    target "$pkg_depend_ambiguity_target" \
+    providers "$pkg_depend_ambiguity_providers"
 }
 
 _pkg_depend_candidate_choose_report()
@@ -448,7 +453,10 @@ _pkg_depend_candidate_choose_report()
   case "$pkg_depend_choose_status" in
     0) return 0 ;;
     4)
-      _pkg_depend_ambiguity_log         "$pkg_depend_choose_facility"         "$pkg_depend_choose_constraints"         "$pkg_depend_choose_target" || :
+      _pkg_depend_ambiguity_log \
+        "$pkg_depend_choose_facility" \
+        "$pkg_depend_choose_constraints" \
+        "$pkg_depend_choose_target" || :
       return 4
       ;;
     *) return "$pkg_depend_choose_status" ;;
@@ -483,7 +491,7 @@ _pkg_depend_provider_resolve()
   _pkg_depend_installed_candidates "$pkg_depend_catalog" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints" || return 1
   if [ -n "$pkg_depend_candidates" ]
   then
-    _pkg_depend_candidate_choose "$pkg_depend_target" || return $?
+    _pkg_depend_candidate_choose_report "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints" || return $?
     return 0
   fi
 
