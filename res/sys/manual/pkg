@@ -73,7 +73,10 @@ COMMANDS
         provider is preferred, followed by an unambiguous compatible installed
         provider. Only when no compatible planned or installed provider exists may
         the planner add a catalog provider; multiple compatible provider packages
-        are ambiguous and fail rather than being ranked silently.
+        are ambiguous and fail rather than being ranked silently. Such an
+        ambiguity reports reason=provider-ambiguous together with the affected
+        facility, combined constraints, target osarch and exact compatible provider
+        candidates so the operator can configure an explicit provider selection.
 
         The command is read-only with respect to package/provider state. Catalog
         cache refresh and invocation-private temporary snapshot materialization are
