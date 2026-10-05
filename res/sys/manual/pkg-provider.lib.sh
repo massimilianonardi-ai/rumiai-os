@@ -18,12 +18,16 @@ DESCRIPTION
     bindings may be made read-only/traversable for a service account while their
     enclosing state remains non-writable to that account.
 
-    Global environment is recomputed from authoritative selector intent rather than
-    stored as generated configuration. A valid ext-osarch selector chooses the
-    active platform class; otherwise only generic provider classes can contribute.
-    Facility defaults are applied in LC_ALL=C facility-name order and later
-    assignments win duplicate ordinary variables. PATH is reserved to facility
-    command publication and is invalid facility-env metadata.
+    Global environment is materialized as derived system environment cache when
+    facility-default or provider-package-default state changes. The materializer
+    resolves every supported osarch, extracts assignments common to all platform
+    contexts into the generic env snapshot and writes remaining assignments into
+    env-<osarch> snapshots. Facility defaults are processed in LC_ALL=C facility
+    order and later assignments win duplicate ordinary variables.
+
+    PATH is a special facility-env projection. It accepts root/root-path descriptors
+    only, may repeat, and contributes managed provider directories rather than
+    replacing the whole PATH. Later contributions have higher precedence.
 
 FUNCTIONS
     pkg_provider_default_resolve <facility>
@@ -83,9 +87,15 @@ FUNCTIONS
 
     pkg_provider_global_environment_apply
         Recompute and apply the environment of all currently resolvable system
-        facility defaults for this bootstrap. Unresolved valid selectors contribute
-        no environment. Returns non-zero for invalid/corrupt default or projection
-        data without selecting another provider.
+        facility defaults to the current process. This API remains available for
+        direct runtime use; the m bootstrap does not call it.
+
+    pkg_provider_global_environment_materialize
+        Recompute all supported-osarch global facility environments and atomically
+        publish the derived env and env-<osarch> snapshots under the system
+        sys/environment cache. Ordinary assignments common to every platform are
+        placed in env. PATH is common only when its complete resolved contribution
+        sequence is identical for every platform.
 
     pkg_provider_package_default_reconcile <package> <osarch> <old-concrete> <new-concrete>
         Reconcile global commands affected by one package-default transition. For
@@ -128,9 +138,9 @@ PROVIDER SELECTORS
     This library stores selector intent; it does not install providers or choose a
     missing provider automatically. Unversioned global command links target provider
     package-default selectors; pinned selectors target pinned provider concretes.
-    Environment exposure is late-bound again by each new m bootstrap, so later
-    facility-default or provider-package-default changes require no generated
-    environment rewrite.
+    Facility-default and provider-package-default mutations reconcile generated
+    environment snapshots before returning. New m executions source those already
+    resolved snapshots and perform no provider resolution.
 
 RETURN STATUS
     Unless a function documents a more specific status contract:
@@ -144,8 +154,9 @@ RETURN STATUS
     concrete.
 
 DEPENDENCIES
-    The library runs inside the m bootstrap environment and uses state-path for
-    authoritative system configuration paths.
+    The library runs inside the m bootstrap environment. Authoritative selector
+    configuration remains under package subsystem state; generated global
+    environment is written under the system sys/environment cache.
 
 SEE ALSO
     pkg
