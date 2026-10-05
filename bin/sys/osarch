@@ -179,10 +179,35 @@ osarch_apply()
   osarch_old_ext=
   osarch_old_ai=
   osarch_old_env=
-  [ ! -L "$m_BIN_SYS_OSARCH_DIR" ] || osarch_old_sys="$(command -p -- readlink "$m_BIN_SYS_OSARCH_DIR")" || return 1
-  [ ! -L "$m_BIN_EXT_OSARCH_DIR" ] || osarch_old_ext="$(command -p -- readlink "$m_BIN_EXT_OSARCH_DIR")" || return 1
-  [ ! -L "$osarch_ai_link" ] || osarch_old_ai="$(command -p -- readlink "$osarch_ai_link")" || return 1
-  [ ! -L "$osarch_env_link" ] || osarch_old_env="$(command -p -- readlink "$osarch_env_link")" || return 1
+
+  if [ -L "$m_BIN_SYS_OSARCH_DIR" ]
+  then
+    osarch_old_sys="$(command -p -- readlink "$m_BIN_SYS_OSARCH_DIR")" || {
+      [ "$osarch_env_created" -eq 0 ] || command -p -- rm -f -- "$osarch_env_file" 2>/dev/null || :
+      return 1
+    }
+  fi
+  if [ -L "$m_BIN_EXT_OSARCH_DIR" ]
+  then
+    osarch_old_ext="$(command -p -- readlink "$m_BIN_EXT_OSARCH_DIR")" || {
+      [ "$osarch_env_created" -eq 0 ] || command -p -- rm -f -- "$osarch_env_file" 2>/dev/null || :
+      return 1
+    }
+  fi
+  if [ -L "$osarch_ai_link" ]
+  then
+    osarch_old_ai="$(command -p -- readlink "$osarch_ai_link")" || {
+      [ "$osarch_env_created" -eq 0 ] || command -p -- rm -f -- "$osarch_env_file" 2>/dev/null || :
+      return 1
+    }
+  fi
+  if [ -L "$osarch_env_link" ]
+  then
+    osarch_old_env="$(command -p -- readlink "$osarch_env_link")" || {
+      [ "$osarch_env_created" -eq 0 ] || command -p -- rm -f -- "$osarch_env_file" 2>/dev/null || :
+      return 1
+    }
+  fi
 
   if ! osarch_update_link "$m_BIN_SYS_OSARCH_DIR" "$osarch_sys_target" ||
      ! osarch_update_link "$m_BIN_EXT_OSARCH_DIR" "$osarch_ext_target" ||
