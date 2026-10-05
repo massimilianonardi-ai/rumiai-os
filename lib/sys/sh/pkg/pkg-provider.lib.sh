@@ -321,6 +321,15 @@ _pkg_provider_default()
       _pkg_provider_global_reconcile "$1" "" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
       return 1
     fi
+    if ! pkg_provider_global_environment_materialize
+    then
+      if [ -n "$pkg_provider_old_selector" ]
+      then
+        _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+      fi
+      _pkg_provider_global_reconcile "$1" "" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+      return 1
+    fi
     return 0
   fi
 
@@ -346,6 +355,17 @@ _pkg_provider_default()
   _pkg_provider_global_reconcile "$1" "$pkg_provider_old_selector" "$pkg_provider_new_selector" || return 1
   if ! _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_new_selector"
   then
+    _pkg_provider_global_reconcile "$1" "$pkg_provider_new_selector" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+    return 1
+  fi
+  if ! pkg_provider_global_environment_materialize
+  then
+    if [ -n "$pkg_provider_old_selector" ]
+    then
+      _pkg_provider_config_set "$pkg_provider_config_file" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
+    else
+      _pkg_provider_config_unset "$pkg_provider_config_file" >/dev/null 2>&1 || :
+    fi
     _pkg_provider_global_reconcile "$1" "$pkg_provider_new_selector" "$pkg_provider_old_selector" >/dev/null 2>&1 || :
     return 1
   fi
@@ -546,9 +566,9 @@ pkg_provider_effective_selector()
 _pkg_provider_environment_name_valid()
 {
   [ "$#" -eq 1 ] || return 2
-  [ "$1" != PATH ] || return 1
   case "$1" in
     "" | [!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz_]* | *[!ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_]*) return 1 ;;
+    m_GLOBAL_ENV_GENERATION) return 1 ;;
   esac
 }
 
@@ -613,8 +633,19 @@ _pkg_provider_environment_plan()
     case "$pkg_provider_environment_descriptor" in *"$pkg_provider_environment_tab"*) return 1 ;; esac
 
     _pkg_provider_environment_name_valid "$pkg_provider_environment_variable" || return 1
-    [ "$pkg_provider_environment_variable" != "$pkg_provider_environment_previous" ] || return 1
+    if [ "$pkg_provider_environment_variable" = "$pkg_provider_environment_previous" ] && [ "$pkg_provider_environment_variable" != PATH ]
+    then
+      return 1
+    fi
     pkg_provider_environment_previous=$pkg_provider_environment_variable
+
+    if [ "$pkg_provider_environment_variable" = PATH ]
+    then
+      case "$pkg_provider_environment_descriptor" in
+        root | "root-path "*) : ;;
+        *) return 1 ;;
+      esac
+    fi
 
     case "$pkg_provider_environment_descriptor" in
       root)
@@ -642,6 +673,13 @@ _pkg_provider_environment_plan()
         ;;
     esac
 
+    if [ "$pkg_provider_environment_variable" = PATH ]
+    then
+      case "$pkg_provider_environment_value" in
+        "" | *:*) return 1 ;;
+      esac
+    fi
+
     printf -- '%s\t%s\n' "$pkg_provider_environment_variable" "$pkg_provider_environment_value" || return 1
     pkg_provider_environment_count=$((pkg_provider_environment_count + 1))
   done < "$pkg_provider_environment_file"
@@ -659,7 +697,13 @@ _pkg_provider_environment_plan_apply()
   do
     [ -n "$pkg_provider_environment_apply_variable" ] && [ -z "$pkg_provider_environment_apply_extra" ] || return 1
     _pkg_provider_environment_name_valid "$pkg_provider_environment_apply_variable" || return 1
-    export "$pkg_provider_environment_apply_variable=$pkg_provider_environment_apply_value" || return 1
+    if [ "$pkg_provider_environment_apply_variable" = PATH ]
+    then
+      PATH="$pkg_provider_environment_apply_value${PATH:+:$PATH}"
+      export PATH || return 1
+    else
+      export "$pkg_provider_environment_apply_variable=$pkg_provider_environment_apply_value" || return 1
+    fi
   done <<EOF_PROVIDER_ENVIRONMENT
 $1
 EOF_PROVIDER_ENVIRONMENT
@@ -824,17 +868,52 @@ pkg_provider_default_resolve()
   printf -- '%s\n' "$pkg_provider_default_resolve_concrete"
 )
 
-pkg_provider_global_environment_apply()
+_pkg_provider_environment_plan_normalize()
 {
-  [ "$#" -eq 0 ] || return 2
-  [ -n "${m_STATE_SYS_DIR-}" ] && [ -n "${m_BIN_EXT_OSARCH_DIR-}" ] || return 1
+  [ "$#" -eq 1 ] || return 2
+  [ -n "$1" ] || return 0
 
-  pkg_provider_global_environment_root="$m_STATE_SYS_DIR/sys/pkg/conf/provider/default"
+  printf -- '%s\n' "$1" | LC_ALL=C command -p -- awk -F '\t' '
+    NF != 2 { invalid = 1; next }
+    $1 == "PATH" {
+      if (!path_seen[$2]++) {
+        if (path == "")
+          path = $2
+        else
+          path = $2 ":" path
+      }
+      next
+    }
+    { value[$1] = $2 }
+    END {
+      if (invalid)
+        exit 1
+      for (name in value)
+        print name "\t" value[name]
+      if (path != "")
+        print "PATH\t" path
+    }
+  ' | LC_ALL=C command -p -- sort
+}
+
+_pkg_provider_global_environment_plan()
+(
+  [ "$#" -eq 0 ] || [ "$#" -eq 1 ] || return 2
+  pkg_provider_global_environment_osarch=${1-}
+
+  if [ -n "$pkg_provider_global_environment_osarch" ]
+  then
+    _pkg_provider_osarch_valid "$pkg_provider_global_environment_osarch" || return 2
+  fi
+
+  _pkg_provider_system_conf || return 1
+  pkg_provider_global_environment_root="$pkg_provider_system_conf/provider/default"
+
   if [ ! -e "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ]
   then
     return 0
   fi
-  [ -d "$pkg_provider_global_environment_root" ] && [ ! -L "$pkg_provider_global_environment_root" ] || return 1
+  valid_dir "$pkg_provider_global_environment_root" || return 1
 
   pkg_provider_global_environment_files="$(
     for pkg_provider_global_environment_file in "$pkg_provider_global_environment_root"/*
@@ -845,8 +924,7 @@ pkg_provider_global_environment_apply()
   )" || return 1
   [ -n "$pkg_provider_global_environment_files" ] || return 0
 
-  pkg_provider_global_environment_osarch="$(_pkg_provider_global_active_osarch 2>/dev/null)" || pkg_provider_global_environment_osarch=
-  pkg_provider_global_environment_plan=
+  pkg_provider_global_environment_raw=
 
   while IFS= read -r pkg_provider_global_environment_file
   do
@@ -873,19 +951,257 @@ pkg_provider_global_environment_apply()
     pkg_provider_global_environment_fragment="$(_pkg_provider_environment_plan "$pkg_provider_global_environment_facility" "$pkg_provider_global_environment_concrete")" || return 1
     [ -n "$pkg_provider_global_environment_fragment" ] || continue
 
-    if [ -n "$pkg_provider_global_environment_plan" ]
+    if [ -n "$pkg_provider_global_environment_raw" ]
     then
-      pkg_provider_global_environment_plan="$pkg_provider_global_environment_plan
+      pkg_provider_global_environment_raw="$pkg_provider_global_environment_raw
 $pkg_provider_global_environment_fragment"
     else
-      pkg_provider_global_environment_plan=$pkg_provider_global_environment_fragment
+      pkg_provider_global_environment_raw=$pkg_provider_global_environment_fragment
     fi
   done <<EOF_PROVIDER_DEFAULTS
 $pkg_provider_global_environment_files
 EOF_PROVIDER_DEFAULTS
 
-  [ -n "$pkg_provider_global_environment_plan" ] || return 0
+  _pkg_provider_environment_plan_normalize "$pkg_provider_global_environment_raw"
+)
 
+_pkg_provider_global_environment_snapshot_write()
+{
+  [ "$#" -eq 4 ] || return 2
+  pkg_provider_snapshot_plan=$1
+  pkg_provider_snapshot_file=$2
+  pkg_provider_snapshot_generation=$3
+  pkg_provider_snapshot_kind=$4
+
+  case "$pkg_provider_snapshot_kind" in
+    generic | osarch) : ;;
+    *) return 2 ;;
+  esac
+
+  : > "$pkg_provider_snapshot_file" || return 1
+
+  pkg_provider_snapshot_quoted="$(quote "$pkg_provider_snapshot_generation")" || return 1
+  if [ "$pkg_provider_snapshot_kind" = generic ]
+  then
+    printf -- 'm_GLOBAL_ENV_GENERATION=%s\n' "$pkg_provider_snapshot_quoted" >> "$pkg_provider_snapshot_file" || return 1
+  else
+    printf -- '[ "${m_GLOBAL_ENV_GENERATION-}" = %s ] || return 1\n' "$pkg_provider_snapshot_quoted" >> "$pkg_provider_snapshot_file" || return 1
+  fi
+
+  [ -s "$pkg_provider_snapshot_plan" ] || return 0
+
+  pkg_provider_snapshot_tab="$(printf '\t')"
+  while IFS="$pkg_provider_snapshot_tab" read -r pkg_provider_snapshot_name pkg_provider_snapshot_value pkg_provider_snapshot_extra
+  do
+    [ -n "$pkg_provider_snapshot_name" ] && [ -z "$pkg_provider_snapshot_extra" ] || return 1
+    _pkg_provider_environment_name_valid "$pkg_provider_snapshot_name" || return 1
+    pkg_provider_snapshot_quoted="$(quote "$pkg_provider_snapshot_value")" || return 1
+
+    if [ "$pkg_provider_snapshot_name" = PATH ]
+    then
+      printf -- 'PATH=%s${PATH:+":$PATH"}\nexport PATH\n' "$pkg_provider_snapshot_quoted" >> "$pkg_provider_snapshot_file" || return 1
+    else
+      printf -- '%s=%s\nexport %s\n' "$pkg_provider_snapshot_name" "$pkg_provider_snapshot_quoted" "$pkg_provider_snapshot_name" >> "$pkg_provider_snapshot_file" || return 1
+    fi
+  done < "$pkg_provider_snapshot_plan"
+}
+
+_pkg_provider_global_environment_restore()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_provider_restore_cache=$1
+  pkg_provider_restore_backup=$2
+  pkg_provider_restore_status=0
+
+  for pkg_provider_restore_name in \
+    env \
+    env-linux-x86_64 env-linux-arm64 \
+    env-macos-x86_64 env-macos-arm64 \
+    env-windows-x86_64 env-windows-arm64
+  do
+    command -p -- rm -f -- "$pkg_provider_restore_cache/$pkg_provider_restore_name" 2>/dev/null || pkg_provider_restore_status=1
+    if [ -f "$pkg_provider_restore_backup/$pkg_provider_restore_name" ] && [ ! -L "$pkg_provider_restore_backup/$pkg_provider_restore_name" ]
+    then
+      command -p -- cp -p -- "$pkg_provider_restore_backup/$pkg_provider_restore_name" "$pkg_provider_restore_cache/$pkg_provider_restore_name" 2>/dev/null || pkg_provider_restore_status=1
+    fi
+  done
+
+  [ "$pkg_provider_restore_status" -eq 0 ]
+}
+
+pkg_provider_global_environment_materialize()
+(
+  [ "$#" -eq 0 ] || return 2
+
+  pkg_provider_materialize_cache="$m_STATE_SYS_DIR/sys/environment/cache"
+  umask 022
+  command -p -- mkdir -p -- "$pkg_provider_materialize_cache" || return 1
+  valid_dir "$pkg_provider_materialize_cache" || return 1
+  command -p -- chmod 755 "$pkg_provider_materialize_cache" || return 1
+
+  pkg_provider_materialize_stage="$pkg_provider_materialize_cache/.env-stage-$$"
+  pkg_provider_materialize_backup="$pkg_provider_materialize_cache/.env-backup-$$"
+  [ ! -e "$pkg_provider_materialize_stage" ] && [ ! -L "$pkg_provider_materialize_stage" ] || return 1
+  [ ! -e "$pkg_provider_materialize_backup" ] && [ ! -L "$pkg_provider_materialize_backup" ] || return 1
+  command -p -- mkdir -- "$pkg_provider_materialize_stage" "$pkg_provider_materialize_backup" || return 1
+
+  pkg_provider_materialize_cleanup()
+  {
+    command -p -- rm -rf -- "$pkg_provider_materialize_stage" "$pkg_provider_materialize_backup" 2>/dev/null || :
+  }
+
+  for pkg_provider_materialize_osarch in \
+    linux-x86_64 linux-arm64 \
+    macos-x86_64 macos-arm64 \
+    windows-x86_64 windows-arm64
+  do
+    if ! _pkg_provider_global_environment_plan "$pkg_provider_materialize_osarch" > "$pkg_provider_materialize_stage/plan-$pkg_provider_materialize_osarch"
+    then
+      pkg_provider_materialize_cleanup
+      return 1
+    fi
+  done
+
+  command -p -- cp -- "$pkg_provider_materialize_stage/plan-linux-x86_64" "$pkg_provider_materialize_stage/common" || {
+    pkg_provider_materialize_cleanup
+    return 1
+  }
+
+  for pkg_provider_materialize_osarch in \
+    linux-arm64 macos-x86_64 macos-arm64 windows-x86_64 windows-arm64
+  do
+    if ! command -p -- comm -12 "$pkg_provider_materialize_stage/common" "$pkg_provider_materialize_stage/plan-$pkg_provider_materialize_osarch" > "$pkg_provider_materialize_stage/common-next"
+    then
+      pkg_provider_materialize_cleanup
+      return 1
+    fi
+    command -p -- mv -f -- "$pkg_provider_materialize_stage/common-next" "$pkg_provider_materialize_stage/common" || {
+      pkg_provider_materialize_cleanup
+      return 1
+    }
+  done
+
+  for pkg_provider_materialize_osarch in \
+    linux-x86_64 linux-arm64 \
+    macos-x86_64 macos-arm64 \
+    windows-x86_64 windows-arm64
+  do
+    if ! command -p -- comm -23 "$pkg_provider_materialize_stage/plan-$pkg_provider_materialize_osarch" "$pkg_provider_materialize_stage/common" > "$pkg_provider_materialize_stage/delta-$pkg_provider_materialize_osarch"
+    then
+      pkg_provider_materialize_cleanup
+      return 1
+    fi
+  done
+
+  pkg_provider_materialize_generation="$(
+    {
+      printf -- 'generic\n'
+      command -p -- cat -- "$pkg_provider_materialize_stage/common"
+      for pkg_provider_materialize_osarch in \
+        linux-x86_64 linux-arm64 \
+        macos-x86_64 macos-arm64 \
+        windows-x86_64 windows-arm64
+      do
+        printf -- '%s\n' "$pkg_provider_materialize_osarch"
+        command -p -- cat -- "$pkg_provider_materialize_stage/delta-$pkg_provider_materialize_osarch"
+      done
+    } | command -p -- cksum
+  )" || {
+    pkg_provider_materialize_cleanup
+    return 1
+  }
+  set -- $pkg_provider_materialize_generation
+  [ "$#" -ge 2 ] || {
+    pkg_provider_materialize_cleanup
+    return 1
+  }
+  pkg_provider_materialize_generation="$1-$2"
+
+  _pkg_provider_global_environment_snapshot_write \
+    "$pkg_provider_materialize_stage/common" \
+    "$pkg_provider_materialize_stage/env" \
+    "$pkg_provider_materialize_generation" \
+    generic || {
+      pkg_provider_materialize_cleanup
+      return 1
+    }
+
+  for pkg_provider_materialize_osarch in \
+    linux-x86_64 linux-arm64 \
+    macos-x86_64 macos-arm64 \
+    windows-x86_64 windows-arm64
+  do
+    _pkg_provider_global_environment_snapshot_write \
+      "$pkg_provider_materialize_stage/delta-$pkg_provider_materialize_osarch" \
+      "$pkg_provider_materialize_stage/env-$pkg_provider_materialize_osarch" \
+      "$pkg_provider_materialize_generation" \
+      osarch || {
+        pkg_provider_materialize_cleanup
+        return 1
+      }
+  done
+
+  for pkg_provider_materialize_name in \
+    env \
+    env-linux-x86_64 env-linux-arm64 \
+    env-macos-x86_64 env-macos-arm64 \
+    env-windows-x86_64 env-windows-arm64
+  do
+    command -p -- chmod 644 "$pkg_provider_materialize_stage/$pkg_provider_materialize_name" || {
+      pkg_provider_materialize_cleanup
+      return 1
+    }
+
+    if [ -e "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" ] || [ -L "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" ]
+    then
+      [ -f "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" ] && [ ! -L "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" ] || {
+        pkg_provider_materialize_cleanup
+        return 1
+      }
+      command -p -- cp -p -- "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" "$pkg_provider_materialize_backup/$pkg_provider_materialize_name" || {
+        pkg_provider_materialize_cleanup
+        return 1
+      }
+    fi
+  done
+
+  pkg_provider_materialize_publish_status=0
+  for pkg_provider_materialize_name in \
+    env-linux-x86_64 env-linux-arm64 \
+    env-macos-x86_64 env-macos-arm64 \
+    env-windows-x86_64 env-windows-arm64 \
+    env
+  do
+    command -p -- mv -f -- "$pkg_provider_materialize_stage/$pkg_provider_materialize_name" "$pkg_provider_materialize_cache/$pkg_provider_materialize_name" || {
+      pkg_provider_materialize_publish_status=1
+      break
+    }
+  done
+
+  if [ "$pkg_provider_materialize_publish_status" -ne 0 ]
+  then
+    _pkg_provider_global_environment_restore "$pkg_provider_materialize_cache" "$pkg_provider_materialize_backup" >/dev/null 2>&1 || :
+    pkg_provider_materialize_cleanup
+    return 1
+  fi
+
+  pkg_provider_materialize_cleanup
+  return 0
+)
+
+pkg_provider_global_environment_apply()
+{
+  [ "$#" -eq 0 ] || return 2
+
+  pkg_provider_global_environment_osarch="$(_pkg_provider_global_active_osarch 2>/dev/null)" || pkg_provider_global_environment_osarch=
+  if [ -n "$pkg_provider_global_environment_osarch" ]
+  then
+    pkg_provider_global_environment_plan="$(_pkg_provider_global_environment_plan "$pkg_provider_global_environment_osarch")" || return 1
+  else
+    pkg_provider_global_environment_plan="$(_pkg_provider_global_environment_plan)" || return 1
+  fi
+
+  [ -n "$pkg_provider_global_environment_plan" ] || return 0
   ( _pkg_provider_environment_plan_apply "$pkg_provider_global_environment_plan" ) || return 1
   _pkg_provider_environment_plan_apply "$pkg_provider_global_environment_plan"
 }
@@ -1494,7 +1810,13 @@ $pkg_provider_transition_piece"
     fi
   done
 
-  _pkg_provider_global_reconcile_plans "$pkg_provider_transition_old_plan" "$pkg_provider_transition_new_plan"
+  _pkg_provider_global_reconcile_plans "$pkg_provider_transition_old_plan" "$pkg_provider_transition_new_plan" || return 1
+  if ! pkg_provider_global_environment_materialize
+  then
+    _pkg_provider_global_reconcile_plans "$pkg_provider_transition_new_plan" "$pkg_provider_transition_old_plan" >/dev/null 2>&1 || :
+    return 1
+  fi
+  return 0
 )
 
 pkg_provider()
