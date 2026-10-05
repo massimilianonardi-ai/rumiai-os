@@ -40,8 +40,8 @@ export_readonly()
 {
   while [ "$#" -gt "0" ]
   do
-    export -- "$1"
-    readonly -- "$1"
+    export -- "$1" || return 1
+    readonly -- "$1" || return 2
     shift
   done
 }
@@ -63,48 +63,27 @@ export_readonly m_BOOTSTRAP_BIN m_ROOT
 # SYSTEM VARIABLES
 #-------------------------------------------------------------------------------
 
-m_BIN_DIR="$m_ROOT/bin"
-m_BIN_SYS_DIR="$m_BIN_DIR/sys"
-m_BIN_SYS_OSARCH_DIR="$m_BIN_DIR/sys-osarch"
-m_BIN_EXT_DIR="$m_BIN_DIR/ext"
-m_BIN_EXT_OSARCH_DIR="$m_BIN_DIR/ext-osarch"
-m_LIB_DIR="$m_ROOT/lib"
-m_PKG_DIR="$m_ROOT/pkg"
-m_RES_DIR="$m_ROOT/res"
-m_LANG_DIR="$m_RES_DIR/sys/lang"
-m_SRC_DIR="$m_ROOT/src"
+export_readonly m_BIN_DIR="$m_ROOT/bin"
+export_readonly m_BIN_SYS_DIR="$m_BIN_DIR/sys"
+export_readonly m_BIN_SYS_OSARCH_DIR="$m_BIN_DIR/sys-osarch"
+export_readonly m_BIN_EXT_DIR="$m_BIN_DIR/ext"
+export_readonly m_BIN_EXT_OSARCH_DIR="$m_BIN_DIR/ext-osarch"
+export_readonly m_LIB_DIR="$m_ROOT/lib"
+export_readonly m_PKG_DIR="$m_ROOT/pkg"
+export_readonly m_RES_DIR="$m_ROOT/res"
+export_readonly m_LANG_DIR="$m_RES_DIR/sys/lang"
+export_readonly m_SRC_DIR="$m_ROOT/src"
 
-export_readonly \
-  m_BIN_DIR \
-  m_BIN_SYS_DIR \
-  m_BIN_SYS_OSARCH_DIR \
-  m_BIN_EXT_DIR \
-  m_BIN_EXT_OSARCH_DIR \
-  m_LIB_DIR \
-  m_PKG_DIR \
-  m_RES_DIR \
-  m_LANG_DIR \
-  m_SRC_DIR \
+export_readonly PAGER="pager"
 
-PAGER="pager"
-export_readonly PAGER
+export_readonly m_LANGUAGE_FALLBACK="en_US"
+export_readonly m_TEXT_ENCODING="UTF-8"
+export_readonly m_LANG_CURRENT_DIR="$m_LANG_DIR/current"
+export_readonly m_LANG_FALLBACK_DIR="$m_LANG_DIR/$m_LANGUAGE_FALLBACK"
 
-m_LANGUAGE_FALLBACK="en_US"
-m_TEXT_ENCODING="UTF-8"
-m_LANG_CURRENT_DIR="$m_LANG_DIR/current"
-m_LANG_FALLBACK_DIR="$m_LANG_DIR/$m_LANGUAGE_FALLBACK"
-
-export_readonly \
-  m_LANGUAGE_FALLBACK \
-  m_TEXT_ENCODING \
-  m_LANG_CURRENT_DIR \
-  m_LANG_FALLBACK_DIR
-
-m_STATE_DIR="$m_ROOT/state"
-m_STATE_SYS_DIR="$m_STATE_DIR/system/current"
-m_STATE_USER_DIR="$m_STATE_DIR/user/current"
-
-export_readonly m_STATE_DIR m_STATE_SYS_DIR m_STATE_USER_DIR
+export_readonly m_STATE_DIR="$m_ROOT/state"
+export_readonly m_STATE_SYS_DIR="$m_STATE_DIR/system/current"
+export_readonly m_STATE_USER_DIR="$m_STATE_DIR/user/current"
 
 export -- m_LOG_LEVEL
 
