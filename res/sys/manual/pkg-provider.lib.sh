@@ -27,7 +27,8 @@ DESCRIPTION
 
     PATH is a special facility-env projection. It accepts root/root-path descriptors
     only, may repeat, and contributes managed provider directories rather than
-    replacing the whole PATH. Later contributions have higher precedence.
+    replacing the whole PATH. A PATH root-path descriptor must resolve to a directory
+    contained by the provider useful root. Later contributions have higher precedence.
 
 FUNCTIONS
     pkg_provider_default_resolve <facility>
