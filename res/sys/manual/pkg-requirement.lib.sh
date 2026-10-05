@@ -34,11 +34,12 @@ FUNCTIONS
         satisfiable, and 2 for invalid invocation or syntax.
 
 DEPENDENCIES
-    Static package requirement listing reuses pkg-install catalog selection without
-    artifact transfer. Facility resolution delegates to pkg-dependency.lib.sh.
+    Static package requirement listing uses pkg-catalog.lib.sh and validates
+    dependency declarations through pkg-dependency.lib.sh. Facility resolution
+    delegates to pkg-dependency.lib.sh.
 
 SEE ALSO
     pkg
-    pkg-install.lib.sh
+    pkg-catalog.lib.sh
     pkg-dependency.lib.sh
     pkg-provider.lib.sh
