@@ -155,6 +155,11 @@ osarch_apply()
   osarch_env_created=0
   if [ ! -e "$osarch_env_file" ] && [ ! -L "$osarch_env_file" ]
   then
+    osarch_env_generic="$osarch_env_dir/env"
+    if [ -e "$osarch_env_generic" ] || [ -L "$osarch_env_generic" ]
+    then
+      return 1
+    fi
     : > "$osarch_env_file" || return 1
     command -p -- chmod 644 "$osarch_env_file" || {
       command -p -- rm -f -- "$osarch_env_file" 2>/dev/null || :
