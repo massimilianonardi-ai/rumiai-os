@@ -119,6 +119,14 @@ _pkg_facility_env_realization_validate()
     fi
 
     _pkg_facility_env_descriptor_validate "$pkg_facility_env_descriptor" "$pkg_facility_env_root" || return 1
+    if [ "$pkg_facility_env_name" = PATH ]
+    then
+      case "$pkg_facility_env_descriptor" in
+        "root-path "*)
+          [ -d "$pkg_facility_env_resolved" ] || return 1
+          ;;
+      esac
+    fi
     pkg_facility_env_realization_count=$((pkg_facility_env_realization_count + 1))
   done < "$pkg_facility_env_realization"
 
