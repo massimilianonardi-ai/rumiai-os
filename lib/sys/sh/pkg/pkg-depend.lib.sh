@@ -412,6 +412,49 @@ _pkg_depend_catalog_candidates()
   done
 }
 
+_pkg_depend_ambiguity_log()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_depend_ambiguity_facility=$1
+  pkg_depend_ambiguity_constraints=$2
+  pkg_depend_ambiguity_target=$3
+  pkg_depend_ambiguity_providers=
+
+  while IFS= read -r pkg_depend_ambiguity_candidate
+  do
+    [ -n "$pkg_depend_ambiguity_candidate" ] || continue
+    if [ -n "$pkg_depend_ambiguity_providers" ]
+    then
+      pkg_depend_ambiguity_providers="$pkg_depend_ambiguity_providers $pkg_depend_ambiguity_candidate"
+    else
+      pkg_depend_ambiguity_providers=$pkg_depend_ambiguity_candidate
+    fi
+  done <<EOF_PKG_DEPEND_AMBIGUITY
+$pkg_depend_candidates
+EOF_PKG_DEPEND_AMBIGUITY
+
+  log error execution execution-failed operation pkg-depend     reason provider-ambiguous     facility "$pkg_depend_ambiguity_facility"     constraints "$pkg_depend_ambiguity_constraints"     target "$pkg_depend_ambiguity_target"     providers "$pkg_depend_ambiguity_providers"
+}
+
+_pkg_depend_candidate_choose_report()
+{
+  [ "$#" -eq 3 ] || return 2
+  pkg_depend_choose_target=$1
+  pkg_depend_choose_facility=$2
+  pkg_depend_choose_constraints=$3
+
+  _pkg_depend_candidate_choose "$pkg_depend_choose_target"
+  pkg_depend_choose_status=$?
+  case "$pkg_depend_choose_status" in
+    0) return 0 ;;
+    4)
+      _pkg_depend_ambiguity_log         "$pkg_depend_choose_facility"         "$pkg_depend_choose_constraints"         "$pkg_depend_choose_target" || :
+      return 4
+      ;;
+    *) return "$pkg_depend_choose_status" ;;
+  esac
+}
+
 _pkg_depend_provider_resolve()
 {
   [ "$#" -eq 5 ] || return 2
@@ -433,7 +476,7 @@ _pkg_depend_provider_resolve()
   _pkg_depend_planned_candidates "$pkg_depend_catalog" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints" || return 1
   if [ -n "$pkg_depend_candidates" ]
   then
-    _pkg_depend_candidate_choose "$pkg_depend_target" || return $?
+    _pkg_depend_candidate_choose_report "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints" || return $?
     return 0
   fi
 
@@ -445,7 +488,7 @@ _pkg_depend_provider_resolve()
   fi
 
   _pkg_depend_catalog_candidates "$pkg_depend_catalog" "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints" || return 1
-  _pkg_depend_candidate_choose "$pkg_depend_target"
+  _pkg_depend_candidate_choose_report "$pkg_depend_target" "$pkg_depend_facility" "$pkg_depend_constraints"
 }
 
 _pkg_depend_contexts_rebuild()
