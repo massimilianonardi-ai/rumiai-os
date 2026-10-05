@@ -660,6 +660,10 @@ _pkg_provider_environment_plan()
           "$pkg_provider_environment_root"/*) : ;;
           *) return 1 ;;
         esac
+        if [ "$pkg_provider_environment_variable" = PATH ]
+        then
+          [ -d "$pkg_provider_environment_resolved" ] || return 1
+        fi
         pkg_provider_environment_value="$pkg_provider_environment_root/$pkg_provider_environment_relative"
         ;;
       literal)
