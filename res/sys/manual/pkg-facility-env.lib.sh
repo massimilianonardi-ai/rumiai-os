@@ -10,7 +10,8 @@ DESCRIPTION
 
     PATH is a valid special env contract member. Provider realizations may contain
     multiple PATH records, but PATH accepts only root and root-path descriptors;
-    literal PATH replacement is rejected. Ordinary environment variables remain
+    a PATH root-path target must resolve to a directory inside the provider root.
+    Literal PATH replacement is rejected. Ordinary environment variables remain
     single-record realization members.
 
     The library validates declarations only; it does not export variables, select a
