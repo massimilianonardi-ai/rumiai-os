@@ -49,9 +49,10 @@ FUNCTIONS
 
     pkg_provider_global_runtime_access_prepare
         Prepare every configured system facility-default selector for read-only
-        enumeration/resolution by a non-owner runtime account. This preserves
-        bootstrap global facility-environment semantics after a host supervisor
-        drops privilege. Selector intent is not changed.
+        enumeration/resolution by a non-owner runtime account that explicitly uses
+        live provider-selection APIs. The m bootstrap does not require this access
+        for global environment loading because it consumes materialized environment
+        cache instead. Selector intent is not changed.
 
     pkg_provider_effective_selector_runtime_access_prepare <consumer> <facility>
         Prepare explicit selector metadata used by one consumer/facility pair for
