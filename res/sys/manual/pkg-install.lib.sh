@@ -28,6 +28,11 @@ FUNCTIONS
         Dependencies and requested roots are exact concrete identities before the
         install loop begins. An already installed concrete is not reinstalled.
 
+        A dependency-planning failure after valid request syntax is an execution
+        failure, not an invalid-arguments condition. Diagnostics emitted by
+        pkg depend, including provider-ambiguity details, remain visible before the
+        top-level pkg-install dependency-unresolvable failure.
+
     pkg_install_one <package-spec>
         Resolve one package specification against the current installation catalog
         snapshot and install its concrete identity unless it is already installed.
