@@ -873,27 +873,35 @@ _pkg_provider_environment_plan_normalize()
   [ "$#" -eq 1 ] || return 2
   [ -n "$1" ] || return 0
 
-  printf -- '%s\n' "$1" | LC_ALL=C command -p -- awk -F '\t' '
-    NF != 2 { invalid = 1; next }
-    $1 == "PATH" {
-      if (!path_seen[$2]++) {
-        if (path == "")
-          path = $2
-        else
-          path = $2 ":" path
+  pkg_provider_environment_normalize_tab="$(printf '\t')"
+  pkg_provider_environment_normalized="$(
+    printf -- '%s\n' "$1" | LC_ALL=C command -p -- awk -F "$pkg_provider_environment_normalize_tab" '
+      NF != 2 { invalid = 1; next }
+      $1 == "PATH" {
+        if (!path_seen[$2]++) {
+          if (path == "")
+            path = $2
+          else
+            path = $2 ":" path
+        }
+        next
       }
-      next
-    }
-    { value[$1] = $2 }
-    END {
-      if (invalid)
-        exit 1
-      for (name in value)
-        print name "\t" value[name]
-      if (path != "")
-        print "PATH\t" path
-    }
-  ' | LC_ALL=C command -p -- sort
+      { value[$1] = $2 }
+      END {
+        if (invalid)
+          exit 1
+        for (name in value)
+          print name "\t" value[name]
+        if (path != "")
+          print "PATH\t" path
+      }
+    ' || exit 1
+    printf -- '%s' x
+  )" || return 1
+  pkg_provider_environment_normalized=${pkg_provider_environment_normalized%x}
+  [ -n "$pkg_provider_environment_normalized" ] || return 0
+
+  printf -- '%s' "$pkg_provider_environment_normalized" | LC_ALL=C command -p -- sort
 }
 
 _pkg_provider_global_environment_plan()
