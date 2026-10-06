@@ -15,10 +15,18 @@ DESCRIPTION
     With no command operand, m starts the managed shell through the shell
     facility.
 
-    With a command operand, m resolves that command through the active command
-    path, exports its resolved pathname as m_COMMAND_BIN, removes the command
-    operand from the argument vector and executes the command body inside the
-    initialized m runtime.
+    With a command operand, m first attempts to resolve and canonicalize the
+    first operand. If the resolved file begins with the exact line:
+
+        #!/usr/bin/env m
+
+    m treats it as an integrated command: it exports the canonical pathname as
+    readonly m_COMMAND_BIN, removes the command operand from the argument
+    vector, sources the command body inside the initialized runtime and returns
+    its status.
+
+    Otherwise m clears m_COMMAND_BIN and executes the original command vector
+    externally in the initialized environment.
 
     The bootstrap refuses to dispatch itself recursively as a command.
 
@@ -37,9 +45,9 @@ GLOBAL EXECUTION ENVIRONMENT
 
         env-osarch -> env-<osarch>
 
-    The selector target must be one of the supported normalized osarch snapshot
-    names and must resolve to a readable non-executable regular file in the same
-    cache directory.
+    m tests each expected pathname with -f and sources it when that test
+    succeeds. It does not validate or regenerate env-osarch selector structure
+    during bootstrap.
 
     These files are derived state. m does not resolve package providers,
     facility defaults or package defaults while bootstrapping.
@@ -93,5 +101,3 @@ EXIT STATUS
 
 SEE ALSO
     shell
-    rumiai-os
-    rumiai-os-sh
