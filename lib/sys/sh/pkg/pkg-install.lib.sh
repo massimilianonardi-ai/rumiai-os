@@ -281,6 +281,19 @@ EOF_PKG_INSTALL_DEPENDENCIES
 
   for _pkg_install_pkg
   do
-    pkg_install_one "$_pkg_install_pkg" || fatal 6 execution execution-failed operation pkg-install reason install-failed package "$_pkg_install_pkg"
+    pkg_install_one "$_pkg_install_pkg"
+    _pkg_install_status=$?
+    [ "$_pkg_install_status" -eq 0 ] && continue
+
+    case "$_pkg_install_status" in
+      12) _pkg_install_stage=download ;;
+      13) _pkg_install_stage=extract ;;
+      17) _pkg_install_stage=provider-validation ;;
+      18) _pkg_install_stage=integration ;;
+      19) _pkg_install_stage=default-selection ;;
+      *) _pkg_install_stage=install ;;
+    esac
+
+    fatal 6 execution execution-failed       operation pkg-install       reason install-failed       package "$_pkg_install_pkg"       stage "$_pkg_install_stage"       status "$_pkg_install_status"
   done
 )
