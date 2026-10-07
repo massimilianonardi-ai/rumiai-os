@@ -668,7 +668,16 @@ _pkg_dependency_runtime_access_prepare_concrete()
   _pkg_provider_concrete_parse "$pkg_dependency_access_concrete" || return 1
   pkg_dependency_access_consumer=$pkg_provider_concrete_pkg
   pkg_dependency_access_osarch=$pkg_provider_concrete_osarch
-  pkg_dependency_access_file="$m_PKG_DIR/$pkg_dependency_access_concrete/dependency"
+  pkg_dependency_access_root="$m_PKG_DIR/$pkg_dependency_access_concrete"
+  pkg_dependency_access_file="$pkg_dependency_access_root/dependency"
+
+  [ -d "$m_PKG_DIR" ] && [ ! -L "$m_PKG_DIR" ] || return 1
+  [ -d "$pkg_dependency_access_root" ] && [ ! -L "$pkg_dependency_access_root" ] || return 1
+
+  command -p -- chmod 755 "$m_PKG_DIR" || return 1
+  command -p -- find "$pkg_dependency_access_root" -type d -exec chmod a+rx {} + || return 1
+  command -p -- find "$pkg_dependency_access_root" -type f -exec chmod a+r {} + || return 1
+  command -p -- find "$pkg_dependency_access_root" -type f -perm -100 -exec chmod a+rx {} + || return 1
 
   if [ ! -e "$pkg_dependency_access_file" ] && [ ! -L "$pkg_dependency_access_file" ]
   then
