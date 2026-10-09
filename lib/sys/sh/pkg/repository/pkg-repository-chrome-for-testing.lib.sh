@@ -36,11 +36,12 @@ _pkg_repository_chrome_for_testing_scalar()
 _pkg_repository_chrome_for_testing_validate_version()
 {
   [ "$#" -eq 1 ] || return 2
-  printf '%s\n' "$1" | LC_ALL=C command -p -- awk -F . '
-NF != 4 { exit 1 }
-{
+  LC_ALL=C command -p -- awk -v value="$1" '
+BEGIN {
+  count=split(value, part, /[.]/)
+  if (count != 4) exit 1
   for (i=1; i<=4; i++) {
-    if ($i !~ /^(0|[1-9][0-9]*)$/) exit 1
+    if (part[i] !~ /^(0|[1-9][0-9]*)$/) exit 1
   }
 }
 ' >/dev/null
@@ -199,7 +200,7 @@ pkg_repository_compare_versions()
 
   [ "$2" = "$3" ] && { printf -- '0\n'; return 0; }
 
-  LC_ALL=C command -p -- awk -F . -v left="$2" -v right="$3" '
+  LC_ALL=C command -p -- awk -v left="$2" -v right="$3" '
 function cmp(a,b) {
   if (length(a) < length(b)) return -1
   if (length(a) > length(b)) return 1
@@ -208,8 +209,8 @@ function cmp(a,b) {
   return 0
 }
 BEGIN {
-  split(left,l,".")
-  split(right,r,".")
+  split(left,l,/[.]/)
+  split(right,r,/[.]/)
   for (i=1; i<=4; i++) {
     c=cmp(l[i],r[i])
     if (c != 0) { print c; exit 0 }
