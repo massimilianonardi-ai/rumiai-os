@@ -67,7 +67,9 @@ QUICK START: COMPLETE TWO-MODULE PROJECT
     The output registers counter and application but does not execute them.
     Copy lib/sys/js/dynamic-loader.lib.js from the active rumiai-os tree
     to demo/public/dynamic-loader.lib.js (or serve it using an equivalent
-    URL). Then create public/index.html:
+    URL).
+
+    Then create public/index.html:
 
         <!doctype html>
         <meta charset="utf-8">
