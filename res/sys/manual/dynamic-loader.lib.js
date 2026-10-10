@@ -108,9 +108,12 @@ PUBLIC FUNCTIONS
         Source lists may be fetched in parallel across libraries; within
         each manifest source files are processed in declared order.
 
-    At load time, the independent script automatically starts the
-    dynamicLibs entries when that global array is present, following
-    the original standalone loader model.
+    As in the original standalone script, loading the loader starts
+    loading automatically. With dynamicLibs present it loads the listed
+    directories; otherwise it looks for modules-js.json and
+    modules-css.json beside the loader script itself. Callers who want
+    only explicit load operations can set dynamicLibs = [] before loading
+    the library.
 
 DESCRIPTOR CONTRACT
     Exactly the same ordered nested JSON source format as the original
