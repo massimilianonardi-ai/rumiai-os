@@ -40,16 +40,51 @@ OUTPUT
     writing output. Failed validation preserves any previous output file.
 
 EXIT STATUS
-    0    Compilation succeeded.
-    1    Launcher engine unavailable or invalid CLI operands.
-    2    Managed Node runtime unavailable or manifest cannot be read.
-    3    Node command unavailable or manifest/module metadata invalid.
-    4    Module source cannot be read (launcher exec failure when applicable).
-    5    Invalid classic module source.
-    6    Missing or cyclic declared dependency.
-    7    Generated JavaScript failed validation.
+    The launcher and its Node.js compiler have separate failure boundaries.
+    A Node compiler exit status is propagated unchanged. The diagnostic
+    jsc.<message-id> identifies the branch when numeric values overlap.
+
+    Launcher (m fatal):
+    1    Invalid command arguments.
+    2    Compiler engine unavailable.
+    3    Default m-managed nodejs runtime unavailable.
+    4    Node command unavailable.
+
+    Node compiler:
+    0    Success.
+    1    Invalid arguments.
+    2    Manifest unreadable.
+    3    No modules declared.
+    4    Module source path cannot be resolved.
+    5    Invalid classic JavaScript source syntax.
+    6    Circular module dependency.
+    7    Generated JavaScript invalid.
     8    Output write failure.
-    9    Unexpected compiler error.
+    9    Unexpected compiler failure.
+    10   Invalid module identifier.
+    11   Malformed manifest JSON.
+    12   Unsupported manifest structure.
+    13   Invalid module record.
+    14   Duplicate module ID.
+    15   Unsupported source format.
+    16   Invalid source filename.
+    17   Dependency list is not an array.
+    18   Self-dependency.
+    19   Duplicate declared dependency.
+    20   Source resolves outside manifest tree.
+    21   Module source unreadable.
+    22   Missing graph dependency.
+
+DIAGNOSTICS
+    The m launcher uses localized log/fatal identities such as
+    jsc.engine-unavailable and jsc.managed-node-unavailable. Successful
+    invocation also records compilation-started at info, with debug/trace
+    diagnostics for runtime resolution and child process completion.
+
+    The Node engine executes in a distinct process without shell log/fatal.
+    Compiler errors are emitted as [error] [jsc.<message-id>] diagnostics
+    with contextual details. The launcher deliberately avoids duplicating
+    these errors with another fatal message.
 
 EXAMPLE
     jsc ./modules.json ./compiled.js
