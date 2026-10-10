@@ -252,8 +252,19 @@ pkg_install()
 
   _pkg_install_init || fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
 
-  _pkg_install_list_resolved=$(pkg_install_resolve "$@") || fatal 4 execution invalid-arguments operation pkg-install reason request-unresolvable
-  eval "set -- $_pkg_install_list_resolved"
+  _pkg_install_list_requested=
+  for _pkg_install_request
+  do
+    _pkg_install_request_quoted="$(quote "$_pkg_install_request")" ||
+      fatal 3 execution execution-failed operation pkg-install reason pkg-init-failed
+
+    if [ -n "$_pkg_install_list_requested" ]
+    then
+      _pkg_install_list_requested="$_pkg_install_list_requested $_pkg_install_request_quoted"
+    else
+      _pkg_install_list_requested=$_pkg_install_request_quoted
+    fi
+  done
 
   _pkg_install_dependency_output=$(pkg depend "$@") || fatal 5 execution execution-failed operation pkg-install reason dependency-unresolvable
   _pkg_install_list_dependency_resolved=
@@ -277,7 +288,7 @@ $_pkg_install_dependency_output
 EOF_PKG_INSTALL_DEPENDENCIES
   fi
 
-  eval "set -- $_pkg_install_list_dependency_resolved $_pkg_install_list_resolved"
+  eval "set -- $_pkg_install_list_dependency_resolved $_pkg_install_list_requested"
 
   for _pkg_install_pkg
   do
