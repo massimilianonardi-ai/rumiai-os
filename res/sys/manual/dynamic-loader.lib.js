@@ -2,9 +2,15 @@ NAME
     dynamic-loader.lib.js - independent classic JavaScript module loader
 
 PURPOSE AND SCOPE
-    dynamic-loader.lib.js owns the runtime portion of the current controlled
-    classic JavaScript module system. It can load modules previously compiled
-    by jsc or accept manually authored module registrations WITHOUT jsc.
+    dynamic-loader.lib.js owns the OPTIONAL explicit id/deps module-registry
+    runtime. It accepts version-1 jsc registration output or manually
+    authored module registrations WITHOUT jsc. It is not required when
+    jsc compiles an original ordered name/modules/file/symbols manifest:
+    that primary mode produces an executable classic namespace assembly.
+
+    The original m browser JS/CSS source-list loader was a different system;
+    this library does NOT parse modules-js.json/modules-css.json or rebuild
+    browser stylesheets from source lists. Preserve this distinction.
 
     It is a non-executable browser classic-script library, not a command,
     Node.js package or native ES Module implementation. It is distributed
@@ -25,7 +31,7 @@ THE TWO DIFFERENT ACTIONS
     time. If the module script was downloaded as a bundle, its source bytes
     were already downloaded; lazy evaluation does not defer network traffic.
 
-USING THE LOADER WITH JSC (COMPLETE EXAMPLE)
+USING THE LOADER WITH OPTIONAL ID/DEPS JSC MODE (COMPLETE EXAMPLE)
     First create counter.js:
 
         exports.increment = function (n) {
@@ -50,7 +56,7 @@ USING THE LOADER WITH JSC (COMPLETE EXAMPLE)
           ]
         }
 
-    Compile using the installed m command:
+    Compile the OPTIONAL "version":1 form using the installed m command:
 
         jsc modules.json compiled.js
 
@@ -298,7 +304,7 @@ CACHING, DELIVERY AND SAFETY
     security policy, application state migration or safe disposal of
     external effects.
 
-LEGACY COMPATIBILITY BOUNDARY
+ORIGINAL BROWSER LOADER COMPATIBILITY BOUNDARY
     This is NOT the original m dynamic loader that accepts modules-js.json
     and modules-css.json and rebuilds a script or style element from
     source-file lists. This implementation manages CLASSIC JAVASCRIPT
