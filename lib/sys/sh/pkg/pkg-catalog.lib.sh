@@ -186,6 +186,27 @@ pkg_catalog_request_resolve()
   _pkg_catalog_assign "$pkg_catalog_output_target" "$pkg_catalog_target"
 }
 
+_pkg_catalog_latest_known()
+(
+  [ "$#" -eq 1 ] || return 2
+  pkg_catalog_versions_file="$1/repository/versions"
+  [ -f "$pkg_catalog_versions_file" ] && [ ! -L "$pkg_catalog_versions_file" ] && \
+    [ -r "$pkg_catalog_versions_file" ] && [ ! -x "$pkg_catalog_versions_file" ] || return 1
+  LC_ALL=C command -p -- awk '
+    {
+      if ($0 !~ /^[A-Za-z0-9][A-Za-z0-9._+~-]*$/ || seen[$0]++) {
+        invalid=1
+        exit 1
+      }
+      last=$0
+    }
+    END {
+      if (invalid || NR == 0) exit 1
+      print last
+    }
+  ' "$pkg_catalog_versions_file"
+)
+
 pkg_catalog_version_resolve()
 {
   [ "$#" -eq 2 ] || [ "$#" -eq 3 ] || return 2
@@ -213,7 +234,23 @@ pkg_catalog_version_resolve()
     pkg_catalog_version="$(
       . "$pkg_catalog_adapter" || exit 1
       pkg_repository_resolve_version "$pkg_catalog_repository"
-    )" || return 1
+    )"
+    pkg_catalog_resolve_status=$?
+    if [ "$pkg_catalog_resolve_status" -ne 0 ]
+    then
+      pkg_catalog_known="$(_pkg_catalog_latest_known "$pkg_catalog_stream")" || pkg_catalog_known=
+      if [ -n "$pkg_catalog_known" ]
+      then
+        pkg_catalog_name=${pkg_catalog_stream%/*}
+        pkg_catalog_name=${pkg_catalog_name##*/}
+        log warn pkg-catalog latest-discovery-unavailable \
+          package "$pkg_catalog_name" \
+          last_known_version "$pkg_catalog_known" \
+          suggestion "pkg install $pkg_catalog_name@$pkg_catalog_known" \
+          caveat "artifact availability not verified" || :
+      fi
+      return 1
+    fi
   fi
 
   pkg_version_valid "$pkg_catalog_version" || return 1
