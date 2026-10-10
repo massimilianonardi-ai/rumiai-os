@@ -1,27 +1,24 @@
 NAME
-    jsc - ordered classic JavaScript/CSS source and namespace compiler
+    jsc - compile the original ordered JavaScript namespaces or CSS sources
 
 SYNOPSIS
     jsc <modules.json> [output]
 
-WHAT JSC DOES
-    The PRIMARY mode restores the original m/jsc usage and source model:
-    a single JSON description lists source files IN ORDER and nests them
-    inside JavaScript namespaces. It does not require module IDs or explicit
-    dependencies. The order of preceding declarations determines what is
-    already visible to subsequent modules.
+DESCRIPTION
+    jsc compiles the original m source description format. Its input is an
+    ordered JSON tree containing namespace nodes (name/modules) and source
+    nodes (file/symbols). No module IDs, dependency lists, build graph or
+    separate runtime registry are required.
 
-    Example: in namespace m.srv.data the already-declared MyClass is
-    available directly as MyClass; in m.srv its namespace object is
-    accessible as data.MyClass; anywhere with access to the root, it is
-    available as m.srv.data.MyClass.
+    Earlier declarations are available to later source files in the same
+    lexical namespace. Symbols exported in a nested namespace become
+    accessible through the corresponding namespace object in parent scopes.
 
-    This mode creates an immediately executable classic JS assembly, not
-    lazy module registrations. It does NOT require JscRuntime or the
-    separate dynamic-loader.lib.js.
+    jsc uses the default m-managed Node.js runtime through the existing
+    shell bootstrap. It does not install Node.js automatically.
 
-ORIGINAL MANIFEST: COMPLETE NAMESPACE EXAMPLE
-    A working project may have these files:
+COMPLETE EXAMPLE
+    Given these files:
 
         project/
           modules-js.json
@@ -72,17 +69,13 @@ ORIGINAL MANIFEST: COMPLETE NAMESPACE EXAMPLE
           ]
         }
 
-    Compile to stdout (as in the original jsc):
+    Compile to standard output:
 
         jsc modules-js.json > bundle.js
 
-    Or specify the output file:
+    Or compile directly to a file:
 
         jsc modules-js.json bundle.js
-
-    bundle.js is a standalone classic script. When loaded it immediately
-    executes source files in descriptor order and creates the namespaces.
-    It does not need any separate JavaScript module registry library.
 
     In a browser, load bundle.js:
 
@@ -98,380 +91,110 @@ ORIGINAL MANIFEST: COMPLETE NAMESPACE EXAMPLE
               String(m.srv.Facade());
           </script>
 
-ORIGINAL MANIFEST REFERENCE
-    The root object must contain a nonempty "modules" array.
+    The result is 42. The standalone classic script creates namespace m,
+    m.srv and m.srv.data as it executes. In the data namespace, MyClass is
+    directly usable by later source files; in m.srv, data.MyClass is usable;
+    qualified access through m.srv.data.MyClass is also available.
 
-    A namespace node contains:
-        name       optional valid JavaScript identifier for a namespace
-        modules    ordered array of nested namespace and/or source nodes
+MODULES.JSON FORMAT
+    The root object contains an ordered "modules" array.
 
-    A source node contains:
-        file       relative filename of a JavaScript source
-        symbols    optional comma-separated names exported to this namespace
+    A namespace node:
+        name       namespace name: one valid JavaScript identifier
+        modules    nested ordered array of namespace and source nodes
 
-    Example of multiple symbols from ONE source:
+    A source node:
+        file       relative source pathname
+        symbols    optional comma-separated exported identifiers
+
+    Example of multiple exports:
 
         {"file": "m/util/clock.js", "symbols": "clock,clockUTC"}
 
-    Empty or omitted "symbols" permits side-effect-only source files:
+    Example of a side-effect-only source:
 
         {"file": "m/init.js", "symbols": ""}
 
-    The source is included literally inside the namespace's lexical
-    function scope. Its declarations remain usable in later files in
-    the same scope. Each listed symbol becomes a property of that
-    namespace. The descriptor's order is part of the program meaning:
-    loading a consumer before a required declaration is not automatically
-    corrected by the compiler.
+    The files are included in JSON order. jsc does not automatically sort
+    them, discover references or build a dependency graph. The project
+    author chooses order. Source paths are relative to the directory of
+    the manifest, rather than the shell working directory. Sources must
+    resolve inside that directory. Unknown record members, unsafe names
+    and invalid output syntax are rejected.
 
-    This is NOT a Node package graph. No "deps", "id" or "require" metadata
-    is needed in original manifests. Source paths resolve relative to the
-    directory containing the JSON, including when jsc is invoked elsewhere.
-    They must resolve inside that directory (including symlink resolution).
+    Namespace objects can be reopened by a subsequently loaded bundle.
+    Previous exported namespace members remain accessible when doing so.
 
-    Namespace and symbol names must be valid, safe JS identifiers.
-    Invalid JSON, paths, identifiers and final JS syntax are rejected
-    without replacing previously compiled output files.
-
-    Namespace objects from an earlier bundle can be reopened by compiling
-    a second ordered manifest. Existing exported namespace members are
-    imported into that scope by the generated classic wrapper, preserving
-    the original namespace reuse behavior.
-
-ORIGINAL CSS MANIFEST
-    jsc also accepts source lists of CSS files, in declared order:
+CSS
+    A CSS manifest is another ordered source list, without namespaces:
 
         {
           "modules": [
-            {"file": "style/reset.css"},
-            {"file": "style/layout.css"},
-            {"file": "style/theme.css"}
+            {"file": "css/reset.css"},
+            {"file": "css/layout.css"}
           ]
         }
 
-    Compiling:
+    Example:
 
-        jsc modules-css.json style.css
+        jsc modules-css.json styles.css
 
-    joins the stylesheet contents without JavaScript wrappers. CSS entries
-    do not declare JS symbols or namespace names. JS and CSS are handled
-    in SEPARATE manifests; mixed source types are rejected.
+    Concatenation respects input order. JavaScript and CSS belong in
+    different manifests and are not mixed inside one assembly.
 
-BUILD ARTEFACTS AND MINIFICATION
-    With one input operand, generated JS or CSS is emitted directly to
-    stdout. A shell redirection can write it to any destination:
+OUTPUT AND RELEASE ARTIFACTS
+    With one operand, source bytes are emitted only to stdout. Redirect
+    this stream to produce your file; no additional files are created.
 
-        jsc modules-js.json > output.js
+    With an explicit output filename, jsc writes the assembled file.
+    It additionally produces gzip output. When an already-installed
+    compatible minifier is available, it produces <name>.min.js or
+    <name>.min.css and the corresponding .gz of that minified file.
 
-    With an explicit output filename, the raw assembly is written to that
-    file. A gzip release is generated offline using Node's built-in gzip.
+    JavaScript minification uses an installed google-closure-compiler.
+    CSS minification uses an installed uglifycss. If the minifier is
+    absent, the raw assembly remains usable and its .gz is produced
+    with a warning. jsc does not install tools or access the network.
 
-    For .js outputs, an already installed "google-closure-compiler" (as
-    used by original jsc) is preferred; "terser" is a supported fallback.
-    For .css outputs an already installed "uglifycss" can be used.
-    If available, the minifier writes output.min.js or output.min.css
-    and gzip compresses that minified sibling to output.min.js.gz or
-    output.min.css.gz, respectively.
+    Syntax/input validation is performed before replacing output.
+    A filesystem write failure is not an atomic rollback guarantee.
 
-    If no minifier is available, compilation STILL succeeds, emits a
-    jsc.legacy-minifier-unavailable warning on stderr, and produces
-    output.js.gz or output.css.gz containing unminified bytes. No
-    implicit npx installation, network download or cloud requirement is
-    performed. When output is redirected from stdout, no secondary
-    minified or gzip artifacts are created.
+ERRORS
+    Errors are reported with distinct jsc.<message-id> diagnostics and
+    nonzero statuses. The m launcher uses log/fatal for errors occurring
+    before Node starts; the Node compiler reports its own errors without
+    generating a duplicate shell fatal.
 
-    Do not rely on a minified file's existence unless your build
-    environment provides the appropriate installed tool and the step
-    succeeded. A minifier's reported failure is a real build failure,
-    not silently ignored.
+    Major compiler statuses:
+         1   Invalid operands
+         2   Manifest unreadable
+         3   No sources declared
+         4   Source pathname unresolved
+         7   Invalid assembled JavaScript
+         8   Output cannot be written
+         9   Unexpected compiler failure
+        11   Invalid manifest JSON
+        12   Invalid manifest shape
+        20   Source outside manifest directory
+        21   Unreadable source file
+        23   Invalid namespace or symbol identifier
+        24   Invalid source/namespace record
+        25   Mixed JS/CSS or CSS namespace
+        26   Duplicate export symbol
+        27   Installed minifier failed
+        28   Gzip output failed
 
-SEPARATE OPTIONAL MODULE-REGISTRY MODE
-    A manifest whose root explicitly contains "version": 1 uses the
-    newer experimental id/file/deps representation and produces
-    JscRuntime.installBatch registrations. It does NOT perform original
-    namespace assembly. This mode remains supported for existing
-    experimental consumers, but it is not required or recommended for
-    the original namespace-oriented project layout.
-
-    In this OPTIONAL mode, the compiled script must be loaded after
-    dynamic-loader.lib.js and modules execute when explicitly required.
-    The following quickstart and reference apply ONLY to that mode.
-
-QUICK START: COMPLETE TWO-MODULE PROJECT
-    Create a directory for sources:
-
-        mkdir -p demo/public
-        cd demo
-
-    Create counter.js:
-
-        exports.next = function () {
-          return 42;
-        };
-
-    Create application.js:
-
-        const counter = require('counter');
-        module.exports = {
-          run: function () {
-            return counter.next();
-          }
-        };
-
-    Create modules.json in the SAME directory:
-
-        {
-          "version": 1,
-          "modules": [
-            {
-              "id": "counter",
-              "file": "counter.js",
-              "deps": []
-            },
-            {
-              "id": "application",
-              "file": "application.js",
-              "deps": ["counter"]
-            }
-          ]
-        }
-
-    Compile:
-
-        jsc modules.json public/compiled.js
-
-    The output registers counter and application but does not execute them.
-    Copy lib/sys/js/dynamic-loader.lib.js from the active rumiai-os tree
-    to demo/public/dynamic-loader.lib.js (or serve it using an equivalent
-    URL).
-
-    Then create public/index.html:
-
-        <!doctype html>
-        <meta charset="utf-8">
-        <script src="dynamic-loader.lib.js"></script>
-        <script src="compiled.js"></script>
-        <body>
-          <div id="result"></div>
-          <script>
-            const app = JscRuntime.require('application');
-            document.getElementById('result').textContent = String(app.run());
-          </script>
-
-    Serve public/ as a static web root and open index.html in a browser.
-    The page displays 42. Merely loading compiled.js does not execute
-    application; the explicit require() does.
-
-OPTIONAL ID/DEPS MANIFEST JSON REFERENCE
-    A manifest is one JSON OBJECT. Exact top-level members:
-
-        version   required number, currently only 1
-        modules   required nonempty array of module records
-
-    No other top-level members are accepted.
-
-    Each module record has:
-
-        id        required unique string used by require() and registrations
-        file      required source filename relative to modules.json
-        deps      required array of module IDs; [] for no dependencies
-        format    optional string; when present it must be "classic"
-
-    No other record members are accepted.
-
-    Example with the optional explicit source format:
-
-        {
-          "version": 1,
-          "modules": [
-            {
-              "id": "math",
-              "file": "src/math.js",
-              "deps": [],
-              "format": "classic"
-            },
-            {
-              "id": "app",
-              "file": "src/app.js",
-              "deps": ["math"]
-            }
-          ]
-        }
-
-    Source path resolution is relative to the directory containing the
-    manifest, NOT the shell's current working directory. The source must
-    exist and resolve inside that manifest directory, including after
-    symbolic-link resolution. The output pathname is relative to the
-    current working directory unless absolute. Its parent must exist.
-
-    Module IDs use an ASCII letter first, followed by ASCII letters,
-    digits, dots, underscores, slashes and hyphens. A substring ".."
-    anywhere in an ID is rejected. IDs are exact and case-sensitive.
-
-    Every ID in deps must be declared by some module in the same manifest.
-    Duplicate IDs, duplicate dependency entries, self-dependencies,
-    missing dependencies and cycles are rejected. Registration order is
-    not required to match dependency order; the whole graph is validated.
-
-    For separate independently compiled optional modules, each manifest
-    must currently be self-contained: dependencies must be declared in
-    that manifest. Compiling only a module that refers to a dependency
-    declared solely in an earlier bundle will fail. A module with no
-    dependencies can be compiled separately and installed later.
-
-OPTIONAL ID/DEPS SOURCE CONTRACT
-    A .js source is the BODY of a function receiving three arguments:
-
-        require(id)    obtain a declared dependency, evaluated on demand
-        module         object with exports and onDispose(callback)
-        exports        initial shorthand reference to module.exports
-
-    To export properties, use:
-
-        exports.answer = 42;
-
-    Or replace the exported value:
-
-        module.exports = function () { return 42; };
-
-    Reassigning the local variable exports does not replace module.exports.
-    require('id') is restricted to IDs declared in that module's deps.
-
-    This is a controlled classic-JavaScript module system, NOT standard
-    Node.js require, Node package resolution or native ECMAScript Modules.
-    Static "import ... from", "export" and "import.meta" are rejected.
-    Native import() used in otherwise classic code remains outside the
-    loader's registry.
-
-OPTIONAL ID/DEPS OUTPUT AND RUNTIME CONTRACT
-    jsc emits a single ordinary classic script equivalent in shape to:
-
-        globalThis.JscRuntime.installBatch([
-          {
-            id: "counter",
-            deps: [],
-            factory: function (require, module, exports) {
-              'use strict';
-              // contents of counter.js
-            }
-          },
-          {
-            id: "application",
-            deps: ["counter"],
-            factory: function (require, module, exports) {
-              'use strict';
-              // contents of application.js
-            }
-          }
-        ]);
-
-    Do not edit generated registrations to invoke the factories directly.
-    The loader must be loaded first or executing compiled.js fails because
-    globalThis.JscRuntime is unavailable.
-
-    A failed input/syntax/dependency validation does not overwrite an
-    existing compiled output. A failure while writing an output file is
-    NOT guaranteed to leave the previous file intact.
-
-OPTIONAL ID/DEPS DYNAMIC USE AND RELOADING
-    Registering compiled output does not imply module execution:
-
-        JscRuntime.state()              // {registered, active, names}
-        JscRuntime.require('application')
-
-    For development, compile a separate patch manifest targeting an existing
-    module ID, then load its generated patch script:
-
-        await JscRuntime.loadScript('./patch.js', {
-          expect: 'counter'
-        });
-
-    When patch.js registers a replacement, the loader invalidates the
-    module and its instantiated dependents. After replacement, obtain
-    current exports again with JscRuntime.require('application').
-    Existing captured exports are not live bindings. Applications using
-    timers, DOM listeners or other resources must register cleanup with
-    module.onDispose(callback).
-
-    The loader does NOT accept modules.json directly, fetch source files
-    from that JSON, or watch files automatically. The manifest is a
-    BUILD-TIME input; loadScript() fetches COMPILED JavaScript registrations.
-
-ORIGINAL VS OPTIONAL MODE
-    Original m/jsc syntax is restored as ordered namespace and symbol
-    assembly without id/deps. Its standard output behavior and CSS source
-    lists are supported. The optional explicit registry mode is separate.
-    The independent dynamic loader currently exposes the JscRuntime module
-    registry; it is NOT the original browser JS/CSS source-list loader.
-
-
-OPERANDS AND ENVIRONMENT
-    modules.json
-        JSON descriptor selecting the original ordered modules tree or,
-        when version: 1 is present, the optional explicit registry mode.
-
-    output (optional)
-        Destination filename. Omit to write source code to stdout.
-        With a destination in original mode, gzip and, when supported by
-        installed minifiers, additional minified release artifacts are built.
-
-    The public shell launcher is bootstrap-integrated through m and selects
-    the default m-managed nodejs package. It neither downloads nor
-    installs Node.js. It uses m log/fatal for launcher failures, whereas
-    the separately running compiler emits its own jsc.<message-id> errors.
-
-EXIT STATUS
-    Launcher errors (m fatal):
-        1   Invalid command argument count/empty pathname
-        2   Engine missing, unreadable or invalid type/mode
-        3   No default m-managed Node.js runtime
-        4   Node executable cannot be resolved
-
-    Compiler errors (Node subprocess; its status is propagated as-is):
-        0   Success
-        1   Invalid arguments to compiler API/CLI
-        2   Manifest unreadable
-        3   No modules declared
-        4   Source pathname could not be resolved
-        5   Invalid classic JavaScript source syntax
-        6   Circular dependency graph
-        7   Generated output syntax failure
-        8   Destination write failure
-        9   Unexpected compiler failure
-       10   Invalid module ID
-       11   Invalid manifest JSON
-       12   Invalid manifest shape
-       13   Invalid module record
-       14   Duplicate module ID
-       15   Unsupported source format
-       16   Invalid module filename
-       17   deps is not an array
-       18   Module depends on itself
-       19   Duplicate dependency entry
-       20   Source resolves outside manifest tree
-       21   Module content unreadable
-       22   Missing dependency ID
-       23   Invalid legacy namespace/symbol identifier
-       24   Invalid legacy node or CSS symbol metadata
-       25   Mixed CSS and JavaScript legacy sources
-       26   Duplicate legacy export symbol
-       27   Installed external minifier failed
-       28   Gzip release artifact failed
-
-    Numeric statuses 1-4 overlap between the launcher and compiler.
-    Use the diagnostic identity to distinguish the exact failure branch.
-    Launcher messages are localized jsc.<message-id> log/fatal events;
-    Node messages are "[error] [jsc.<message-id>]" with context.
-    Successful compilation prints module count and generated byte count.
+    Launcher statuses:
+         1   Missing/invalid operands
+         2   Compiler engine unavailable
+         3   Default m-managed nodejs runtime unavailable
+         4   Node executable unavailable
 
 FILES
-    bin/sys/jsc                         executable command
-    lib/sys/js/jsc.lib.js               Node.js compiler implementation
-    lib/sys/js/dynamic-loader.lib.js    independent classic-script runtime
-    res/sys/manual/jsc                  command reference
-    res/sys/manual/dynamic-loader.lib.js loader reference
+    bin/sys/jsc
+    lib/sys/js/jsc.lib.js
+    res/sys/manual/jsc
 
 SEE ALSO
-    manual sys dynamic-loader.lib.js
     manual sys jsc.lib.js
-    manual sys mk
+    manual sys dynamic-loader.lib.js
