@@ -82,14 +82,21 @@ ORIGINAL MANIFEST: COMPLETE NAMESPACE EXAMPLE
 
     bundle.js is a standalone classic script. When loaded it immediately
     executes source files in descriptor order and creates the namespaces.
-    It does not need any separate JavaScript module registry library:
+    It does not need any separate JavaScript module registry library.
 
+    In a browser, load bundle.js:
+
+        <!doctype html>
+        <meta charset="utf-8">
         <script src="bundle.js"></script>
-        <script>
-          console.log(m.srv.data.MyClass());  // 42
-          console.log(m.srv.data.Other());    // 42
-          console.log(m.srv.Facade());        // 42
-        </script>
+        <body>
+          <div id="result"></div>
+          <script>
+            console.log(m.srv.data.MyClass()); // 42
+            console.log(m.srv.data.Other());   // 42
+            document.getElementById('result').textContent =
+              String(m.srv.Facade());
+          </script>
 
 ORIGINAL MANIFEST REFERENCE
     The root object must contain a nonempty "modules" array.
