@@ -11,8 +11,9 @@ PUBLIC FUNCTIONS
 
         args must be [manifestPath, outputPath]. Returns a Promise resolving
         to process-style status 0 on success and a nonzero status on failure.
-        Emits a concise success line to standard output or a branch-specific
-        compiler diagnostic to standard error. The caller owns the process
+        Emits a concise success line on stdout, or [error] with a distinct
+        jsc.<message-id> identity and context on stderr. It runs outside
+        the m shell process and does not have direct access to log/fatal. The caller owns the process
         lifecycle; the function does not exit its caller process.
 
         The compiler checks manifest shape, source containment, module
