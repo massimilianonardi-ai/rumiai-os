@@ -1,0 +1,42 @@
+name: jsc and classic dynamic loader
+
+on:
+  push:
+    paths:
+      - 'bin/sys/jsc'
+      - 'lib/sys/js/jsc.lib.js'
+      - 'lib/sys/js/dynamic-loader.lib.js'
+      - 'res/sys/manual/jsc'
+      - 'res/sys/manual/jsc.lib.js'
+      - 'res/sys/manual/dynamic-loader.lib.js'
+      - '.github/workflows/jsc-classic-loader.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  jsc:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out actual product
+        uses: actions/checkout@v4
+      - name: Check out permanent test suite at pinned revision
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 59069e1315f70d55b2de1957b8e81f5bbbbce049
+          path: .jsc-test-suite
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify real published command and compiler/loader behavior
+        shell: bash
+        run: |
+          export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
+          ./.jsc-test-suite/tests/rumiai-os/jsc/compiler-loader.test
+      - name: Validate complete JavaScript engines as real Node sources
+        run: |
+          node --check lib/sys/js/jsc.lib.js
+          node --check lib/sys/js/dynamic-loader.lib.js
+          sh -n bin/sys/jsc
