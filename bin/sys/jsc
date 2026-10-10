@@ -2,8 +2,12 @@
 
 main()
 {
-  [ "$#" -eq 2 ] && [ -n "$1" ] && [ -n "$2" ] ||
-    fatal 1 jsc invalid-arguments expected 2 received "$#"
+  [ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -n "$1" ] ||
+    fatal 1 jsc invalid-arguments expected '1-or-2' received "$#"
+  if [ "$#" -eq 2 ] && [ -z "$2" ]
+  then
+    fatal 1 jsc invalid-arguments expected 'nonempty-output' received "$#"
+  fi
 
   jsc_engine="$m_LIB_DIR/sys/js/jsc.lib.js"
   [ -f "$jsc_engine" ] && [ ! -L "$jsc_engine" ] &&
@@ -20,7 +24,7 @@ main()
     fatal 4 jsc node-command-unavailable command node
 
   log debug jsc runtime-selected command "$jsc_node"
-  log info jsc compilation-started manifest "$1" output "$2"
+  log info jsc compilation-started manifest "$1" output "${2-stdout}"
 
   # Node executes outside the m shell and reports specific compilation errors
   # itself; propagating its status avoids a redundant shell fatal message.
