@@ -53,7 +53,11 @@ FUNCTIONS
         The concrete identity determines the exact stream: identities carrying
         !<osarch> use that stream, while platform-independent identities use all.
         Range numbering must be contiguous from n0001 and anchors must be strictly
-        increasing according to the stream repository adapter.
+        increasing according to the stream repository adapter. Anchor ordering is
+        validated once in ascending range order; after validation, selection walks
+        from the newest range toward the oldest and stops at the first anchor not
+        newer than the concrete version. This preserves range semantics while
+        avoiding comparisons against older anchors that cannot affect the result.
 
         On success <range-variable> receives the selected range path.
 

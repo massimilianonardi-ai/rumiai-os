@@ -281,7 +281,7 @@ pkg_catalog_range_resolve()
 
   pkg_catalog_expected=1
   pkg_catalog_previous_anchor=
-  pkg_catalog_selected=
+  pkg_catalog_reverse_ranges=
 
   while IFS= read -r pkg_catalog_name
   do
@@ -296,18 +296,35 @@ pkg_catalog_range_resolve()
       [ "$pkg_catalog_order" = -1 ] || return 1
     fi
 
-    pkg_catalog_order="$(_pkg_catalog_compare_versions "$pkg_catalog_adapter" "$pkg_catalog_repository" "$pkg_catalog_anchor" "$pkg_catalog_version")" || return 1
-    case "$pkg_catalog_order" in
-      -1|0) pkg_catalog_selected="$pkg_catalog_stream/$pkg_catalog_name" ;;
-      1) : ;;
-      *) return 1 ;;
-    esac
+    if [ -n "$pkg_catalog_reverse_ranges" ]
+    then
+      pkg_catalog_reverse_ranges="$pkg_catalog_name$pkg_catalog_lf$pkg_catalog_reverse_ranges"
+    else
+      pkg_catalog_reverse_ranges=$pkg_catalog_name
+    fi
 
     pkg_catalog_previous_anchor=$pkg_catalog_anchor
     pkg_catalog_expected=$((pkg_catalog_expected + 1))
   done <<EOF_PKG_CATALOG_RANGES
 $pkg_catalog_ranges
 EOF_PKG_CATALOG_RANGES
+
+  pkg_catalog_selected=
+  while IFS= read -r pkg_catalog_name
+  do
+    pkg_catalog_anchor=${pkg_catalog_name#*=}
+    pkg_catalog_order="$(_pkg_catalog_compare_versions "$pkg_catalog_adapter" "$pkg_catalog_repository" "$pkg_catalog_anchor" "$pkg_catalog_version")" || return 1
+    case "$pkg_catalog_order" in
+      -1|0)
+        pkg_catalog_selected="$pkg_catalog_stream/$pkg_catalog_name"
+        break
+        ;;
+      1) : ;;
+      *) return 1 ;;
+    esac
+  done <<EOF_PKG_CATALOG_REVERSE_RANGES
+$pkg_catalog_reverse_ranges
+EOF_PKG_CATALOG_REVERSE_RANGES
 
   [ -n "$pkg_catalog_selected" ] || return 1
   _pkg_catalog_assign "$pkg_catalog_output_range" "$pkg_catalog_selected"
