@@ -57,7 +57,7 @@ _pkg_repository_github_validate_repository()
     [ -e "$pkg_repository_github_repository_item" ] || [ -L "$pkg_repository_github_repository_item" ] || continue
     pkg_repository_github_repository_name=${pkg_repository_github_repository_item##*/}
     case "$pkg_repository_github_repository_name" in
-      type|owner|repository)
+      type|owner|repository|versions)
         [ -f "$pkg_repository_github_repository_item" ] && \
         [ ! -L "$pkg_repository_github_repository_item" ] && \
         [ ! -x "$pkg_repository_github_repository_item" ] || return 1
@@ -144,6 +144,34 @@ BEGIN {
 ' || return 1
   fi
 }
+
+_pkg_repository_github_index_order()
+(
+  [ "$#" -eq 3 ] || return 2
+  pkg_repository_github_index="$1/versions"
+  [ -e "$pkg_repository_github_index" ] || [ -L "$pkg_repository_github_index" ] || return 3
+  [ -f "$pkg_repository_github_index" ] && [ ! -L "$pkg_repository_github_index" ] && \
+    [ -r "$pkg_repository_github_index" ] && [ ! -x "$pkg_repository_github_index" ] || return 1
+
+  # Missing versions require live discovery (status 3); corrupt data fails closed.
+  LC_ALL=C command -p -- awk -v left="$2" -v right="$3" '
+  {
+    if ($0 !~ /^[A-Za-z0-9][A-Za-z0-9._+~-]*$/ || seen[$0]++) {
+      invalid=1
+      exit 1
+    }
+    if ($0 == left) left_position=NR
+    if ($0 == right) right_position=NR
+  }
+  END {
+    if (invalid || NR == 0) exit 1
+    if (!left_position || !right_position) exit 3
+    if (left_position < right_position) print "-1"
+    else if (left_position > right_position) print "1"
+    else print "0"
+  }
+  ' "$pkg_repository_github_index"
+)
 
 _pkg_repository_github_release_order_key()
 (
@@ -271,6 +299,17 @@ pkg_repository_compare_versions()
     return 0
   fi
 
+  if [ -e "$pkg_repository_github_repository_dir/versions" ] || [ -L "$pkg_repository_github_repository_dir/versions" ]
+  then
+    _pkg_repository_github_index_order "$pkg_repository_github_repository_dir" "$pkg_repository_github_left" "$pkg_repository_github_right"
+    pkg_repository_github_index_status=$?
+    case "$pkg_repository_github_index_status" in
+      0) return 0 ;;
+      3) : ;;
+      *) return 1 ;;
+    esac
+  fi
+
   pkg_repository_github_left_key="$(_pkg_repository_github_release_order_key "$pkg_repository_github_repository_dir" "$pkg_repository_github_left")" || return 1
 
   pkg_repository_github_right_key="$(_pkg_repository_github_release_order_key "$pkg_repository_github_repository_dir" "$pkg_repository_github_right")" || return 1
@@ -299,6 +338,19 @@ pkg_repository_resolve_version()
     pkg_repository_github_requested=$2
     _pkg_repository_github_validate_version "$pkg_repository_github_requested" || return 1
     pkg_repository_github_path=/releases/tags/$pkg_repository_github_requested
+    if [ -e "$1/versions" ] || [ -L "$1/versions" ]
+    then
+      _pkg_repository_github_index_order "$1" "$pkg_repository_github_requested" "$pkg_repository_github_requested" >/dev/null
+      pkg_repository_github_index_status=$?
+      case "$pkg_repository_github_index_status" in
+        0)
+          printf -- '%s\n' "$pkg_repository_github_requested"
+          return 0
+          ;;
+        3) : ;;
+        *) return 1 ;;
+      esac
+    fi
   fi
 
   pkg_repository_github_body="$(_pkg_repository_github_get "$pkg_repository_github_path" pkg_repository_resolve_version)" || return 1
