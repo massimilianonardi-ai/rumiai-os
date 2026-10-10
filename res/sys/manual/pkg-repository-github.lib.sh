@@ -12,6 +12,11 @@ DESCRIPTION
         owner
         repository
 
+    An optional repository/versions file contains known stable release tags,
+    one per line, in ascending GitHub chronology. Both-indexed historical
+    comparisons and exact indexed-version resolution avoid discovery HTTP.
+    Unknown tags still use live lookup. Malformed indices fail closed.
+
     and may additionally contain the optional typed artifact override
     subdirectories:
 
@@ -44,7 +49,7 @@ FUNCTIONS
 
     pkg_repository_compare_versions <repository-dir> <left> <right>
         Print -1, 0 or 1 according to GitHub release chronology. Equality is
-        resolved locally.
+        resolved locally; indexed historical comparisons also avoid HTTP.
 
     pkg_repository_resolve_version <repository-dir> [version]
         Validate and print an exact stable GitHub release tag, or resolve and

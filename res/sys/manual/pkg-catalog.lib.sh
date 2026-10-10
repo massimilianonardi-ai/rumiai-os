@@ -44,7 +44,11 @@ FUNCTIONS
         Resolve a repository version through the adapter owned by one catalog
         stream. With <requested-version>, resolution must return that exact version;
         without it, the repository adapter selects its normal current/latest
-        version. On success <version-variable> receives the validated version.
+        version. Failure of live latest discovery is not silently replaced
+        with a historical version. If a valid repository/versions index exists,
+        the diagnostic suggests an explicitly pinned known version for a
+        separate installation attempt; artifact availability is not guaranteed.
+        On success <version-variable> receives the validated version.
 
     pkg_catalog_range_resolve <range-variable> <catalog> <concrete>
         Resolve an already concrete package identity to its applicable catalog
