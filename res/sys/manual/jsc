@@ -1,100 +1,287 @@
 NAME
-    jsc - compile explicitly described classic JavaScript modules
+    jsc - compile a declared graph of classic JavaScript modules
 
 SYNOPSIS
     jsc <manifest.json> <output.js>
 
-DESCRIPTION
-    Compile a version-1 JSON module manifest into a classic JavaScript script
-    that registers every declared module through JscRuntime.installBatch.
+WHAT JSC DOES
+    jsc converts JavaScript module source files into one classic script
+    containing module REGISTRATIONS. It does not execute the modules.
 
-    jsc is a compiler. It does not embed, install or execute the independent
-    JavaScript dynamic loader. The consumer loads dynamic-loader.lib.js first,
-    then the compiled registration script. For a single-file distribution,
-    an explicit separate packaging step can concatenate the loader and the
-    compiler output.
+    The separate dynamic-loader.lib.js library owns the runtime registry,
+    module evaluation, dependency resolution and dynamic replacement.
 
-    The launcher is an m bootstrap-integrated command. It uses the default
-    m-managed nodejs runtime; it does not install nodejs implicitly.
+    Typical workflow:
 
-OPERANDS
+        write source files + modules.json
+            -> jsc modules.json compiled.js
+            -> load dynamic-loader.lib.js before compiled.js
+            -> JscRuntime.require('application')
+
+    A default m-managed Node.js runtime (22+) is required on the build host.
+    No Node.js runtime is required by the compiled modules in the browser.
+
+QUICK START: COMPLETE TWO-MODULE PROJECT
+    Create a directory for sources:
+
+        mkdir -p demo/public
+        cd demo
+
+    Create counter.js:
+
+        exports.next = function () {
+          return 42;
+        };
+
+    Create application.js:
+
+        const counter = require('counter');
+        module.exports = {
+          run: function () {
+            return counter.next();
+          }
+        };
+
+    Create modules.json in the SAME directory:
+
+        {
+          "version": 1,
+          "modules": [
+            {
+              "id": "counter",
+              "file": "counter.js",
+              "deps": []
+            },
+            {
+              "id": "application",
+              "file": "application.js",
+              "deps": ["counter"]
+            }
+          ]
+        }
+
+    Compile:
+
+        jsc modules.json public/compiled.js
+
+    The output registers counter and application but does not execute them.
+    Copy lib/sys/js/dynamic-loader.lib.js from the active rumiai-os tree
+    to demo/public/dynamic-loader.lib.js (or serve it using an equivalent
+    URL). Then create public/index.html:
+
+        <!doctype html>
+        <meta charset="utf-8">
+        <script src="dynamic-loader.lib.js"></script>
+        <script src="compiled.js"></script>
+        <script>
+          const app = JscRuntime.require('application');
+          document.body.append(String(app.run()));
+        </script>
+
+    Serve public/ as a static web root and open index.html in a browser.
+    The page displays 42. Merely loading compiled.js does not execute
+    application; the explicit require() does.
+
+MANIFEST JSON REFERENCE
+    A manifest is one JSON OBJECT. Exact top-level members:
+
+        version   required number, currently only 1
+        modules   required nonempty array of module records
+
+    No other top-level members are accepted.
+
+    Each module record has:
+
+        id        required unique string used by require() and registrations
+        file      required source filename relative to modules.json
+        deps      required array of module IDs; [] for no dependencies
+        format    optional string; when present it must be "classic"
+
+    No other record members are accepted.
+
+    Example with the optional explicit source format:
+
+        {
+          "version": 1,
+          "modules": [
+            {
+              "id": "math",
+              "file": "src/math.js",
+              "deps": [],
+              "format": "classic"
+            },
+            {
+              "id": "app",
+              "file": "src/app.js",
+              "deps": ["math"]
+            }
+          ]
+        }
+
+    Source path resolution is relative to the directory containing the
+    manifest, NOT the shell's current working directory. The source must
+    exist and resolve inside that manifest directory, including after
+    symbolic-link resolution. The output pathname is relative to the
+    current working directory unless absolute. Its parent must exist.
+
+    Module IDs use an ASCII letter first, followed by ASCII letters,
+    digits, dots, underscores, slashes and hyphens. A substring ".."
+    anywhere in an ID is rejected. IDs are exact and case-sensitive.
+
+    Every ID in deps must be declared by some module in the same manifest.
+    Duplicate IDs, duplicate dependency entries, self-dependencies,
+    missing dependencies and cycles are rejected. Registration order is
+    not required to match dependency order; the whole graph is validated.
+
+    For separate independently compiled optional modules, each manifest
+    must currently be self-contained: dependencies must be declared in
+    that manifest. Compiling only a module that refers to a dependency
+    declared solely in an earlier bundle will fail. A module with no
+    dependencies can be compiled separately and installed later.
+
+SOURCE CONTRACT
+    A .js source is the BODY of a function receiving three arguments:
+
+        require(id)    obtain a declared dependency, evaluated on demand
+        module         object with exports and onDispose(callback)
+        exports        initial shorthand reference to module.exports
+
+    To export properties, use:
+
+        exports.answer = 42;
+
+    Or replace the exported value:
+
+        module.exports = function () { return 42; };
+
+    Reassigning the local variable exports does not replace module.exports.
+    require('id') is restricted to IDs declared in that module's deps.
+
+    This is a controlled classic-JavaScript module system, NOT standard
+    Node.js require, Node package resolution or native ECMAScript Modules.
+    Static "import ... from", "export" and "import.meta" are rejected.
+    Native import() used in otherwise classic code remains outside the
+    loader's registry.
+
+OUTPUT AND RUNTIME CONTRACT
+    jsc emits a single ordinary classic script equivalent in shape to:
+
+        globalThis.JscRuntime.installBatch([
+          {
+            id: "counter",
+            deps: [],
+            factory: function (require, module, exports) {
+              'use strict';
+              // contents of counter.js
+            }
+          },
+          {
+            id: "application",
+            deps: ["counter"],
+            factory: function (require, module, exports) {
+              'use strict';
+              // contents of application.js
+            }
+          }
+        ]);
+
+    Do not edit generated registrations to invoke the factories directly.
+    The loader must be loaded first or executing compiled.js fails because
+    globalThis.JscRuntime is unavailable.
+
+    A failed input/syntax/dependency validation does not overwrite an
+    existing compiled output. A failure while writing an output file is
+    NOT guaranteed to leave the previous file intact.
+
+DYNAMIC USE AND RELOADING
+    Registering compiled output does not imply module execution:
+
+        JscRuntime.state()              // {registered, active, names}
+        JscRuntime.require('application')
+
+    For development, compile a separate patch manifest targeting an existing
+    module ID, then load its generated patch script:
+
+        await JscRuntime.loadScript('./patch.js', {
+          expect: 'counter'
+        });
+
+    When patch.js registers a replacement, the loader invalidates the
+    module and its instantiated dependents. After replacement, obtain
+    current exports again with JscRuntime.require('application').
+    Existing captured exports are not live bindings. Applications using
+    timers, DOM listeners or other resources must register cleanup with
+    module.onDispose(callback).
+
+    The loader does NOT accept modules.json directly, fetch source files
+    from that JSON, or watch files automatically. The manifest is a
+    BUILD-TIME input; loadScript() fetches COMPILED JavaScript registrations.
+
+LEGACY COMPATIBILITY BOUNDARY
+    This version does NOT accept the original m/jsc nested manifest shape
+    using "modules", "name" and "symbols" inside subtrees. It does not
+    automatically create symbol namespaces, compile CSS, minify JavaScript
+    or emit gzip files. Those are not implied by the name jsc. Migrating
+    old manifests needs an explicit design/migration decision.
+
+OPERANDS AND ENVIRONMENT
     manifest.json
-        Readable JSON object with version 1 and modules array. Each module has
-        id, relative file and deps array; optional format can only be classic.
+        Input JSON manifest. Relative source names resolve from its parent.
 
     output.js
-        Output file receiving one classic registration script.
+        Destination path. The parent directory must exist.
 
-SOURCE FORMAT
-    Module files contain function-body JavaScript. At runtime each factory
-    receives require, module and exports. Dependencies must be declared in
-    the manifest. A module may set module.exports or exports.
-
-    Static ESM import/export and import.meta syntax are not translated:
-    incompatible sources are rejected. ESM projects use their separate
-    compiler/loader path. Dynamic native import() is not managed by jsc.
-
-OUTPUT
-    Compilation verifies source syntax, module identifiers, manifest-tree
-    containment and dependency graph completeness and acyclicity before
-    writing output. Failed validation preserves any previous output file.
+    The public shell launcher is bootstrap-integrated through m and selects
+    the default m-managed nodejs package. It neither downloads nor
+    installs Node.js. It uses m log/fatal for launcher failures, whereas
+    the separately running compiler emits its own jsc.<message-id> errors.
 
 EXIT STATUS
-    The launcher and its Node.js compiler have separate failure boundaries.
-    A Node compiler exit status is propagated unchanged. The diagnostic
-    jsc.<message-id> identifies the branch when numeric values overlap.
+    Launcher errors (m fatal):
+        1   Invalid command argument count/empty pathname
+        2   Engine missing, unreadable or invalid type/mode
+        3   No default m-managed Node.js runtime
+        4   Node executable cannot be resolved
 
-    Launcher (m fatal):
-    1    Invalid command arguments.
-    2    Compiler engine unavailable.
-    3    Default m-managed nodejs runtime unavailable.
-    4    Node command unavailable.
+    Compiler errors (Node subprocess; its status is propagated as-is):
+        0   Success
+        1   Invalid arguments to compiler API/CLI
+        2   Manifest unreadable
+        3   No modules declared
+        4   Source pathname could not be resolved
+        5   Invalid classic JavaScript source syntax
+        6   Circular dependency graph
+        7   Generated output syntax failure
+        8   Destination write failure
+        9   Unexpected compiler failure
+       10   Invalid module ID
+       11   Invalid manifest JSON
+       12   Invalid manifest shape
+       13   Invalid module record
+       14   Duplicate module ID
+       15   Unsupported source format
+       16   Invalid module filename
+       17   deps is not an array
+       18   Module depends on itself
+       19   Duplicate dependency entry
+       20   Source resolves outside manifest tree
+       21   Module content unreadable
+       22   Missing dependency ID
 
-    Node compiler:
-    0    Success.
-    1    Invalid arguments.
-    2    Manifest unreadable.
-    3    No modules declared.
-    4    Module source path cannot be resolved.
-    5    Invalid classic JavaScript source syntax.
-    6    Circular module dependency.
-    7    Generated JavaScript invalid.
-    8    Output write failure.
-    9    Unexpected compiler failure.
-    10   Invalid module identifier.
-    11   Malformed manifest JSON.
-    12   Unsupported manifest structure.
-    13   Invalid module record.
-    14   Duplicate module ID.
-    15   Unsupported source format.
-    16   Invalid source filename.
-    17   Dependency list is not an array.
-    18   Self-dependency.
-    19   Duplicate declared dependency.
-    20   Source resolves outside manifest tree.
-    21   Module source unreadable.
-    22   Missing graph dependency.
-
-DIAGNOSTICS
-    The m launcher uses localized log/fatal identities such as
-    jsc.engine-unavailable and jsc.managed-node-unavailable. Successful
-    invocation also records compilation-started at info, with debug/trace
-    diagnostics for runtime resolution and child process completion.
-
-    The Node engine executes in a distinct process without shell log/fatal.
-    Compiler errors are emitted as [error] [jsc.<message-id>] diagnostics
-    with contextual details. The launcher deliberately avoids duplicating
-    these errors with another fatal message.
-
-EXAMPLE
-    jsc ./modules.json ./compiled.js
+    Numeric statuses 1-4 overlap between the launcher and compiler.
+    Use the diagnostic identity to distinguish the exact failure branch.
+    Launcher messages are localized jsc.<message-id> log/fatal events;
+    Node messages are "[error] [jsc.<message-id>]" with context.
+    Successful compilation prints module count and generated byte count.
 
 FILES
-    bin/sys/jsc
-    lib/sys/js/jsc.lib.js
-    lib/sys/js/dynamic-loader.lib.js
+    bin/sys/jsc                         executable command
+    lib/sys/js/jsc.lib.js               Node.js compiler implementation
+    lib/sys/js/dynamic-loader.lib.js    independent classic-script runtime
+    res/sys/manual/jsc                  command reference
+    res/sys/manual/dynamic-loader.lib.js loader reference
 
 SEE ALSO
-    manual sys jsc.lib.js
     manual sys dynamic-loader.lib.js
+    manual sys jsc.lib.js
     manual sys mk
