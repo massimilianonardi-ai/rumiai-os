@@ -602,7 +602,22 @@ EOF_PKG_DEPEND_REQUIREMENTS_FOR_KEY
 
     [ -n "$pkg_depend_key_facility" ] && [ -n "$pkg_depend_key_target" ] && [ -n "$pkg_depend_key_constraints" ] || return 1
 
-    _pkg_depend_provider_resolve "$pkg_depend_catalog" "$pkg_depend_key_selector" "$pkg_depend_key_facility" "$pkg_depend_key_constraints" "$pkg_depend_key_target" || return 1
+    _pkg_depend_provider_resolve "$pkg_depend_catalog" "$pkg_depend_key_selector" "$pkg_depend_key_facility" "$pkg_depend_key_constraints" "$pkg_depend_key_target"
+    pkg_depend_provider_status=$?
+    case "$pkg_depend_provider_status" in
+      0) : ;;
+      4) return 1 ;;
+      *)
+        log error execution execution-failed operation pkg-depend \
+          reason provider-unresolvable \
+          facility "$pkg_depend_key_facility" \
+          constraints "$pkg_depend_key_constraints" \
+          target "$pkg_depend_key_target" \
+          selector "$pkg_depend_key_selector" \
+          status "$pkg_depend_provider_status" || :
+        return 1
+        ;;
+    esac
     pkg_depend_selection="$pkg_depend_key|$pkg_depend_selected|$pkg_depend_key_target"
 
     if [ -n "$pkg_depend_new_selections" ]
@@ -730,7 +745,17 @@ _pkg_depend_resolve()
 
   for pkg_depend_request
   do
-    _pkg_depend_request_resolve "$pkg_depend_catalog" "$pkg_depend_request" "$m_OSARCH" request || return $?
+    _pkg_depend_request_resolve "$pkg_depend_catalog" "$pkg_depend_request" "$m_OSARCH" request
+    pkg_depend_request_status=$?
+    if [ "$pkg_depend_request_status" -ne 0 ]
+    then
+      log error execution execution-failed operation pkg-depend \
+        reason request-unresolvable \
+        request "$pkg_depend_request" \
+        default-target "$m_OSARCH" \
+        status "$pkg_depend_request_status" || :
+      return "$pkg_depend_request_status"
+    fi
     _pkg_depend_context_add "$pkg_depend_concrete" "$pkg_depend_target" || return 1
   done
   pkg_depend_roots=$pkg_depend_contexts

@@ -17,6 +17,11 @@ DESCRIPTION
     response body is written to standard output, and for -l requests. Progress
     formatting is backend-specific.
 
+    On a backend transfer failure, backend-native diagnostics remain visible and
+    http-fetch adds structured execution context identifying the selected backend
+    and its native status. That context is diagnostic only: the public http-fetch
+    status remains 1 for transfer failures.
+
 OPTIONS
     -H <header>
         Add one HTTP request header. May be repeated. The value must contain a

@@ -2,7 +2,8 @@ NAME
     pkg-depend.lib.sh - resolve package dependency installation plans
 
 DESCRIPTION
-    pkg-depend.lib.sh implements the read-only pkg depend planner; experimental install2 reuses this same public entry function before installing the returned concrete identities.
+    pkg-depend.lib.sh implements the read-only pkg depend planner used by
+    pkg install before installing the returned concrete dependency identities.
 
     Planning resolves explicit package requests only to discover their recursive
     facility dependencies until provider selection and the dependency graph
@@ -31,13 +32,20 @@ FUNCTIONS
         roots are omitted unless they are also selected dependency nodes. Every
         emitted identity is directly valid as a package operand.
 
-        When provider resolution is ambiguous, status 1 is accompanied by an
-        execution diagnostic identifying reason=provider-ambiguous together with
-        the facility, combined compatibility constraints, target osarch and exact
-        compatible provider candidates.
+        When an original request cannot be resolved, status 1 is accompanied by
+        diagnostic context identifying reason=request-unresolvable, the original
+        request, the default target and the internal status. When a provider bucket
+        cannot be resolved, diagnostic context identifies
+        reason=provider-unresolvable together with the facility, combined
+        constraints, target, selector and internal status.
 
-        Returns 0 on success, 1 when the dependency plan cannot be resolved, and 2
-        for invalid invocation or package-spec syntax.
+        Provider ambiguity remains a distinct diagnostic:
+        reason=provider-ambiguous identifies the facility, combined compatibility
+        constraints, target osarch and exact compatible provider candidates.
+
+        These diagnostics refine failure context only; they do not add public
+        status classes. Returns 0 on success, 1 when the dependency plan cannot be
+        resolved, and 2 for invalid invocation or package-spec syntax.
 
 DEPENDENCIES
     pkg-common.lib.sh
@@ -50,4 +58,4 @@ DEPENDENCIES
 SEE ALSO
     pkg
     pkg-catalog.lib.sh
-    pkg-install2.lib.sh
+    pkg-install.lib.sh

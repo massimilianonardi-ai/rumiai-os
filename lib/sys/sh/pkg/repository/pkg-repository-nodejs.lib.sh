@@ -76,12 +76,33 @@ _pkg_repository_nodejs_validate_repository()
   [ -d "$nodejs_repository_dir/metadata" ] && [ ! -L "$nodejs_repository_dir/metadata" ] || return 1
 }
 
+_pkg_repository_nodejs_get()
+{
+  [ "$#" -eq 2 ] || return 2
+  nodejs_url=$1
+  nodejs_function=$2
+
+  http-fetch -- "$nodejs_url"
+  nodejs_status=$?
+  [ "$nodejs_status" -eq 0 ] && return 0
+
+  log error execution execution-failed \
+    operation pkg-repository-nodejs \
+    reason upstream-request-failed \
+    function "$nodejs_function" \
+    url "$nodejs_url" \
+    status "$nodejs_status" || :
+  return 1
+}
+
 _pkg_repository_nodejs_index_versions()
 (
-  [ "$#" -eq 1 ] || return 2
+  [ "$#" -eq 2 ] || return 2
   _pkg_repository_nodejs_validate_repository "$1" || return 1
+  nodejs_function=$2
+  nodejs_index_url=https://nodejs.org/dist/index.json
 
-  nodejs_body="$(http-fetch -- https://nodejs.org/dist/index.json)" || return 1
+  nodejs_body="$(_pkg_repository_nodejs_get "$nodejs_index_url" "$nodejs_function")" || return 1
   nodejs_records="$(printf '%s\n' "$nodejs_body" | json_array_object_fields version)" || return 1
   [ -n "$nodejs_records" ] || return 1
 
@@ -116,7 +137,7 @@ EOF_NODEJS_INDEX
 pkg_repository_list_versions()
 (
   [ "$#" -eq 1 ] || return 2
-  _pkg_repository_nodejs_index_versions "$1"
+  _pkg_repository_nodejs_index_versions "$1" pkg_repository_list_versions
 )
 
 pkg_repository_compare_versions()
@@ -157,7 +178,7 @@ pkg_repository_resolve_version()
 (
   [ "$#" -ge 1 ] && [ "$#" -le 2 ] || return 2
   _pkg_repository_nodejs_validate_repository "$1" || return 1
-  nodejs_versions="$(_pkg_repository_nodejs_index_versions "$1")" || return 1
+  nodejs_versions="$(_pkg_repository_nodejs_index_versions "$1" pkg_repository_resolve_version)" || return 1
   [ -n "$nodejs_versions" ] || return 1
 
   if [ "$#" -eq 2 ]

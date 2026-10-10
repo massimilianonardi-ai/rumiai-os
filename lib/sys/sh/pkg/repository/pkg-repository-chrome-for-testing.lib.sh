@@ -76,6 +76,25 @@ _pkg_repository_chrome_for_testing_validate_repository()
   [ "$pkg_repository_chrome_for_testing_platform" = linux-arm64 ] || return 1
 }
 
+_pkg_repository_chrome_for_testing_get()
+{
+  [ "$#" -eq 2 ] || return 2
+  pkg_repository_chrome_for_testing_url=$1
+  pkg_repository_chrome_for_testing_function=$2
+
+  http-fetch -- "$pkg_repository_chrome_for_testing_url"
+  pkg_repository_chrome_for_testing_status=$?
+  [ "$pkg_repository_chrome_for_testing_status" -eq 0 ] && return 0
+
+  log error execution execution-failed \
+    operation pkg-repository-chrome-for-testing \
+    reason upstream-request-failed \
+    function "$pkg_repository_chrome_for_testing_function" \
+    url "$pkg_repository_chrome_for_testing_url" \
+    status "$pkg_repository_chrome_for_testing_status" || :
+  return 1
+}
+
 _pkg_repository_chrome_for_testing_archive()
 {
   [ "$#" -eq 1 ] || return 2
@@ -125,9 +144,10 @@ BEGIN {
 
 _pkg_repository_chrome_for_testing_metadata()
 (
-  [ "$#" -eq 2 ] || return 2
+  [ "$#" -eq 3 ] || return 2
   _pkg_repository_chrome_for_testing_validate_repository "$1" || return 1
   pkg_repository_chrome_for_testing_requested=$2
+  pkg_repository_chrome_for_testing_function=$3
   _pkg_repository_chrome_for_testing_validate_version "$pkg_repository_chrome_for_testing_requested" || return 1
 
   pkg_repository_chrome_for_testing_archive="$(_pkg_repository_chrome_for_testing_archive "$pkg_repository_chrome_for_testing_platform")" || return 1
@@ -135,7 +155,7 @@ _pkg_repository_chrome_for_testing_metadata()
   pkg_repository_chrome_for_testing_encoded_object="$pkg_repository_chrome_for_testing_requested%2F$pkg_repository_chrome_for_testing_platform%2F$pkg_repository_chrome_for_testing_archive"
   pkg_repository_chrome_for_testing_metadata_url="https://www.googleapis.com/storage/v1/b/chrome-for-testing-public/o/$pkg_repository_chrome_for_testing_encoded_object?fields=name%2Csize%2Cmd5Hash%2Ccrc32c"
 
-  pkg_repository_chrome_for_testing_body="$(http-fetch -- "$pkg_repository_chrome_for_testing_metadata_url")" || return 1
+  pkg_repository_chrome_for_testing_body="$(_pkg_repository_chrome_for_testing_get "$pkg_repository_chrome_for_testing_metadata_url" "$pkg_repository_chrome_for_testing_function")" || return 1
   json_object_read \
     name pkg_repository_chrome_for_testing_name_token \
     size pkg_repository_chrome_for_testing_size_token \
@@ -184,10 +204,10 @@ _pkg_repository_chrome_for_testing_latest()
   _pkg_repository_chrome_for_testing_validate_repository "$1" || return 1
 
   pkg_repository_chrome_for_testing_latest_url="https://googlechromelabs.github.io/chrome-for-testing/LATEST_RELEASE_STABLE"
-  pkg_repository_chrome_for_testing_latest="$(http-fetch -- "$pkg_repository_chrome_for_testing_latest_url")" || return 1
+  pkg_repository_chrome_for_testing_latest="$(_pkg_repository_chrome_for_testing_get "$pkg_repository_chrome_for_testing_latest_url" pkg_repository_resolve_version)" || return 1
   _pkg_repository_chrome_for_testing_validate_version "$pkg_repository_chrome_for_testing_latest" || return 1
 
-  _pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_latest" >/dev/null || return 1
+  _pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_latest" pkg_repository_resolve_version >/dev/null || return 1
   printf -- '%s\n' "$pkg_repository_chrome_for_testing_latest"
 )
 
@@ -233,7 +253,7 @@ pkg_repository_resolve_version()
 
   pkg_repository_chrome_for_testing_requested=$2
   _pkg_repository_chrome_for_testing_validate_version "$pkg_repository_chrome_for_testing_requested" || return 1
-  _pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_requested" >/dev/null || return 1
+  _pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_requested" pkg_repository_resolve_version >/dev/null || return 1
   printf -- '%s\n' "$pkg_repository_chrome_for_testing_requested"
 )
 
@@ -262,7 +282,7 @@ pkg_repository_resolve_artifact()
   pkg_repository_chrome_for_testing_digest_type="$(_pkg_repository_chrome_for_testing_scalar "$pkg_repository_chrome_for_testing_range_dir/digest_type")" || return 1
   [ "$pkg_repository_chrome_for_testing_digest_type" = md5 ] || return 1
 
-  pkg_repository_chrome_for_testing_metadata="$(_pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_requested")" || return 1
+  pkg_repository_chrome_for_testing_metadata="$(_pkg_repository_chrome_for_testing_metadata "$1" "$pkg_repository_chrome_for_testing_requested" pkg_repository_resolve_artifact)" || return 1
   pkg_repository_chrome_for_testing_tab="$(printf '\t')"
   IFS="$pkg_repository_chrome_for_testing_tab" read -r \
     pkg_repository_chrome_for_testing_name \

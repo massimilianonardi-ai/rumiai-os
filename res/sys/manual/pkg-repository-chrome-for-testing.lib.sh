@@ -30,6 +30,10 @@ DESCRIPTION
     This permits catalog range anchors to remain ordering metadata even when an
     historical artifact later becomes unavailable upstream.
 
+    Failed upstream transfers emit contextual internal diagnostics identifying
+    the adapter operation and requested URL. These diagnostics do not change the
+    public adapter function signatures or status classes.
+
 FUNCTIONS
     pkg_repository_compare_versions <repository-dir> <left> <right>
         Validate both four-component version identities and print -1, 0 or 1

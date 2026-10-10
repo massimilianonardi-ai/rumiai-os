@@ -86,11 +86,25 @@ _pkg_repository_github_validate_repository()
 
 _pkg_repository_github_get()
 {
-  [ "$#" -eq 1 ] || return 2
+  [ "$#" -eq 2 ] || return 2
+  pkg_repository_github_path=$1
+  pkg_repository_github_function=$2
+  pkg_repository_github_url="https://api.github.com/repos/$pkg_repository_github_owner/$pkg_repository_github_repository$pkg_repository_github_path"
+
   http-fetch \
     -H 'Accept: application/vnd.github+json' \
     -H 'X-GitHub-Api-Version: 2026-03-10' \
-    -- "https://api.github.com/repos/$pkg_repository_github_owner/$pkg_repository_github_repository$1"
+    -- "$pkg_repository_github_url"
+  pkg_repository_github_status=$?
+  [ "$pkg_repository_github_status" -eq 0 ] && return 0
+
+  log error execution execution-failed \
+    operation pkg-repository-github \
+    reason upstream-request-failed \
+    function "$pkg_repository_github_function" \
+    url "$pkg_repository_github_url" \
+    status "$pkg_repository_github_status" || :
+  return 1
 }
 
 _pkg_repository_github_validate_release_tokens()
@@ -138,7 +152,7 @@ _pkg_repository_github_release_order_key()
   pkg_repository_github_requested=$2
   _pkg_repository_github_validate_version "$pkg_repository_github_requested" || return 1
 
-  pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested")" || return 1
+  pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested" pkg_repository_compare_versions)" || return 1
   json_object_read \
     tag_name pkg_repository_github_tag_token \
     draft pkg_repository_github_draft_token \
@@ -173,7 +187,7 @@ pkg_repository_list_versions()
 
   while :
   do
-    pkg_repository_github_body="$(_pkg_repository_github_get "/releases?per_page=100&page=$pkg_repository_github_page")" || return 1
+    pkg_repository_github_body="$(_pkg_repository_github_get "/releases?per_page=100&page=$pkg_repository_github_page" pkg_repository_list_versions)" || return 1
     pkg_repository_github_records="$(printf '%s\n' "$pkg_repository_github_body" | json_array_object_fields tag_name draft prerelease created_at published_at)" || return 1
 
     pkg_repository_github_count=0
@@ -287,7 +301,7 @@ pkg_repository_resolve_version()
     pkg_repository_github_path=/releases/tags/$pkg_repository_github_requested
   fi
 
-  pkg_repository_github_body="$(_pkg_repository_github_get "$pkg_repository_github_path")" || return 1
+  pkg_repository_github_body="$(_pkg_repository_github_get "$pkg_repository_github_path" pkg_repository_resolve_version)" || return 1
   json_object_read \
     tag_name pkg_repository_github_tag_token \
     draft pkg_repository_github_draft_token \
@@ -354,7 +368,7 @@ pkg_repository_resolve_artifact()
     [ "$pkg_repository_github_digest_type" = sha256 ] || return 1
   fi
 
-  pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested")" || return 1
+  pkg_repository_github_body="$(_pkg_repository_github_get "/releases/tags/$pkg_repository_github_requested" pkg_repository_resolve_artifact)" || return 1
   json_object_read \
     tag_name pkg_repository_github_tag_token \
     draft pkg_repository_github_draft_token \

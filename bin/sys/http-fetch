@@ -165,6 +165,11 @@ then
     if [ "$http_fetch_status" -ne "0" ]
     then
       [ -z "$http_fetch_response" ] || printf -- '%s\n' "$http_fetch_response" >&2
+      log error execution execution-failed \
+        operation http-fetch \
+        reason transfer-failed \
+        backend curl \
+        status "$http_fetch_status" || :
       exit "1"
     fi
     printf -- '%s\n' "$http_fetch_response" | http_fetch_content_length
@@ -173,7 +178,13 @@ then
   fi
 
   command -- curl "$@"
-  [ "$?" -eq "0" ] && exit "0"
+  http_fetch_status=$?
+  [ "$http_fetch_status" -eq "0" ] && exit "0"
+  log error execution execution-failed \
+    operation http-fetch \
+    reason transfer-failed \
+    backend curl \
+    status "$http_fetch_status" || :
   exit "1"
 fi
 
@@ -227,6 +238,11 @@ then
         if [ "$http_fetch_status" -ne "0" ]
         then
           [ -z "$http_fetch_response" ] || printf -- '%s\n' "$http_fetch_response" >&2
+          log error execution execution-failed \
+            operation http-fetch \
+            reason transfer-failed \
+            backend wget \
+            status "$http_fetch_status" || :
           exit "1"
         fi
         printf -- '%s\n' "$http_fetch_response" | http_fetch_content_length
@@ -235,10 +251,16 @@ then
       fi
 
       command -- wget "$@"
-      [ "$?" -eq "0" ] && exit "0"
+      http_fetch_status=$?
+      [ "$http_fetch_status" -eq "0" ] && exit "0"
+      log error execution execution-failed \
+        operation http-fetch \
+        reason transfer-failed \
+        backend wget \
+        status "$http_fetch_status" || :
       exit "1"
       ;;
   esac
 fi
 
-fatal execution execution-failed operation http-fetch
+fatal execution execution-failed operation http-fetch reason backend-unavailable

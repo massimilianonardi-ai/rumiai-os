@@ -33,6 +33,10 @@ DESCRIPTION
     timestamps rather than by interpreting tag text as semantic or numeric
     versions.
 
+    Failed upstream transfers emit contextual internal diagnostics identifying
+    the adapter operation and requested URL. These diagnostics do not change the
+    public adapter function signatures or status classes.
+
 FUNCTIONS
     pkg_repository_list_versions <repository-dir>
         Print available non-draft, non-prerelease GitHub release tags in

@@ -22,6 +22,10 @@ DESCRIPTION
     Version comparison is local and does not depend on historical upstream
     artifact availability.
 
+    Failed upstream transfers emit contextual internal diagnostics identifying
+    the adapter operation and requested URL. These diagnostics do not change the
+    public adapter function signatures or status classes.
+
 FUNCTIONS
     pkg_repository_list_versions <repository-dir>
         Print releases from the configured major line reported by the official
