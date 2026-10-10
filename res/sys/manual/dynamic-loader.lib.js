@@ -61,13 +61,15 @@ USING THE LOADER WITH JSC (COMPLETE EXAMPLE)
         <meta charset="utf-8">
         <script src="dynamic-loader.lib.js"></script>
         <script src="compiled.js"></script>
-        <script>
-          console.log(JscRuntime.state());
-          // Registered: 2; active: 0. No factory has run yet.
+        <body>
+          <div id="result"></div>
+          <script>
+            console.log(JscRuntime.state());
+            // Registered: 2; active: 0. No factory has run yet.
 
-          const app = JscRuntime.require('application');
-          document.body.textContent = String(app.run());
-        </script>
+            const app = JscRuntime.require('application');
+            document.getElementById('result').textContent = String(app.run());
+          </script>
 
     Opening the page displays 42. Include the loader BEFORE compiled.js.
     Both tags are ordinary scripts, without type="module". A web server
