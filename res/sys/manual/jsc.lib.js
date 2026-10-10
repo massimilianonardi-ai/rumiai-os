@@ -7,17 +7,20 @@ ROLE
     when called directly by a Node.js program. It DOES NOT contain or
     initialize the independent browser dynamic-loader.lib.js runtime.
 
-    Most users should run jsc from the shell. See "manual sys jsc" for the
-    complete version-1 modules.json format, a working two-module project,
-    generated output, deployment steps, limitations and exit statuses.
+    Most users should run jsc from the shell. The PRIMARY format is the
+    original ordered nested "modules" description with name/file/symbols,
+    compiled to classic namespace source without a runtime loader.
+    The version-1 id/deps registration format is available separately
+    for explicit JscRuntime consumers. See "manual sys jsc" for both
+    formats, full examples, release artifacts, and exit statuses.
 
 PUBLIC FUNCTION
     jscMain(args)
-        Async function. args is exactly an array of two nonempty strings:
+        Async function. args is one or two nonempty strings:
 
             [
-              manifestPath,       // filename of version-1 JSON descriptor
-              outputPath          // destination compiled classic JS file
+              manifestPath,       // filename of nested or version-1 descriptor
+              outputPath          // optional destination, omit for stdout
             ]
 
         Returns a Promise resolving to a numeric process-style status:
@@ -32,6 +35,12 @@ PUBLIC FUNCTION
         inherit the shell functions log() and fatal(). The shell launcher
         propagates the compiler status instead of repeating its error.
 
+        When no outputPath is supplied, the generated source is emitted to
+        stdout without status chatter. In legacy mode, supplying outputPath
+        writes the raw source and produces a gzip release using Node's
+        built-in compression; installed external JS/CSS minifiers can
+        additionally generate .min.js/.min.css and compressed siblings.
+
         A failed manifest, source or graph validation is detected before
         modifying the destination file. A filesystem write failure is NOT
         guaranteed to preserve a previous destination.
@@ -45,7 +54,7 @@ PROGRAMMATIC EXAMPLE
         const {jscMain} =
           require('/path/to/rumiai-os/lib/sys/js/jsc.lib.js');
 
-        jscMain(['./modules.json', './compiled.js'])
+        jscMain(['./modules-js.json', './compiled.js'])
           .then(function (status) {
             if (status !== 0) {
               process.exitCode = status;
@@ -64,17 +73,34 @@ PROGRAMMATIC EXAMPLE
 DIRECT NODE EXECUTION
     The same file also supports:
 
-        node /path/to/lib/sys/js/jsc.lib.js modules.json compiled.js
+        node /path/to/lib/sys/js/jsc.lib.js modules-js.json compiled.js
 
     The public m-integrated command is preferable for normal use:
 
-        jsc modules.json compiled.js
+        jsc modules-js.json compiled.js
 
     It validates invocation and uses the default m-managed Node.js runtime,
     normal m log/fatal facilities and localized launcher diagnostics.
 
-MANIFEST AND OUTPUT EXAMPLE
-    A minimal version-1 manifest:
+MANIFEST AND OUTPUT EXAMPLES
+    Original ordered source assembly:
+
+        {
+          "modules": [
+            {"name":"m","modules":[
+              {"file":"m/Base.js","symbols":"Base"},
+              {"name":"srv","modules":[
+                {"file":"m/srv/Worker.js","symbols":"Worker"}
+              ]}
+            ]}
+          ]
+        }
+
+    Earlier source declarations in the same namespace remain available to
+    later source modules without any id/deps declarations. The output is a
+    classic executable namespace assembly. It does NOT need JscRuntime.
+
+    Optional explicit registration mode:
 
         {
           "version": 1,
@@ -87,17 +113,10 @@ MANIFEST AND OUTPUT EXAMPLE
 
         module.exports = {value: 42};
 
-    A successful compile writes ordinary classic JavaScript containing a
-    call to globalThis.JscRuntime.installBatch([...]). It does not embed
-    any runtime implementation and does not execute module factories.
-    Before using the result in a browser, load dynamic-loader.lib.js and
-    then the generated registration script, and call:
+    This separate mode emits globalThis.JscRuntime.installBatch([...]).
+    To execute in a browser, load dynamic-loader.lib.js BEFORE the generated
+    registrations and then call JscRuntime.require('answer').value.
 
-        JscRuntime.require('answer').value // 42
-
-    This controlled classic system does not implement standard Node
-    package lookup or reinterpret native ESM syntax. Legacy nested
-    manifests using name/symbols are NOT accepted.
 
 ERRORS AND DIAGNOSTICS
     jscMain resolves to nonzero status values rather than throwing its
