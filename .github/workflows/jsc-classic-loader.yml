@@ -25,7 +25,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 244a8bdb39e1cff08c84a2f492791b6d9822b0aa
+          ref: 1313c9c8ebca7dcce229ed83fd5458d6c4580b41
           path: .jsc-test-suite
       - uses: actions/setup-node@v4
         with:
@@ -37,6 +37,7 @@ jobs:
         run: |
           export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
           ./.jsc-test-suite/tests/rumiai-os/jsc/compiler-loader.test
+          ./.jsc-test-suite/tests/rumiai-os/manual/coverage.test
       - name: Validate complete JavaScript engines as real Node sources
         run: |
           node --check lib/sys/js/jsc.lib.js
