@@ -1,0 +1,25 @@
+#!/usr/bin/env m
+
+main()
+{
+  jsc_engine="$m_LIB_DIR/sys/js/jsc.lib.js"
+  [ -f "$jsc_engine" ] && [ ! -L "$jsc_engine" ] &&
+    [ -r "$jsc_engine" ] && [ ! -x "$jsc_engine" ] || {
+      printf '%s\n' "jsc [engine-unavailable]: $jsc_engine" >&2
+      return 1
+    }
+
+  pkg default nodejs >/dev/null 2>&1 || {
+    printf '%s\n' 'jsc [managed-node-unavailable]: a default m-managed nodejs runtime is required' >&2
+    return 2
+  }
+  command -v node >/dev/null 2>&1 || {
+    printf '%s\n' 'jsc [node-command-unavailable]: node is not on the activated PATH' >&2
+    return 3
+  }
+  exec node "$jsc_engine" "$@"
+  printf '%s\n' 'jsc [node-exec-failed]: could not execute the compiler engine' >&2
+  return 4
+}
+
+main "$@"

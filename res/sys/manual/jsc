@@ -1,0 +1,65 @@
+NAME
+    jsc - compile explicitly described classic JavaScript modules
+
+SYNOPSIS
+    jsc <manifest.json> <output.js>
+
+DESCRIPTION
+    Compile a version-1 JSON module manifest into a classic JavaScript script
+    that registers every declared module through JscRuntime.installBatch.
+
+    jsc is a compiler. It does not embed, install or execute the independent
+    JavaScript dynamic loader. The consumer loads dynamic-loader.lib.js first,
+    then the compiled registration script. For a single-file distribution,
+    an explicit separate packaging step can concatenate the loader and the
+    compiler output.
+
+    The launcher is an m bootstrap-integrated command. It uses the default
+    m-managed nodejs runtime; it does not install nodejs implicitly.
+
+OPERANDS
+    manifest.json
+        Readable JSON object with version 1 and modules array. Each module has
+        id, relative file and deps array; optional format can only be classic.
+
+    output.js
+        Output file receiving one classic registration script.
+
+SOURCE FORMAT
+    Module files contain function-body JavaScript. At runtime each factory
+    receives require, module and exports. Dependencies must be declared in
+    the manifest. A module may set module.exports or exports.
+
+    Static ESM import/export and import.meta syntax are not translated:
+    incompatible sources are rejected. ESM projects use their separate
+    compiler/loader path. Dynamic native import() is not managed by jsc.
+
+OUTPUT
+    Compilation verifies source syntax, module identifiers, manifest-tree
+    containment and dependency graph completeness and acyclicity before
+    writing output. Failed validation preserves any previous output file.
+
+EXIT STATUS
+    0    Compilation succeeded.
+    1    Launcher engine unavailable or invalid CLI operands.
+    2    Managed Node runtime unavailable or manifest cannot be read.
+    3    Node command unavailable or manifest/module metadata invalid.
+    4    Module source cannot be read (launcher exec failure when applicable).
+    5    Invalid classic module source.
+    6    Missing or cyclic declared dependency.
+    7    Generated JavaScript failed validation.
+    8    Output write failure.
+    9    Unexpected compiler error.
+
+EXAMPLE
+    jsc ./modules.json ./compiled.js
+
+FILES
+    bin/sys/jsc
+    lib/sys/js/jsc.lib.js
+    lib/sys/js/dynamic-loader.lib.js
+
+SEE ALSO
+    manual sys jsc.lib.js
+    manual sys dynamic-loader.lib.js
+    manual sys mk
