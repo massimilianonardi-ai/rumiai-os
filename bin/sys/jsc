@@ -16,10 +16,7 @@ main()
   pkg default nodejs >/dev/null 2>&1 ||
     fatal 3 jsc managed-node-unavailable package nodejs
 
-  jsc_node=$(command -v node) ||
-    fatal 4 jsc node-command-unavailable command node
-
-  [ -n "$jsc_node" ] ||
+  jsc_node=$(command -v node) && [ -n "$jsc_node" ] ||
     fatal 4 jsc node-command-unavailable command node
 
   log debug jsc runtime-selected command "$jsc_node"
