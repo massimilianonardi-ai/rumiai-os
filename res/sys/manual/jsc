@@ -73,10 +73,12 @@ QUICK START: COMPLETE TWO-MODULE PROJECT
         <meta charset="utf-8">
         <script src="dynamic-loader.lib.js"></script>
         <script src="compiled.js"></script>
-        <script>
-          const app = JscRuntime.require('application');
-          document.body.append(String(app.run()));
-        </script>
+        <body>
+          <div id="result"></div>
+          <script>
+            const app = JscRuntime.require('application');
+            document.getElementById('result').textContent = String(app.run());
+          </script>
 
     Serve public/ as a static web root and open index.html in a browser.
     The page displays 42. Merely loading compiled.js does not execute
