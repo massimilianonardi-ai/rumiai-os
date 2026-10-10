@@ -30,6 +30,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - name: Use canonical product origin spelling for target identity
+        run: git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
       - name: Verify real published command and compiler/loader behavior
         shell: bash
         run: |
