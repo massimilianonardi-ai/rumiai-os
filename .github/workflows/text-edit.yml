@@ -47,3 +47,29 @@ jobs:
           name: TextEdit-v0.1.0
           path: TextEdit-v0.1.0.zip
           if-no-files-found: error
+
+  publish-release:
+    name: Publish TextEdit v0.1.0
+    if: github.ref == 'refs/heads/release/text-edit-v0.1.0'
+    needs: text-edit
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download exactly validated distribution
+        uses: actions/download-artifact@v4
+        with:
+          name: TextEdit-v0.1.0
+      - name: Create immutable version tag and GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view text-edit-v0.1.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
+            echo 'TextEdit v0.1.0 release already exists; refusing to overwrite'
+            exit 1
+          fi
+          gh release create text-edit-v0.1.0 TextEdit-v0.1.0.zip \
+            --repo massimilianonardi-ai/rumiai-os \
+            --target "$GITHUB_SHA" \
+            --title "TextEdit v0.1.0" \
+            --notes "First GUI-independent source release: PieceDocument, TextEditSelections, TextEditRepresentation with source-coordinate replace(start,end,text), advanced logical selections. No history or GUI. See res/sys/manual/text-edit.lib.js."
