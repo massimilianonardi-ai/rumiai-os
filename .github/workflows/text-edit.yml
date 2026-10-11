@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: c9f0ee0e2f517e8ce7cfe82481a1dc51ec518de5
+          ref: 024f60b85fc94a49f5222cd1fac9f3e9a326f562
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -31,7 +31,7 @@ jobs:
         run: node --check lib/sys/js/text-edit.lib.js
       - name: Test source-mapped representation, editor and selection integration
         run: |
-          RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" node .text-edit-tests/tests/rumiai-os/text-edit/core.test.mjs
+          RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" ./.text-edit-tests/tests/rumiai-os/text-edit/core.test
       - name: Create standalone distribution archive
         run: |
           mkdir -p dist
