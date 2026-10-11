@@ -29,6 +29,8 @@ jobs:
           node-version: '22'
       - name: Check source syntax
         run: node --check lib/sys/js/text-edit.lib.js
+      - name: Normalize product Git origin for canonical target discovery
+        run: git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
       - name: Test source-mapped representation, editor and selection integration
         run: |
           RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" ./.text-edit-tests/tests/rumiai-os/text-edit/core.test
