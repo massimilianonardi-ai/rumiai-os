@@ -23,7 +23,8 @@ strings and document positions are UTF-16 code units.
 CORE CLASSES
 
 TextEdit
-  new TextEdit(initialText = '', {document} = {})
+  new TextEdit(initialText = '', {document,selections} = {})
+      Optional selection-compatible wrapper can be injected (for future history).
   .document               indexed PieceDocument unless supplied
   .selections             TextEditSelections
   .representation         TextEditRepresentation
@@ -71,14 +72,17 @@ TextEditRepresentation
       'replacement', each carrying its source {start,end} and displayed text.
       Original text segments also carry graphemeBoundaries. Returns annotation
       metadata separately, with source anchors and projected positions.
-      A window may not cut through an overlay. Excessive source extraction
+      A window may not split a Unicode grapheme or cut through an overlay.
+      Excessive source extraction
       fails; use smaller source windows. This does not decide pixel geometry.
   sourceToView(offset)
   viewToSource(offset)
       Translate UTF-16 positions. Exact unmapped source/view positions return
       {kind:'offset',offset}. Positions inside substituted text return
       {kind:'replaced-region',source:{start,end},view:{start,end}};
-      no imaginary character-level mapping is invented.
+      no imaginary character-level mapping is invented. A replacement with an
+      empty displayed string remains a replaced-region, not a unique source
+      caret position.
       Non-text annotations do not count as virtual characters.
   setAnnotations([{id,at,text,affinity?}, ...])
       A note is anchored in source UTF-16 units, but is not inserted as text.
