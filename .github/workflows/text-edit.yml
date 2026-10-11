@@ -1,0 +1,47 @@
+name: TextEdit standalone library verification
+
+on:
+  push:
+    paths:
+      - 'lib/sys/js/text-edit.lib.js'
+      - 'res/sys/manual/text-edit.lib.js'
+      - '.github/workflows/text-edit.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  text-edit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out real product
+        uses: actions/checkout@v4
+      - name: Check out permanent test sources
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 05eae2417cb93d8a54053ca77566363a64c9f39f
+          path: .text-edit-tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Check source syntax
+        run: node --check lib/sys/js/text-edit.lib.js
+      - name: Test source-mapped representation, editor and selection integration
+        run: |
+          RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" node .text-edit-tests/tests/rumiai-os/text-edit/core.test.mjs
+      - name: Create standalone distribution archive
+        run: |
+          mkdir -p dist
+          cp lib/sys/js/text-edit.lib.js dist/text-edit.lib.js
+          cp res/sys/manual/text-edit.lib.js dist/README.txt
+          cd dist
+          zip -q -9 ../TextEdit-v0.1.0.zip text-edit.lib.js README.txt
+      - name: Publish installable release archive
+        uses: actions/upload-artifact@v4
+        with:
+          name: TextEdit-v0.1.0
+          path: TextEdit-v0.1.0.zip
+          if-no-files-found: error
