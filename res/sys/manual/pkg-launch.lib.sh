@@ -67,10 +67,11 @@ RETURN STATUS
     2   Invalid invocation.
     1   Managed command, package state, dependency/provider resolution or runtime
         projection could not be validated/applied.
-    3   Environment-preservation list malformed or contains duplicates.
+    3   Environment-preservation list malformed.
     4   Listed inherited environment variable missing.
     5   Environment-preservation list includes a launcher control variable.
     6   Trusted POSIX env executor unavailable for the requested preservation.
+    7   Environment-preservation list contains duplicate names.
     On successful preparation, the upstream process exit status becomes the process
     exit status because launcher uses exec.
 
