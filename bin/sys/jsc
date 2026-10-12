@@ -1,6 +1,6 @@
 #!/usr/bin/env m
 
-[ -n "$1" ] || fatal 1 jsc invalid-arguments
+[ "$#" -le 2 ] && [ -n "$1" ] || fatal 1 jsc invalid-arguments
 
 if [ "$#" -eq 2 ]
 then
