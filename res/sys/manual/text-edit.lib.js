@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.6.0
+Version 0.7.0
 
 PURPOSE
 
