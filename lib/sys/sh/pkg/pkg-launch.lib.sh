@@ -308,7 +308,7 @@ launcher()
       case "$pkg_launch_override_seen" in
         *" $pkg_launch_override_name "*)
           _pkg_launch_override_error environment-override-duplicate "$pkg_launch_override_name"
-          return 3
+          return 7
           ;;
       esac
       pkg_launch_override_seen="$pkg_launch_override_seen$pkg_launch_override_name "
