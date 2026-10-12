@@ -36,24 +36,25 @@ else
 
   artifact=$output
 
-  if [ -n "$minifier" ] && command -v "$minifier" >/dev/null 2>&1
+  if [ -n "$minifier" ]
   then
-    case $minifier in
-      google-closure-compiler)
-        "$minifier" --js="$output" --js_output_file="$minified" || fatal 4 jsc minification-failed
-      ;;
-      uglifycss)
-        "$minifier" "$output" > "$minified" || fatal 4 jsc minification-failed
-      ;;
-      *)
-        log error jsc minifier-unavailable minifier "$minifier"
-      ;;
-    esac
+    if command -v "$minifier" >/dev/null 2>&1
+    then
+      case $minifier in
+        google-closure-compiler)
+          "$minifier" --js="$output" --js_output_file="$minified" ||
+            fatal 4 jsc minification-failed
+        ;;
+        uglifycss)
+          "$minifier" "$output" > "$minified" ||
+            fatal 4 jsc minification-failed
+        ;;
+      esac
 
-    artifact=$minified
-  else
-    log warning jsc minifier-unavailable command "$minifier"
+      artifact=$minified
+    else
+      log warning jsc minifier-unavailable command "$minifier"
+    fi
   fi
-
   gzip -c < "$artifact" > "${artifact}.gz" || fatal 5 jsc compression-failed
 fi
