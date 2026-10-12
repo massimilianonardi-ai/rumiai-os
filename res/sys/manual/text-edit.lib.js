@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.3.0
+Version 0.4.0
 
 PURPOSE
 
@@ -29,8 +29,8 @@ TextEdit
   .selections             TextEditSelections
   .representation         TextEditRepresentation
   .advancedSelections     TextEditAdvancedSelections
-  .replace(textOrTexts)   perform selection replacement and rebase representation;
-                          returns {changes,before,after,representation}
+  .replace(textOrTexts)   one selected atomic commit; returns
+                          {before,after,representation:{unresolved}}
 
 PieceDocument and FlatDocument — TextEditBase implementations
   TextEditBase is a structural interface, NOT an instantiable class.
@@ -94,13 +94,11 @@ TEXTEDITBASE PUBLIC INTERFACE
 
 INTEGRATION STATUS
 
-  TextEditBase document stores and TextEditSelections are now separately
-  implemented. TextEditSelections uses one atomic document commit for any
-  nonempty multi-selection action and automatically follows other source
-  editors through document.subscribe(). TextEdit still bridges its selection
-  edits to the older explicit TextEditRepresentation.rebase(changes) interface.
-  The full representation subscription and shared-view integration are a
-  separate remaining work unit. No history or generic event bus is included.
+  TextEditBase, TextEditSelections and TextEditRepresentation observe the
+  same atomic document mutations. Selections and representations subscribe
+  directly and independently to the document; changes from any view are
+  rebased exactly once. No explicit rebase(changes) or old-text adapter is
+  necessary. This component does not own history, GUI or a generic event bus.
 
 TEXTEDITSELECTIONS PUBLIC INTERFACE
 
@@ -146,55 +144,63 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
   No selection layer owns GUI, clipboard policy, keyboard handling, source
   persistence, undo/redo, representation folding or history.
 
-TextEditRepresentation
-  new TextEditRepresentation(indexedDocument)
-  replace(start,end,text)
-      Replace the SOURCE interval [start,end) in the REPRESENTATION ONLY.
-      start < end. text can be any string, including an empty or multiline
-      string. This never modifies the original source document. The new text
-      is displayed in place of the original interval. An exact matching range
-      updates its placeholder; intersecting ranges are rejected. Endpoints
-      must lie on Unicode grapheme boundaries (including CRLF integrity).
-      These endpoints are source offsets, NOT previous view coordinates.
+TEXTEDITREPRESENTATION PUBLIC INTERFACE
 
+  new TextEditRepresentation(document)
   setReplacements([{start,end,text}, ...])
-      Atomically set the overlay collection after range and overlap checks.
+  replace(start,end,text)
   remove(start,end)
-      Remove a particular overlay.
   clear()
-      Remove all overlays (not annotations).
-  get replacements
-      Snapshot of source-to-representation substitutions.
-  get length
-      Virtual text length, counting overlay text UTF-16 units.
-  project(start=0,end=source.length,{maxSourceUnits=65536})
-      Project a bounded SOURCE interval into segments of kind 'text' or
-      'replacement', each carrying its source {start,end} and displayed text.
-      Original text segments also carry graphemeBoundaries. Returns annotation
-      metadata separately, with source anchors and projected positions.
-      A window may not split a Unicode grapheme or cut through an overlay.
-      Excessive source extraction
-      fails; use smaller source windows. This does not decide pixel geometry.
+  setAnnotations([{id,at,text,affinity?}, ...])
+  get replacements                   independent overlay snapshot
+  get annotations                    independent ordered annotation snapshot
+  get unresolved                     last committed invalidation snapshot
+  get length                         projected text UTF-16 length
+  project(start=0,end=document.length,{maxSourceUnits=65536})
   sourceToView(offset)
   viewToSource(offset)
-      Translate UTF-16 positions. Exact unmapped source/view positions return
-      {kind:'offset',offset}. Positions inside substituted text return
-      {kind:'replaced-region',source:{start,end},view:{start,end}};
-      no imaginary character-level mapping is invented. A replacement with an
-      empty displayed string remains a replaced-region, not a unique source
-      caret position.
-      Non-text annotations do not count as virtual characters.
-  setAnnotations([{id,at,text,affinity?}, ...])
-      A note is anchored in source UTF-16 units, but is not inserted as text.
-      affinity may be 'before' or 'after' for text insertion exactly at at.
-  rebase(changes)
-      After an independently completed edit, explicitly consume the returned
-      TextEditSelections.replace(...).changes array. Returns {unresolved}.
-      Replaced source regions touched by the edit are invalidated instead
-      of silently moving the overlay. Annotations overlapping deleted text,
-      or inserted exactly at their anchor without explicit affinity, become
-      unresolved. No low-level observer is required.
+  dispose()
 
+  The representation does not modify source text or document.revision.
+  Overlay intervals use half-open UTF-16 SOURCE positions, require a nonempty
+  grapheme-safe range and may not overlap. text may be empty or multiline.
+  replace adds or updates one exact source interval. remove removes only
+  the exact range. clear removes overlays but does not remove annotations.
+  setReplacements and setAnnotations replace their respective collections
+  atomically; invalid inputs preserve the old valid state.
+
+  Annotations carry unique nonempty string id, source at, string text and
+  optional insertion affinity ('before' or 'after'). Unknown affinity at an
+  exact insertion is unresolved. Metadata is not projected text. Overlay
+  and annotation accessors return snapshots. Unresolved records identify
+  invalidated overlays/annotations from the most recent source commit.
+
+  All external and local source edits automatically rebase the representation
+  through the document's existing committed-edit notification. Inserts at
+  overlay boundaries stay outside the overlay; inserts strictly inside or
+  nonempty replacements intersecting an overlay invalidate that overlay.
+  Invalid grapheme boundaries after an edit also invalidate the overlay.
+  Annotations in deleted/replaced source become unresolved. A revision gap
+  (including counter wrap) or a failed committed-notification rebase clears
+  all dependent metadata rather than guessing its new source meaning.
+  Each next commit resets the unresolved snapshot. No edit-derived change
+  records or explicit representation.rebase API are required.
+
+  project requests a SOURCE interval and returns {source,segments,
+  annotations,readUnits}. Text segments contain source and grapheme boundaries;
+  substitution segments contain their source and synthetic text. The
+  maxSourceUnits budget limits projected source extraction. Small windows
+  in large ASCII source lines do not require reading the complete line;
+  arbitrary Unicode grapheme validation can require additional context.
+  Windows must not cut overlays or grapheme clusters.
+
+  sourceToView/viewToSource return {kind:'offset',offset} for positions with
+  a unique mapping and {kind:'replaced-region',source:{start,end},
+  view:{start,end}} for ambiguous substituted regions, including empty
+  virtual substitutions.
+
+  dispose() unsubscribes from the shared document and clears local metadata.
+  It is idempotent, and all other methods reject use after disposal.
 TextEditAdvancedSelections
   new TextEditAdvancedSelections(document,selections,representation)
   lineSelection(firstLogicalLine,lastLogicalLine)
@@ -217,29 +223,11 @@ SAMPLE
 
 DOCUMENT CHANGES, HISTORY AND LIMITS
 
-Edits made through editor.replace(...) automatically call the representation
-rebase once the selection operation succeeds. If edits are performed directly
-through editor.selections.replace(...) or document.replace(...), callers must
-supply the exact change records to representation.rebase(...) before further
-projecting/mapping. Document changes that keep both length and newline count
-unchanged cannot be detected by this minimal contract. Do not silently edit
-outside the agreed coordination boundary.
+A source edit through editor.replace(...), editor.selections.replace(...) or
+document.replace(...) is one atomic document commit. Every subscribed
+representation and selection instance observes it automatically. Use
+representation.unresolved to inspect overlays/annotations invalidated by the
+most recent edit; they are never silently reinterpreted.
 
-The representation is demand-driven: it never stores a duplicate full-document
-string, and accepts bounded source projection windows. It is NOT a DOM layout
-engine, and it does not implement text wrapping, bidi shaping, font metrics,
-IME, semantic folding detection or virtual display-row numbering. Overlapping
-substitutions/nested folding are not silently inferred. Rendering can be
-implemented by a separate GUI.
-
-No undo/redo, event listeners, persistent journal or automatic history exist.
-If added later, history will be a transparent wrapper around
-TextEditSelections. This release makes no GUI behavior/parity claim.
-
-SCOPE / VALIDATION
-
-First standalone source-library release, UTF-16, Node.js/CommonJS and classic
-browser-script loading. Current validation uses permanent tests from
-rumiai-tests and the text-edit GitHub Actions workflow. This initial release
-is a baseline for subsequent GUI work, not a performance certification for
-gigantic selected lines or arbitrary rendering policies.
+There is no implicit history, undo/redo, GUI, DOM rendering, file persistence,
+clipboard policy, pixel layout or distributed conflict resolution.
