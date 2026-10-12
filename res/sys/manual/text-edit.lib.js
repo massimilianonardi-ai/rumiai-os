@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.5.0
+Version 0.6.0
 
 PURPOSE
 
@@ -104,106 +104,93 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
 
   new TextEditSelections(document)
   getSelections()
-  setSelections([{start,end,forward}, ...])
-  addSelections([{start,end,forward}, ...])
+  setSelections([{start:{row,col},end:{row,col},forward},...])
+  addSelections([{start:{row,col},end:{row,col},forward},...])
   replace(textOrTexts)
   dispose()
 
-  All selection offsets refer to the shared document's UTF-16 source.
-  start <= end; equal endpoints represent a caret. forward is a boolean
-  orientation preserved also for carets. setSelections atomically replaces;
-  addSelections atomically appends; either accepts [] and returns this.
-  getSelections returns independent copies, in original collection order.
-  Duplicate, overlapping and unsorted selections are allowed as state and
-  are not implicitly merged or reordered.
+  Selection positions are SOURCE rows and UTF-16 code-unit columns within
+  the row's content (NOT tab-expanded logical/display columns). start <= end
+  in row/column ordering. Equal endpoints are a caret. Orientation, array
+  order, independent duplicates and multiple selections are preserved.
+  Inputs and returned snapshots are copied.
 
-  replace("X") applies one payload to every selection. replace(["A","B"])
-  pairs strings to selections in collection order. The operation rejects
-  an empty selection collection or incompatible edit targets before making
-  changes. One successful invocation produces exactly ONE atomic document
-  replace([...]) call and one source revision increment/notification.
-  On success it returns {before,after}, with independent snapshots in
-  original selection order. Edited selections become carets at the ends
-  of their inserted text, retaining forward orientation. It does not return
-  change records, old text, history entries or a rollback journal.
+  A row past document.lineCount or a column past the physical end of a
+  source row is a VALID VIRTUAL PHYSICAL POSITION. Setting or moving a
+  selection never writes spaces, newlines or other characters to the source.
+  Base lineInfo(row).end locates the insertion boundary BEFORE the actual
+  CR, LF or CRLF terminator. Physical row/column carets do not expose a
+  position between CR and LF; exact source UTF-16 access remains on the base.
 
-  Instances subscribe to their shared document automatically. Edits made by
-  other views rebase selections using deterministic source-offset geometry:
-  insertion at a selection start or end is excluded; insertion strictly
-  inside is included; a caret moves after inserted text. External replacements
-  retain surviving portions and attach overwritten endpoints to their
-  respective replacement boundaries. If both selection boundaries are lost,
-  the selection collapses to the replacement end. Orientation, collection
-  order and duplicates are preserved. On an unexpected revision step or a
-  Number wrap, stale selections are CLEARED, never silently guessed.
-  A failed edit leaves document and selections unchanged.
+  replace("X") writes one payload to every selection; replace(["X","Y"])
+  matches selections in original order. On actual editing, TextEditSelections
+  alone materializes needed spaces and missing rows. Multiple virtual
+  positions mapping to the same original EOL/EOF are combined into one
+  compatible source insertion before the single atomic document.replace
+  commit. Conflicting writes to the same requested cell are rejected.
+  Empty deletions entirely within virtual space do not create text.
+  The default separator for newly materialized source rows is LF.
 
-  dispose() unsubscribes and clears state. It is idempotent; other operations
-  on a disposed instance throw. The shared document is not disposed.
+  Successful source edits return {before,after}. Selected ranges become
+  carets after their inserted text; orientation is retained. Existing-source
+  selection anchors are updated after committed edits from other views;
+  virtual anchors follow their original row where unambiguous, otherwise
+  are conservatively invalidated instead of guessing. A revision gap clears
+  potentially stale selections. The source remains the only editable text.
 
-  No selection layer owns GUI, clipboard policy, keyboard handling, source
-  persistence, undo/redo, representation folding or history.
+  TRANSITIONAL COMPATIBILITY (v0.6.0):
+  The prior {start,end,forward} selection records using numeric source UTF-16
+  offsets remain accepted as a separate compatibility mode. Such collections
+  return numeric offsets and use the validated v0.5.0 editing/rebase contract.
+  Never mix the offset and physical record shapes in one nonempty collection.
+  New logical selection workflows use physical {row,col} records.
+  The future undo/redo wrapper and GUI adapters are not part of this class.
 
 TEXTEDITREPRESENTATION PUBLIC INTERFACE
 
-  new TextEditRepresentation(document)
+  new TextEditRepresentation(document, selections = null)
   setReplacements([{start,end,text}, ...])
   replace(start,end,text)
   remove(start,end)
   clear()
   setAnnotations([{id,at,text,affinity?}, ...])
-  get replacements                   independent overlay snapshot
-  get annotations                    independent ordered annotation snapshot
-  get unresolved                     last committed invalidation snapshot
-  get length                         projected text UTF-16 length
+  get replacements / annotations / unresolved
+  get length
   project(start=0,end=document.length,{maxSourceUnits=65536})
   sourceToView(offset)
   viewToSource(offset)
   setColumnMetrics({tabSize=4,widthOf}={})
   columnToSource(row,col)
   sourceToColumn(offset)
+  logicalRowWidth(row)
+  get rowCount
+  setSelections(logicalSelections)
+  addSelections(logicalSelections)
+  getSelections()
   dispose()
 
-  The representation does not modify source text or document.revision.
-  Overlay intervals use half-open UTF-16 SOURCE positions, require a nonempty
-  grapheme-safe range and may not overlap. text may be empty or multiline.
-  replace adds or updates one exact source interval. remove removes only
-  the exact range. clear removes overlays but does not remove annotations.
-  setReplacements and setAnnotations replace their respective collections
-  atomically; invalid inputs preserve the old valid state.
+  This is a view-local, GUI-independent projection and coordinate translator,
+  never a second source document. Logical selection access requires the
+  optional physical TextEditSelections provider in its constructor; standalone
+  projection/overlay instances work without one. These operations convert
+  complete logical grid {row,col} endpoints to physical source {row,col}
+  endpoints, without deciding clipping or virtual-retention policy.
 
-  Annotations carry unique nonempty string id, source at, string text and
-  optional insertion affinity ('before' or 'after'). Unknown affinity at an
-  exact insertion is unresolved. Metadata is not projected text. Overlay
-  and annotation accessors return snapshots. Unresolved records identify
-  invalidated overlays/annotations from the most recent source commit.
+  logicalRowWidth returns the current row's logical display-cell width
+  (including tab stops and grapheme widths); future source rows have width
+  zero. Invalid columns inside a tab/multicell grapheme, or endpoints crossing
+  replacement overlays, reject without publishing partial selections.
+  The view does not materialize text or retain an independent authoritative
+  copy of the source selections.
 
-  All external and local source edits automatically rebase the representation
-  through the document's existing committed-edit notification. Inserts at
-  overlay boundaries stay outside the overlay; inserts strictly inside or
-  nonempty replacements intersecting an overlay invalidate that overlay.
-  Invalid grapheme boundaries after an edit also invalidate the overlay.
-  Annotations in deleted/replaced source become unresolved. A revision gap
-  (including counter wrap) or a failed committed-notification rebase clears
-  all dependent metadata rather than guessing its new source meaning.
-  Each next commit resets the unresolved snapshot. No edit-derived change
-  records or explicit representation.rebase API are required.
-
-  project requests a SOURCE interval and returns {source,segments,
-  annotations,readUnits}. Text segments contain source and grapheme boundaries;
-  substitution segments contain their source and synthetic text. The
-  maxSourceUnits budget limits projected source extraction. Small windows
-  in large ASCII source lines do not require reading the complete line;
-  arbitrary Unicode grapheme validation can require additional context.
-  Windows must not cut overlays or grapheme clusters.
-
-  sourceToView/viewToSource return {kind:'offset',offset} for positions with
-  a unique mapping and {kind:'replaced-region',source:{start,end},
-  view:{start,end}} for ambiguous substituted regions, including empty
-  virtual substitutions.
-
-  dispose() unsubscribes from the shared document and clears local metadata.
-  It is idempotent, and all other methods reject use after disposal.
+  Source overlay substitutions and annotations retain the established
+  grapheme-safe, ordered, nonoverlapping behavior. Source/view offsets and
+  projected windows remain UTF-16-based, and the projection API remains
+  incremental for very large documents. The representation observes every
+  committed text change, rebases metadata, and reports invalidated overlays
+  or anchors through unresolved. A revision discontinuity clears stale
+  metadata rather than guessing. dispose() unsubscribes but does not
+  dispose the shared document.
 
 TEXTEDITREPRESENTATION SOURCE COLUMN GEOMETRY
 
@@ -228,31 +215,32 @@ TEXTEDITREPRESENTATION SOURCE COLUMN GEOMETRY
 
 TEXTEDITADVANCEDSELECTIONS PUBLIC INTERFACE
 
-  new TextEditAdvancedSelections(document,selections,representation)
+  new TextEditAdvancedSelections(representation,{policy='virtual'}={})
+  get policy
+  setPolicy('virtual'|'clipped')
   lineSelection({row,col},{row,col})
   rectangularSelection({row,col},{row,col})
   resolveRectangles({row,col},{row,col})
 
-  Both selection operations take exactly two ordered endpoints, each
-  with zero-based source row/column. Row and column spans are inclusive.
-  lineSelection selects all complete source rows between them as one
-  selection, including source terminators; columns affect only orientation
-  within the same row.
+  This layer owns selection geometry, INCLUDING the policy applied to logical
+  coordinates before conversion to physical source positions. A virtual
+  selection preserves the full logical geometry even beyond source EOL/EOF.
+  A clipped selection intersects the logical rectangle or source-line range
+  with existing source-row logical cell extents. A selection completely
+  outside source text clips to an empty selection list, not a caret at EOF.
 
-  rectangularSelection selects every included source column on every
-  included row, using the representation's cell geometry. It produces one
-  UTF-16 source selection per row, in requested row direction, and retains
-  horizontal selection orientation. It does not independently segment
-  graphemes or implement tab stops.
+  lineSelection covers the complete included source rows and their physical
+  terminators where present; rectangularSelection emits one half-open logical
+  interval per selected row, with inclusive user-supplied endpoints and
+  preserved orientation. Advanced selections do not calculate grapheme/tab
+  widths, inspect UTF-16 source offsets or write to the document.
 
-  resolveRectangles returns {targets,unresolved,requestedRows,forward}
-  without changing selections. It preserves virtual column displacement,
-  detects grapheme-boundary ambiguity and overlay intersections.
-  rectangularSelection fails without partially modifying selections if
-  any row cannot yet be expressed by physical source ranges. It never
-  silently rounds a tab/emoji boundary or loses virtual spaces.
-  Clipboard/column paste materialization and view-wrapped rows remain
-  separate work.
+  The representation supplies logical row widths and neutral coordinate
+  conversion. TextEditSelections owns physical selection state and performs
+  all deferred materialization during selected text edits. resolveRectangles
+  reports complete policy-resolved logical targets without mutating state.
+  Clipboard distribution, pixels, bidi and wrapped visual rows are outside
+  this library.
 
 SAMPLE
 
