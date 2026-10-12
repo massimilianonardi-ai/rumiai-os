@@ -201,6 +201,7 @@ TEXTEDITREPRESENTATION PUBLIC INTERFACE
 
   dispose() unsubscribes from the shared document and clears local metadata.
   It is idempotent, and all other methods reject use after disposal.
+
 TextEditAdvancedSelections
   new TextEditAdvancedSelections(document,selections,representation)
   lineSelection(firstLogicalLine,lastLogicalLine)
@@ -231,3 +232,17 @@ most recent edit; they are never silently reinterpreted.
 
 There is no implicit history, undo/redo, GUI, DOM rendering, file persistence,
 clipboard policy, pixel layout or distributed conflict resolution.
+
+VALIDATION AND DISTRIBUTION
+
+The source library is verified on the actual product checkout with permanent
+Node.js tests from rumiai-tests, including TextEditBase, selections,
+representation, and facade/source-mapping regression cases. The GitHub Actions
+workflow pins the test revision, performs a syntax check, executes the suite
+on Node.js 22, and produces the versioned standalone source archive.
+Browser UI, native GUI/IME parity, arbitrary Unicode shaping and file I/O
+are not established by these core tests.
+
+SEE ALSO
+
+rumiai-dev/specifications/rumiai-os/TEXT-EDIT.md (development contract)
