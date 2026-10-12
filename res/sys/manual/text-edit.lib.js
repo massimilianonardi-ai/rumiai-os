@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.4.0
+Version 0.5.0
 
 PURPOSE
 
@@ -159,6 +159,9 @@ TEXTEDITREPRESENTATION PUBLIC INTERFACE
   project(start=0,end=document.length,{maxSourceUnits=65536})
   sourceToView(offset)
   viewToSource(offset)
+  setColumnMetrics({tabSize=4,widthOf}={})
+  columnToSource(row,col)
+  sourceToColumn(offset)
   dispose()
 
   The representation does not modify source text or document.revision.
@@ -202,14 +205,54 @@ TEXTEDITREPRESENTATION PUBLIC INTERFACE
   dispose() unsubscribes from the shared document and clears local metadata.
   It is idempotent, and all other methods reject use after disposal.
 
-TextEditAdvancedSelections
+TEXTEDITREPRESENTATION SOURCE COLUMN GEOMETRY
+
+  setColumnMetrics({tabSize=4,widthOf}={}) configures tab stops and the
+  positive integer width in logical cells of non-tab Unicode graphemes.
+  Omitting widthOf gives one cell per grapheme; tabs always align to the
+  next tab stop. Settings belong to the representation, not an individual
+  selection operation. The editor host may provide a width policy, but
+  no font or DOM library is required.
+
+  columnToSource(row,col) returns {kind:'offset',offset} at an exact
+  grapheme boundary, {kind:'inside-grapheme',cell,before,after} inside a
+  tab or other multi-cell grapheme, or
+  {kind:'virtual',offset,virtualSpaces} past a line's source content end.
+  sourceToColumn(offset) returns {kind:'column',row,col} at a valid
+  boundary, otherwise an explicit inside-grapheme result. An offset
+  strictly inside a CRLF terminator is not a content column.
+
+  These functions operate on logical source rows using lineInfo(),
+  including correct CR, LF and CRLF boundaries. Unicode is segmented in
+  bounded source reads without materializing huge source lines.
+
+TEXTEDITADVANCEDSELECTIONS PUBLIC INTERFACE
+
   new TextEditAdvancedSelections(document,selections,representation)
-  lineSelection(firstLogicalLine,lastLogicalLine)
-  rectangularSelection(rectangles,{tabSize=4,widthOf})
-      Convert a logical-line rectangle using grapheme-aware visual columns,
-      with a caller-supplied positive-integer widthOf(grapheme,column,row).
-      Reject ambiguous cell boundaries or colliding ranges; do not guess.
-      These methods operate on document LOGICAL lines, not wrapped pixel rows.
+  lineSelection({row,col},{row,col})
+  rectangularSelection({row,col},{row,col})
+  resolveRectangles({row,col},{row,col})
+
+  Both selection operations take exactly two ordered endpoints, each
+  with zero-based source row/column. Row and column spans are inclusive.
+  lineSelection selects all complete source rows between them as one
+  selection, including source terminators; columns affect only orientation
+  within the same row.
+
+  rectangularSelection selects every included source column on every
+  included row, using the representation's cell geometry. It produces one
+  UTF-16 source selection per row, in requested row direction, and retains
+  horizontal selection orientation. It does not independently segment
+  graphemes or implement tab stops.
+
+  resolveRectangles returns {targets,unresolved,requestedRows,forward}
+  without changing selections. It preserves virtual column displacement,
+  detects grapheme-boundary ambiguity and overlay intersections.
+  rectangularSelection fails without partially modifying selections if
+  any row cannot yet be expressed by physical source ranges. It never
+  silently rounds a tab/emoji boundary or loses virtual spaces.
+  Clipboard/column paste materialization and view-wrapped rows remain
+  separate work.
 
 SAMPLE
 
