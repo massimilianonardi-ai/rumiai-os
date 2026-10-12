@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: e851c02343554a9e4c1cc72b574be9943f54760b
+          ref: 12102940e9aed68c014fca30d0b86fffe6a1399e
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -45,17 +45,17 @@ jobs:
           cp lib/sys/js/text-edit.lib.js dist/text-edit.lib.js
           cp res/sys/manual/text-edit.lib.js dist/README.txt
           cd dist
-          zip -q -9 ../TextEdit-v0.2.0.zip text-edit.lib.js README.txt
+          zip -q -9 ../TextEdit-v0.3.0.zip text-edit.lib.js README.txt
       - name: Publish installable release archive
         uses: actions/upload-artifact@v4
         with:
-          name: TextEdit-v0.2.0
-          path: TextEdit-v0.2.0.zip
+          name: TextEdit-v0.3.0
+          path: TextEdit-v0.3.0.zip
           if-no-files-found: error
 
   publish-release:
-    name: Publish TextEdit v0.2.0
-    if: github.ref == 'refs/heads/release/text-edit-v0.2.0'
+    name: Publish TextEdit v0.3.0
+    if: github.ref == 'refs/heads/release/text-edit-v0.3.0'
     needs: text-edit
     runs-on: ubuntu-latest
     permissions:
@@ -64,17 +64,17 @@ jobs:
       - name: Download exactly validated distribution
         uses: actions/download-artifact@v4
         with:
-          name: TextEdit-v0.2.0
+          name: TextEdit-v0.3.0
       - name: Create immutable version tag and GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view text-edit-v0.2.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
-            echo 'TextEdit v0.2.0 release already exists; refusing to overwrite'
+          if gh release view text-edit-v0.3.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
+            echo 'TextEdit v0.3.0 release already exists; refusing to overwrite'
             exit 1
           fi
-          gh release create text-edit-v0.2.0 TextEdit-v0.2.0.zip \
+          gh release create text-edit-v0.3.0 TextEdit-v0.3.0.zip \
             --repo massimilianonardi-ai/rumiai-os \
             --target "$GITHUB_SHA" \
-            --title "TextEdit v0.2.0" \
-            --notes "TextEdit 0.2.0: atomic TextEditBase overloads, persistent indexed PieceDocument with CR/LF/CRLF logical lines, FlatDocument reference engine, committed-edit listeners and cyclic revision. Existing selection/representation integration remains on its preceding adapter path; see res/sys/manual/text-edit.lib.js. No history or GUI."
+            --title "TextEdit v0.3.0" \
+            --notes "TextEdit v0.3.0: standalone TextEditBase stores plus rebuilt TextEditSelections with atomic multicaret edit commits, addSelections, deterministic cross-view rebasing and lifecycle disposal. TextEdit retains an explicit adapter to legacy TextEditRepresentation.rebase. No history or GUI."
