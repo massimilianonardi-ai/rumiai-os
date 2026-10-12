@@ -45,11 +45,8 @@ else
       uglifycss)
         "$minifier" "$output" > "$minified" || fatal 4 jsc minification-failed
       ;;
-      "")
-        :
-      ;;
       *)
-        log error jsc minifier-unavailable
+        log error jsc minifier-unavailable minifier "$minifier"
       ;;
     esac
 
