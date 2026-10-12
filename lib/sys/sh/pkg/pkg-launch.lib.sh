@@ -14,6 +14,23 @@ _pkg_launch_name_valid()
   esac
 }
 
+_pkg_launch_override_name_valid()
+{
+  [ "$#" -eq 1 ] || return 2
+  case "$1" in
+    [a-zA-Z_]*)
+      case "$1" in *[!a-zA-Z0-9_]*) return 1 ;; esac
+      ;;
+    *) return 1 ;;
+  esac
+}
+
+_pkg_launch_override_error()
+{
+  [ "$#" -eq 2 ] || return 2
+  log error execution "$1" operation launcher variable "$2"
+}
+
 _pkg_launch_state_context_set()
 {
   [ "$#" -eq 0 ] || return 2
@@ -248,6 +265,77 @@ launcher()
     pkg_launch_state_scope \
     pkg_launch_state_instance
 
+  # Snapshot caller values before package/provider environment is applied.
+  # Keep assignments in argv: variable values are never evaluated as shell code.
+  pkg_launch_override_active=0
+  if [ "${m_ENV_DO_NOT_OVERRIDE+x}" = x ]
+  then
+    pkg_launch_override_active=1
+    pkg_launch_override_remaining=$m_ENV_DO_NOT_OVERRIDE
+    pkg_launch_override_seen=' '
+    [ -n "$pkg_launch_override_remaining" ] || {
+      _pkg_launch_override_error environment-override-invalid m_ENV_DO_NOT_OVERRIDE
+      return 3
+    }
+
+    set -- "$pkg_launch_target" "$@"
+    while [ -n "$pkg_launch_override_remaining" ]
+    do
+      case "$pkg_launch_override_remaining" in
+        *' '*)
+          pkg_launch_override_name=${pkg_launch_override_remaining%% *}
+          pkg_launch_override_remaining=${pkg_launch_override_remaining#* }
+          [ -n "$pkg_launch_override_remaining" ] || {
+            _pkg_launch_override_error environment-override-invalid m_ENV_DO_NOT_OVERRIDE
+            return 3
+          }
+          ;;
+        *)
+          pkg_launch_override_name=$pkg_launch_override_remaining
+          pkg_launch_override_remaining=
+          ;;
+      esac
+      _pkg_launch_override_name_valid "$pkg_launch_override_name" || {
+        _pkg_launch_override_error environment-override-invalid "$pkg_launch_override_name"
+        return 3
+      }
+      case "$pkg_launch_override_name" in
+        m_ENV_DO_NOT_OVERRIDE | m_PKG_LAUNCH_CONTEXT | m_PKG_LAUNCH_STATE_INSTANCE)
+          _pkg_launch_override_error environment-override-control-variable "$pkg_launch_override_name"
+          return 5
+          ;;
+      esac
+      case "$pkg_launch_override_seen" in
+        *" $pkg_launch_override_name "*)
+          _pkg_launch_override_error environment-override-duplicate "$pkg_launch_override_name"
+          return 3
+          ;;
+      esac
+      pkg_launch_override_seen="$pkg_launch_override_seen$pkg_launch_override_name "
+      # Only a validated identifier is interpolated into the expansion.
+      eval "pkg_launch_override_present=\${$pkg_launch_override_name+x}"
+      [ "$pkg_launch_override_present" = x ] || {
+        _pkg_launch_override_error environment-override-variable-missing "$pkg_launch_override_name"
+        return 4
+      }
+      eval "pkg_launch_override_value=\${$pkg_launch_override_name}"
+      set -- "$pkg_launch_override_name=$pkg_launch_override_value" "$@"
+    done
+
+    pkg_launch_override_env="$(command -p -v env)" || {
+      _pkg_launch_override_error environment-override-executor-unavailable env
+      return 6
+    }
+    case "$pkg_launch_override_env" in
+      /*) : ;;
+      *)
+        _pkg_launch_override_error environment-override-executor-unavailable env
+        return 6
+        ;;
+    esac
+    unset m_ENV_DO_NOT_OVERRIDE
+  fi
+
   HOME=$pkg_launch_home
   export -- HOME
 
@@ -266,5 +354,11 @@ launcher()
     return 1
   }
 
+  if [ "$pkg_launch_override_active" -eq 1 ]
+  then
+    # env applies the saved values to the exec target without changing state-path.
+    unset m_ENV_DO_NOT_OVERRIDE
+    exec "$pkg_launch_override_env" "$@"
+  fi
   exec "$pkg_launch_target" "$@"
 }
