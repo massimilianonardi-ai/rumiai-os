@@ -6,6 +6,11 @@ on:
       - 'lib/sys/js/text-edit.lib.js'
       - 'res/sys/manual/text-edit.lib.js'
       - '.github/workflows/text-edit.yml'
+  pull_request:
+    paths:
+      - 'lib/sys/js/text-edit.lib.js'
+      - 'res/sys/manual/text-edit.lib.js'
+      - '.github/workflows/text-edit.yml'
   workflow_dispatch:
 
 permissions:
