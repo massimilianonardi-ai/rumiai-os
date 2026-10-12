@@ -42,6 +42,24 @@ FUNCTIONS
         facility-default bootstrap environment. PATH itself is not valid
         facility-env metadata.
 
+        When m_ENV_DO_NOT_OVERRIDE is set, it must contain a nonempty list
+        of valid POSIX variable names separated by single ASCII spaces.
+        Every listed variable must be present in the incoming environment
+        (an empty value is permitted); duplicate names and malformed lists
+        fail. The launcher applies package, provider and user configuration
+        normally, then gives the final target the original values of the
+        listed variables. Only the delivered environment is overridden:
+        HOME/state-path resolution, package identity and service context
+        remain unchanged. The request is consumed and is not forwarded to
+        further package launches.
+
+        m_ENV_DO_NOT_OVERRIDE, m_PKG_LAUNCH_CONTEXT and
+        m_PKG_LAUNCH_STATE_INSTANCE are control-plane variables and
+        cannot be listed. Requests naming these variables fail rather
+        than reintroducing a privileged service-launch context.
+        An unset m_ENV_DO_NOT_OVERRIDE leaves existing launch semantics
+        unchanged, including HOME selection and direct exec of the target.
+
         The launcher replaces the current process with the upstream command and
         therefore returns only when validation/runtime preparation fails.
 
@@ -49,6 +67,10 @@ RETURN STATUS
     2   Invalid invocation.
     1   Managed command, package state, dependency/provider resolution or runtime
         projection could not be validated/applied.
+    3   Environment-preservation list malformed or contains duplicates.
+    4   Listed inherited environment variable missing.
+    5   Environment-preservation list includes a launcher control variable.
+    6   Trusted POSIX env executor unavailable for the requested preservation.
     On successful preparation, the upstream process exit status becomes the process
     exit status because launcher uses exec.
 
