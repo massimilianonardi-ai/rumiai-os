@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.2.0
+Version 0.3.0
 
 PURPOSE
 
@@ -94,20 +94,57 @@ TEXTEDITBASE PUBLIC INTERFACE
 
 INTEGRATION STATUS
 
-  This version finalizes the TextEditBase stores. TextEditSelections and the
-  TextEdit facade still retain the earlier sequential multi-caret integration
-  and explicit TextEditRepresentation.rebase(changes) mechanism. Their future
-  one-commit/one-notification integration is a separate pending work unit, not
-  a behavior claimed by this store release.
+  TextEditBase document stores and TextEditSelections are now separately
+  implemented. TextEditSelections uses one atomic document commit for any
+  nonempty multi-selection action and automatically follows other source
+  editors through document.subscribe(). TextEdit still bridges its selection
+  edits to the older explicit TextEditRepresentation.rebase(changes) interface.
+  The full representation subscription and shared-view integration are a
+  separate remaining work unit. No history or generic event bus is included.
 
-TextEditSelections
+TEXTEDITSELECTIONS PUBLIC INTERFACE
+
   new TextEditSelections(document)
   getSelections()
   setSelections([{start,end,forward}, ...])
-  replace(singleTextOrArray)
-  Each selected replacement is one primitive edit; arrays preserve caller
-  selection order. Multicaret rollback compensation is conservative when an
-  underlying document replacement fails. No history is included.
+  addSelections([{start,end,forward}, ...])
+  replace(textOrTexts)
+  dispose()
+
+  All selection offsets refer to the shared document's UTF-16 source.
+  start <= end; equal endpoints represent a caret. forward is a boolean
+  orientation preserved also for carets. setSelections atomically replaces;
+  addSelections atomically appends; either accepts [] and returns this.
+  getSelections returns independent copies, in original collection order.
+  Duplicate, overlapping and unsorted selections are allowed as state and
+  are not implicitly merged or reordered.
+
+  replace("X") applies one payload to every selection. replace(["A","B"])
+  pairs strings to selections in collection order. The operation rejects
+  an empty selection collection or incompatible edit targets before making
+  changes. One successful invocation produces exactly ONE atomic document
+  replace([...]) call and one source revision increment/notification.
+  On success it returns {before,after}, with independent snapshots in
+  original selection order. Edited selections become carets at the ends
+  of their inserted text, retaining forward orientation. It does not return
+  change records, old text, history entries or a rollback journal.
+
+  Instances subscribe to their shared document automatically. Edits made by
+  other views rebase selections using deterministic source-offset geometry:
+  insertion at a selection start or end is excluded; insertion strictly
+  inside is included; a caret moves after inserted text. External replacements
+  retain surviving portions and attach overwritten endpoints to their
+  respective replacement boundaries. If both selection boundaries are lost,
+  the selection collapses to the replacement end. Orientation, collection
+  order and duplicates are preserved. On an unexpected revision step or a
+  Number wrap, stale selections are CLEARED, never silently guessed.
+  A failed edit leaves document and selections unchanged.
+
+  dispose() unsubscribes and clears state. It is idempotent; other operations
+  on a disposed instance throw. The shared document is not disposed.
+
+  No selection layer owns GUI, clipboard policy, keyboard handling, source
+  persistence, undo/redo, representation folding or history.
 
 TextEditRepresentation
   new TextEditRepresentation(indexedDocument)
