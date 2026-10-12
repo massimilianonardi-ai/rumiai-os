@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 447de6eec061c99ffe9a23132b9b80ec7854d76f
+          ref: e851c02343554a9e4c1cc72b574be9943f54760b
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -77,4 +77,4 @@ jobs:
             --repo massimilianonardi-ai/rumiai-os \
             --target "$GITHUB_SHA" \
             --title "TextEdit v0.2.0" \
-            --notes "First GUI-independent source release: PieceDocument, TextEditSelections, TextEditRepresentation with source-coordinate replace(start,end,text), advanced logical selections. No history or GUI. See res/sys/manual/text-edit.lib.js."
+            --notes "TextEdit 0.2.0: atomic TextEditBase overloads, persistent indexed PieceDocument with CR/LF/CRLF logical lines, FlatDocument reference engine, committed-edit listeners and cyclic revision. Existing selection/representation integration remains on its preceding adapter path; see res/sys/manual/text-edit.lib.js. No history or GUI."
