@@ -36,7 +36,7 @@ jobs:
         run: node --check lib/sys/js/text-edit.lib.js
       - name: Normalize product Git origin for canonical target discovery
         run: git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-      - name: Test source-mapped representation, selections and TextEditBase stores
+      - name: Test TextEditBase, selections, representation and column geometry
         run: |
           RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" ./.text-edit-tests/tests/rumiai-os/text-edit/core.test
       - name: Create standalone distribution archive
