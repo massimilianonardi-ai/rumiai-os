@@ -1,11 +1,11 @@
 TextEdit — GUI-independent text editing library
-Version 0.1.0
+Version 0.2.0
 
 PURPOSE
 
 The TextEdit component provides an indexed text document, oriented multiple
 selections and a source-mapped editable representation for browser-based and
-local text editors. No DOM, rendering, implicit listeners or history.
+local text editors. No DOM, rendering, generic event bus or history.
 
 LOADING
 
@@ -32,10 +32,73 @@ TextEdit
   .replace(textOrTexts)   perform selection replacement and rebase representation;
                           returns {changes,before,after,representation}
 
-PieceDocument and FlatDocument
-  length, slice(start,end), replace(start,end,text)
-  indexed backends additionally expose lineCount and lineStart(line)
-  TextEditBase is the structural length/slice/replace contract, not a class.
+PieceDocument and FlatDocument — TextEditBase implementations
+  TextEditBase is a structural interface, NOT an instantiable class.
+  PieceDocument uses a balanced indexed piece treap for source-line queries and
+  bounded text reads; FlatDocument is a simple flat-string reference backend.
+  Both implement the complete public TextEditBase interface below.
+
+TEXTEDITBASE PUBLIC INTERFACE
+
+  .length                           read-only source UTF-16 code unit count
+  .revision                         read-only Number commit counter
+  .lineCount                        read-only logical source-line count
+  .slice(start,end)                 read source units in [start,end)
+  .lineStart(line)                  zero-based line start source offset
+  .lineAt(offset)                   source offset -> zero-based logical line
+  .lineInfo(line)                   {start,end,nextStart} source offsets
+  .toString()                       materialize complete exact source text
+  .replace(start,end,text)          atomic one-range replacement
+  .replace([{start,end,text},...])   atomic batch, all ranges in old coordinates
+  .subscribe(listener)              subscribe; returns idempotent unsubscribe()
+
+  Source text is literal: no line-ending setting or normalization. Lines are
+  separated by CR, LF or one adjacent CRLF, including across piece boundaries.
+  lineCount is 1 for an empty document; trailing separators add an empty line.
+  lineInfo excludes the terminating CR, LF or CRLF from its content end.
+  An offset ON a separator belongs to the previous line; the position just
+  AFTER the full separator starts the next line. Source positions are UTF-16
+  code units, including both code units of CRLF and possible surrogate halves.
+
+  Valid read and edit ranges are half-open, zero-based, safe-integer offsets
+  satisfying 0 <= start <= end <= length. Empty ranges and EOF insertion work.
+  No grapheme rounding is performed in the base.
+
+  An array replace is one indivisible mutation. Records can be unsorted.
+  Spans may touch but not overlap; insertions cannot share a position or lie
+  inside a replaced span. An insertion at a replacement start goes before the
+  new text, and an insertion at its end goes after the new text. No-change
+  successful edits still count as committed mutations.
+
+  Successful replace returns undefined. Invalid types throw TypeError; invalid
+  ranges and collisions throw RangeError. Failed edits do not publish partial
+  source, increment revision or notify subscribers. Uncertain backends fail
+  closed rather than reporting a confirmed edit.
+
+  revision starts at zero, increments once per accepted replace, and wraps to
+  zero when its prior value is Number.MAX_SAFE_INTEGER. The wrap never blocks
+  an edit. An incremental view checks that each post-commit revision equals its
+  own last successfully processed revision + 1; otherwise, including wrap,
+  the view reloads from the CURRENT source (possibly with bounded slice reads).
+
+  Listeners fire synchronously, in registration order, AFTER source publication
+  and revision update. They receive ONLY the original replace arguments, with
+  the same three-argument or one-array shape. Array-form payload records are
+  immutable copies in original order. Subscriptions changed during notification
+  affect later commits; reentrant writes to the same document are rejected.
+  Listener exceptions do not roll back the edit or prevent other listeners
+  from receiving it, and are diagnosable through the host console.
+
+  This base does not include undo, history, selections, transport, conflict
+  resolution, generic event bus or line-ending conversion.
+
+INTEGRATION STATUS
+
+  This version finalizes the TextEditBase stores. TextEditSelections and the
+  TextEdit facade still retain the earlier sequential multi-caret integration
+  and explicit TextEditRepresentation.rebase(changes) mechanism. Their future
+  one-commit/one-notification integration is a separate pending work unit, not
+  a behavior claimed by this store release.
 
 TextEditSelections
   new TextEditSelections(document)
