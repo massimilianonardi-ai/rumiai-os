@@ -1,37 +1,25 @@
 #!/usr/bin/env m
 
-main()
-{
-  [ "$#" -ge 1 ] && [ "$#" -le 2 ] && [ -n "$1" ] ||
-    fatal 1 jsc invalid-arguments expected '1-or-2' received "$#"
-  if [ "$#" -eq 2 ] && [ -z "$2" ]
+if [ -z "$2" ]
+then
+  node "$m_COMMAND_BIN.js" "${1%/*}" "${1##*/}"
+else
+  node "$m_COMMAND_BIN.js" "${1%/*}" "${1##*/}" > "${2}"
+
+  if [ "${2}" != "${2%.js}" ]
   then
-    fatal 1 jsc invalid-arguments expected 'nonempty-output' received "$#"
+    echo "type javascript"
+    MINIFIED_FILE="${2%.js}.min.js"
+    npx --yes google-closure-compiler --js="$2" --js_output_file="$MINIFIED_FILE"
+  elif [ "${2}" != "${2%.css}" ]
+  then
+    echo "type css"
+    MINIFIED_FILE="${2%.css}.min.css"
+    npx --yes uglifycss "$2" > "$MINIFIED_FILE"
+  else
+    echo "type unknown -> no minification available"
+    MINIFIED_FILE="$2"
   fi
 
-  jsc_engine="$m_LIB_DIR/sys/js/jsc.lib.js"
-  [ -f "$jsc_engine" ] && [ ! -L "$jsc_engine" ] &&
-    [ -r "$jsc_engine" ] && [ ! -x "$jsc_engine" ] ||
-    fatal 2 jsc engine-unavailable path "$jsc_engine"
-
-  log debug jsc engine-selected path "$jsc_engine"
-  log trace jsc runtime-resolution-started runtime nodejs
-
-  pkg default nodejs >/dev/null 2>&1 ||
-    fatal 3 jsc managed-node-unavailable package nodejs
-
-  jsc_node=$(command -v node) && [ -n "$jsc_node" ] ||
-    fatal 4 jsc node-command-unavailable command node
-
-  log debug jsc runtime-selected command "$jsc_node"
-  log info jsc compilation-started manifest "$1" output "${2-stdout}"
-
-  # Node executes outside the m shell and reports specific compilation errors
-  # itself; propagating its status avoids a redundant shell fatal message.
-  node "$jsc_engine" "$@"
-  jsc_status=$?
-  log trace jsc compiler-exited status "$jsc_status"
-  return "$jsc_status"
-}
-
-main "$@"
+  gzip < "$MINIFIED_FILE" > "${MINIFIED_FILE}.gz"
+fi
