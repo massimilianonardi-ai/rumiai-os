@@ -2,7 +2,10 @@
 
 [ -n "$1" ] || fatal 1 jsc invalid-arguments
 
-[ "$#" -eq 2 ] && [ -n "$2" ] || fatal 1 jsc invalid-output
+if [ "$#" -eq 2 ]
+then
+  [ -n "$2" ] || fatal 1 jsc invalid-output
+fi
 
 source_dir=${1%/*}
 modules_file=${1##*/}
@@ -41,6 +44,9 @@ else
       ;;
       uglifycss)
         "$minifier" "$output" > "$minified" || fatal 4 jsc minification-failed
+      ;;
+      *)
+        log error jsc minifier-unavailable
       ;;
     esac
 
