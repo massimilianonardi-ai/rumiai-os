@@ -1,25 +1,53 @@
 #!/usr/bin/env m
 
-if [ -z "$2" ]
-then
-  node "$m_COMMAND_BIN.js" "${1%/*}" "${1##*/}"
-else
-  node "$m_COMMAND_BIN.js" "${1%/*}" "${1##*/}" > "${2}"
+[ -n "$1" ] || fatal 1 jsc invalid-arguments
 
-  if [ "${2}" != "${2%.js}" ]
+[ "$#" -eq 2 ] && [ -n "$2" ] || fatal 1 jsc invalid-output
+
+source_dir=${1%/*}
+modules_file=${1##*/}
+
+[ "$source_dir" != "$1" ] || source_dir=.
+
+if [ "$#" -eq 1 ]; then
+  node "$m_COMMAND_BIN.js" "$source_dir" "$modules_file" || fatal 2 jsc compilation-failed
+else
+  output="$2"
+
+  node "$m_COMMAND_BIN.js" "$source_dir" "$modules_file" > "$output" || fatal 2 jsc compilation-failed
+
+  case $output in
+    *.js)
+      minified=${output%.js}.min.js
+      minifier=google-closure-compiler
+    ;;
+    *.css)
+      minified=${output%.css}.min.css
+      minifier=uglifycss
+    ;;
+    *)
+      minified=
+      minifier=
+    ;;
+  esac
+
+  artifact=$output
+
+  if [ -n "$minifier" ] && command -v "$minifier" >/dev/null 2>&1
   then
-    echo "type javascript"
-    MINIFIED_FILE="${2%.js}.min.js"
-    npx --yes google-closure-compiler --js="$2" --js_output_file="$MINIFIED_FILE"
-  elif [ "${2}" != "${2%.css}" ]
-  then
-    echo "type css"
-    MINIFIED_FILE="${2%.css}.min.css"
-    npx --yes uglifycss "$2" > "$MINIFIED_FILE"
+    case $minifier in
+      google-closure-compiler)
+        "$minifier" --js="$output" --js_output_file="$minified" || fatal 4 jsc minification-failed
+      ;;
+      uglifycss)
+        "$minifier" "$output" > "$minified" || fatal 4 jsc minification-failed
+      ;;
+    esac
+
+    artifact=$minified
   else
-    echo "type unknown -> no minification available"
-    MINIFIED_FILE="$2"
+    log warning jsc minifier-unavailable command "$minifier"
   fi
 
-  gzip < "$MINIFIED_FILE" > "${MINIFIED_FILE}.gz"
+  gzip -c < "$artifact" > "${artifact}.gz" || fatal 5 jsc compression-failed
 fi
