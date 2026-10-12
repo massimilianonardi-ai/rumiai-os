@@ -129,7 +129,10 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
   compatible source insertion before the single atomic document.replace
   commit. Conflicting writes to the same requested cell are rejected.
   Empty deletions entirely within virtual space do not create text.
-  The default separator for newly materialized source rows is LF.
+  The default separator for newly materialized source rows is LF, except
+  after a trailing lone CR, where CR preserves the intended number of rows.
+  Inserting CR immediately before an existing LF forms CRLF; the resulting
+  caret is positioned at the next row start, never inside that terminator.
 
   Successful source edits return {before,after}. Selected ranges become
   carets after their inserted text; orientation is retained. Existing-source
