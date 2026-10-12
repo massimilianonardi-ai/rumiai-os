@@ -141,35 +141,7 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
   are conservatively invalidated instead of guessing. A revision gap clears
   potentially stale selections. The source remains the only editable text.
 
-  TRANSITIONAL COMPATIBILITY (v0.6.0):
-  The prior {start,end,forward} selection records using numeric source UTF-16
-  offsets remain accepted as a separate compatibility mode. Such collections
-  return numeric offsets and use the validated v0.5.0 editing/rebase contract.
-  Never mix the offset and physical record shapes in one nonempty collection.
-  New logical selection workflows use physical {row,col} records.
-  The future undo/redo wrapper and GUI adapters are not part of this class.
 
-TEXTEDITREPRESENTATION PUBLIC INTERFACE
-
-  new TextEditRepresentation(document, selections = null)
-  setReplacements([{start,end,text}, ...])
-  replace(start,end,text)
-  remove(start,end)
-  clear()
-  setAnnotations([{id,at,text,affinity?}, ...])
-  get replacements / annotations / unresolved
-  get length
-  project(start=0,end=document.length,{maxSourceUnits=65536})
-  sourceToView(offset)
-  viewToSource(offset)
-  setColumnMetrics({tabSize=4,widthOf}={})
-  columnToSource(row,col)
-  sourceToColumn(offset)
-  logicalRowWidth(row)
-  get rowCount
-  setSelections(logicalSelections)
-  addSelections(logicalSelections)
-  getSelections()
   dispose()
 
   This is a view-local, GUI-independent projection and coordinate translator,
