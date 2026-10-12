@@ -6,6 +6,11 @@ on:
       - 'lib/sys/js/text-edit.lib.js'
       - 'res/sys/manual/text-edit.lib.js'
       - '.github/workflows/text-edit.yml'
+  pull_request:
+    paths:
+      - 'lib/sys/js/text-edit.lib.js'
+      - 'res/sys/manual/text-edit.lib.js'
+      - '.github/workflows/text-edit.yml'
   workflow_dispatch:
 
 permissions:
@@ -22,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 024f60b85fc94a49f5222cd1fac9f3e9a326f562
+          ref: 447de6eec061c99ffe9a23132b9b80ec7854d76f
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -31,7 +36,7 @@ jobs:
         run: node --check lib/sys/js/text-edit.lib.js
       - name: Normalize product Git origin for canonical target discovery
         run: git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
-      - name: Test source-mapped representation, editor and selection integration
+      - name: Test source-mapped representation, selections and TextEditBase stores
         run: |
           RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" ./.text-edit-tests/tests/rumiai-os/text-edit/core.test
       - name: Create standalone distribution archive
@@ -40,17 +45,17 @@ jobs:
           cp lib/sys/js/text-edit.lib.js dist/text-edit.lib.js
           cp res/sys/manual/text-edit.lib.js dist/README.txt
           cd dist
-          zip -q -9 ../TextEdit-v0.1.0.zip text-edit.lib.js README.txt
+          zip -q -9 ../TextEdit-v0.2.0.zip text-edit.lib.js README.txt
       - name: Publish installable release archive
         uses: actions/upload-artifact@v4
         with:
-          name: TextEdit-v0.1.0
-          path: TextEdit-v0.1.0.zip
+          name: TextEdit-v0.2.0
+          path: TextEdit-v0.2.0.zip
           if-no-files-found: error
 
   publish-release:
-    name: Publish TextEdit v0.1.0
-    if: github.ref == 'refs/heads/release/text-edit-v0.1.0'
+    name: Publish TextEdit v0.2.0
+    if: github.ref == 'refs/heads/release/text-edit-v0.2.0'
     needs: text-edit
     runs-on: ubuntu-latest
     permissions:
@@ -59,17 +64,17 @@ jobs:
       - name: Download exactly validated distribution
         uses: actions/download-artifact@v4
         with:
-          name: TextEdit-v0.1.0
+          name: TextEdit-v0.2.0
       - name: Create immutable version tag and GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view text-edit-v0.1.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
-            echo 'TextEdit v0.1.0 release already exists; refusing to overwrite'
+          if gh release view text-edit-v0.2.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
+            echo 'TextEdit v0.2.0 release already exists; refusing to overwrite'
             exit 1
           fi
-          gh release create text-edit-v0.1.0 TextEdit-v0.1.0.zip \
+          gh release create text-edit-v0.2.0 TextEdit-v0.2.0.zip \
             --repo massimilianonardi-ai/rumiai-os \
             --target "$GITHUB_SHA" \
-            --title "TextEdit v0.1.0" \
+            --title "TextEdit v0.2.0" \
             --notes "First GUI-independent source release: PieceDocument, TextEditSelections, TextEditRepresentation with source-coordinate replace(start,end,text), advanced logical selections. No history or GUI. See res/sys/manual/text-edit.lib.js."
