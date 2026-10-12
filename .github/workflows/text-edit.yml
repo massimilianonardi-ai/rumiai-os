@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: d4ad00f1f78e501438a2ee2b9e430add4e1a7e85
+          ref: e1e0c79e57069c8441127576138b3ced6e32755d
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -45,17 +45,17 @@ jobs:
           cp lib/sys/js/text-edit.lib.js dist/text-edit.lib.js
           cp res/sys/manual/text-edit.lib.js dist/README.txt
           cd dist
-          zip -q -9 ../TextEdit-v0.4.0.zip text-edit.lib.js README.txt
+          zip -q -9 ../TextEdit-v0.5.0.zip text-edit.lib.js README.txt
       - name: Publish installable release archive
         uses: actions/upload-artifact@v4
         with:
-          name: TextEdit-v0.4.0
-          path: TextEdit-v0.4.0.zip
+          name: TextEdit-v0.5.0
+          path: TextEdit-v0.5.0.zip
           if-no-files-found: error
 
   publish-release:
-    name: Publish TextEdit v0.4.0
-    if: github.ref == 'refs/heads/release/text-edit-v0.4.0'
+    name: Publish TextEdit v0.5.0
+    if: github.ref == 'refs/heads/release/text-edit-v0.5.0'
     needs: text-edit
     runs-on: ubuntu-latest
     permissions:
@@ -64,17 +64,17 @@ jobs:
       - name: Download exactly validated distribution
         uses: actions/download-artifact@v4
         with:
-          name: TextEdit-v0.4.0
+          name: TextEdit-v0.5.0
       - name: Create immutable version tag and GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view text-edit-v0.4.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
-            echo 'TextEdit v0.4.0 release already exists; refusing to overwrite'
+          if gh release view text-edit-v0.5.0 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
+            echo 'TextEdit v0.5.0 release already exists; refusing to overwrite'
             exit 1
           fi
-          gh release create text-edit-v0.4.0 TextEdit-v0.4.0.zip \
+          gh release create text-edit-v0.5.0 TextEdit-v0.5.0.zip \
             --repo massimilianonardi-ai/rumiai-os \
             --target "$GITHUB_SHA" \
-            --title "TextEdit v0.4.0" \
-            --notes "TextEdit v0.4.0: indexed TextEditBase source stores, atomic TextEditSelections, and notification-driven TextEditRepresentation with logarithmic source/view coordinate mapping. Overlay/annotation invalidations are observable and multiple views remain synchronized without explicit rebase records. No GUI or history."
+            --title "TextEdit v0.5.0" \
+            --notes "TextEdit v0.5.0: representation-owned grapheme, tab-stop and source-row column mapping with explicit ambiguity/virtual-column results; advanced line and rectangular selections share {row,col} start/end coordinates with inclusive row/cell semantics. Existing source, selection and representation contracts remain independent of GUI and history."
