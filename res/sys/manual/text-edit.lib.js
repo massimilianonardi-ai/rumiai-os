@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.8.0
+Version 0.8.1
 
 PURPOSE
 
@@ -17,6 +17,9 @@ Classic browser script:
   <script src="text-edit.lib.js"></script>
   const {TextEdit, TextEditRepresentation} = globalThis.TextEdit;
 
+  CommonJS load uses module.exports only; it does not create a globalThis.TextEdit
+  property. The browser script exposes the namespace only without CommonJS.
+
 The file is self-contained and has no npm/runtime dependencies. JavaScript
 strings and document positions are UTF-16 code units.
 
@@ -31,12 +34,19 @@ TextEdit
   .advancedSelections     TextEditAdvancedSelections
   .replace(textOrTexts)   one selected atomic commit; returns
                           {before,after,representation:{unresolved}}
+  .dispose()               idempotently closes the owned representation and
+                          default selector subscriptions; the shared source
+                          and an injected selection provider remain alive.
+                          Editing through a disposed facade fails.
 
 PieceDocument and FlatDocument — TextEditBase implementations
   TextEditBase is a structural interface, NOT an instantiable class.
   PieceDocument uses a balanced indexed piece treap for source-line queries and
   bounded text reads; FlatDocument is a simple flat-string reference backend.
   Both implement the complete public TextEditBase interface below.
+  PieceDocument additionally exposes stats() for nonportable diagnostics:
+  {nodes,maxDepth,sources} counts the current tree nodes, maximum tree depth
+  and distinct retained source buffers. This is not part of TextEditBase.
 
 TEXTEDITBASE PUBLIC INTERFACE
 
