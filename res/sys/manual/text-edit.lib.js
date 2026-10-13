@@ -20,8 +20,9 @@ Classic browser script:
   CommonJS load uses module.exports only; it does not create a globalThis.TextEdit
   property. The browser script exposes the namespace only without CommonJS.
 
-The file is self-contained and has no npm/runtime dependencies. JavaScript
-strings and document positions are UTF-16 code units.
+The file is self-contained and has no npm or third-party runtime
+  dependencies. Its JavaScript host MUST provide Intl.Segmenter for grapheme
+  processing. Strings and document positions use UTF-16 code units.
 
 CORE CLASSES
 
