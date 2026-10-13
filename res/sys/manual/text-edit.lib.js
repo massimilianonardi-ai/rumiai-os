@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.7.0
+Version 0.8.0
 
 PURPOSE
 
@@ -123,8 +123,18 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
   position between CR and LF; exact source UTF-16 access remains on the base.
 
   replace("X") writes one payload to every selection; replace(["X","Y"])
-  matches selections in original order. On actual editing, TextEditSelections
-  alone materializes needed spaces and missing rows. Multiple virtual
+  matches selections in original order. Each scalar or array element accepts
+  text, number or boolean: numbers and booleans use JavaScript String(value)
+  notation ("42", "NaN", "Infinity", "true", "false"), without locale-specific
+  formatting. An empty string, null or undefined deletes selected source
+  content. In an array, missing entries (including sparse holes and entries
+  beyond the supplied array length) also mean deletion; replace([]) deletes
+  across all selected ranges. Oversized arrays, unsupported types (objects,
+  nested arrays, symbols, functions, bigint) and attempts to replace with
+  no selections throw before editing. A caller can trim excess source items
+  and warn through an input adapter, but this library never silently drops
+  them. On actual editing, TextEditSelections alone materializes needed
+  spaces and missing rows. Multiple virtual
   positions mapping to the same original EOL/EOF are combined into one
   compatible source insertion before the single atomic document.replace
   commit. Conflicting writes to the same requested cell are rejected.
