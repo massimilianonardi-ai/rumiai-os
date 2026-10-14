@@ -1,21 +1,20 @@
 NAME
-    jsc - compile the original ordered JavaScript namespaces or CSS sources
+    jsc - assemble strict JavaScript namespace bundles or ordered CSS sources
 
 SYNOPSIS
     jsc <modules.json> [output]
 
 DESCRIPTION
-    jsc compiles the original m source description format. Its input is an
-    ordered JSON tree containing namespace nodes (name/modules) and source
-    nodes (file/symbols). No module IDs, dependency lists, build graph or
-    separate runtime registry are required.
+    jsc compiles an ordered JSON tree containing namespace nodes (name/modules)
+    and source nodes (file/exports with optional imports). No runtime module
+    registry or automatic external-file loading is introduced.
 
     Earlier declarations are available to later source files in the same
     lexical namespace. Symbols exported in a nested namespace become
     accessible through the corresponding namespace object in parent scopes.
 
-    jsc uses the default m-managed Node.js runtime through the existing
-    shell bootstrap. It does not install Node.js automatically.
+    jsc invokes Node.js from the existing m-integrated launcher. It does not
+    install Node.js automatically.
 
 COMPLETE EXAMPLE
     Given these files:
@@ -57,11 +56,11 @@ COMPLETE EXAMPLE
                     {
                       "name": "data",
                       "modules": [
-                        {"file": "m/srv/data/MyClass.js", "symbols": "MyClass"},
-                        {"file": "m/srv/data/Other.js", "symbols": "Other"}
+                        {"file": "m/srv/data/MyClass.js", "exports": "MyClass"},
+                        {"file": "m/srv/data/Other.js", "exports": "Other"}
                       ]
                     },
-                    {"file": "m/srv/Facade.js", "symbols": "Facade"}
+                    {"file": "m/srv/Facade.js", "exports": "Facade"}
                   ]
                 }
               ]
@@ -97,7 +96,8 @@ COMPLETE EXAMPLE
     qualified access through m.srv.data.MyClass is also available.
 
 MODULES.JSON FORMAT
-    The root object contains an ordered "modules" array.
+    The root object contains an ordered "modules" array. Optional Boolean
+    "nodeGlobal" defaults to false and controls global publication in Node.
 
     A namespace node:
         name       namespace name: one valid JavaScript identifier
@@ -105,25 +105,44 @@ MODULES.JSON FORMAT
 
     A source node:
         file       relative source pathname
-        symbols    optional comma-separated exported identifiers
+        exports    optional comma-separated exported identifiers
+        imports    optional object mapping local names to namespace paths
 
     Example of multiple exports:
 
-        {"file": "m/util/clock.js", "symbols": "clock,clockUTC"}
+        {"file": "m/util/clock.js", "exports": "clock,clockUTC"}
 
     Example of a side-effect-only source:
 
-        {"file": "m/init.js", "symbols": ""}
+        {"file": "m/init.js", "exports": ""}
 
     The files are included in JSON order. jsc does not automatically sort
     them, discover references or build a dependency graph. The project
-    author chooses order. Source paths are relative to the directory of
-    the manifest, rather than the shell working directory. Sources must
-    resolve inside that directory. Unknown record members, unsafe names
-    and invalid output syntax are rejected.
+    author chooses order. Source paths are relative to the descriptor
+    directory and may not escape it. Invalid identifiers and JavaScript
+    syntax are rejected.
 
     Namespace objects can be reopened by a subsequently loaded bundle.
-    Previous exported namespace members remain accessible when doing so.
+    Previous exports remain accessible through qualified namespace paths.
+    If an unqualified alias is needed, imports generates a lexical reference:
+
+        {"file": "m/srv/Extension.js",
+         "imports": {"A": "m.data.A"}, "exports": "Extension"}
+
+    Equivalent source code may declare: var A = m.data.A;
+    Imports never load or embed provider source files. Captured references
+    retain their value if a namespace property is later replaced.
+
+NODE.JS AND BROWSER
+    Generated JavaScript uses an outer strict closure with nested namespace
+    closures. Browser classic scripts publish namespace roots on globalThis.
+
+    Node CommonJS normally publishes the root namespace through
+    module.exports only, without reading or writing globalThis.m. Set
+    "nodeGlobal": true at the descriptor root to reuse or create the shared
+    global namespace in Node; module.exports returns the same object.
+    Multiple independently compiled bundles must be loaded in dependency
+    order before acquiring references; no import loads a bundle.
 
 CSS
     A CSS manifest is another ordered source list, without namespaces:
@@ -156,39 +175,27 @@ OUTPUT AND RELEASE ARTIFACTS
     absent, the raw assembly remains usable and its .gz is produced
     with a warning. jsc does not install tools or access the network.
 
-    Syntax/input validation is performed before replacing output.
-    A filesystem write failure is not an atomic rollback guarantee.
+    JavaScript syntax is validated by Node before emission. If Closure
+    Compiler is available, jsc also runs its non-mutating --checks_only
+    validation before emitting source. The launcher retains its existing
+    redirection behavior; output replacement on failure is not guaranteed
+    to be atomic.
 
 ERRORS
-    Errors are reported with distinct jsc.<message-id> diagnostics and
-    nonzero statuses. The m launcher uses log/fatal for errors occurring
-    before Node starts; the Node compiler reports its own errors without
-    generating a duplicate shell fatal.
+    The launcher reports fatal jsc.<branch> diagnostics. The Node engine
+    reports branch-specific errors to stderr and exits nonzero.
 
-    Major compiler statuses:
-         1   Invalid operands
-         2   Manifest unreadable
-         3   No sources declared
-         4   Source pathname unresolved
-         7   Invalid assembled JavaScript
-         8   Output cannot be written
-         9   Unexpected compiler failure
-        11   Invalid manifest JSON
-        12   Invalid manifest shape
-        20   Source outside manifest directory
-        21   Unreadable source file
-        23   Invalid namespace or symbol identifier
-        24   Invalid source/namespace record
-        25   Mixed JS/CSS or CSS namespace
-        26   Duplicate export symbol
-        27   Installed minifier failed
-        28   Gzip output failed
+    Engine statuses:
+         1   Invalid arguments
+         2   Descriptor, source or generated syntax invalid
+         3   Installed Closure Compiler check failed
+         4   Output write failed
 
     Launcher statuses:
          1   Missing/invalid operands
-         2   Compiler engine unavailable
-         3   Default m-managed nodejs runtime unavailable
-         4   Node executable unavailable
+         2   Compiler execution failed
+         4   Installed minifier failed
+         5   Gzip generation failed
 
 FILES
     bin/sys/jsc
