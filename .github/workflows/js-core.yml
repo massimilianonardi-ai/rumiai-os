@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 4e0fb3142e6a9fc4a91ab43d76049216cbfd1fa7
+          ref: b6b72053a26d3a4c6ad71e1e0bea4a9ce7ea6af0
           path: .js-core-test-suite
       - uses: actions/setup-node@v4
         with:
@@ -32,4 +32,6 @@ jobs:
         shell: bash
         run: |
           export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
-          ./.js-core-test-suite/tests/rumiai-os/js-core/compile.test
+          chrome="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$chrome"
+          CHROMIUM="$chrome" ./.js-core-test-suite/tests/rumiai-os/js-core/compile.test
