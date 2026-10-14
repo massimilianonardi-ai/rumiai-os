@@ -1,5 +1,5 @@
 TextEdit — GUI-independent text editing library
-Version 0.8.1
+Version 0.8.2
 
 PURPOSE
 
@@ -155,8 +155,11 @@ TEXTEDITSELECTIONS PUBLIC INTERFACE
   Inserting CR immediately before an existing LF forms CRLF; the resulting
   caret is positioned at the next row start, never inside that terminator.
 
-  Successful source edits return {before,after}. Selected ranges become
-  carets after their inserted text; orientation is retained. Existing-source
+  Successful source edits return {before,after}. Selected ranges collapse
+  to carets retaining their original collection order and explicit forward
+  orientation. A forward caret is after the inserted payload; a reverse
+  caret is at its start. The same rule applies to ordinary, multicaret,
+  virtual and advanced-constructed selections, including subsequent edits. Existing-source
   selection anchors are updated after committed edits from other views;
   virtual anchors follow their original row where unambiguous, otherwise
   are conservatively invalidated instead of guessing. A revision gap clears
@@ -226,9 +229,12 @@ TEXTEDITADVANCEDSELECTIONS PUBLIC INTERFACE
   outside source text clips to an empty selection list, not a caret at EOF.
 
   lineSelection covers the complete included source rows and their physical
-  terminators where present; rectangularSelection emits one half-open logical
-  interval per selected row, with inclusive user-supplied endpoints and
-  preserved orientation. Advanced selections do not calculate grapheme/tab
+  terminators where present, producing exactly one forward-oriented range
+  regardless of endpoint traversal. rectangularSelection emits one half-open
+  logical interval per selected row, with inclusive user-supplied endpoints,
+  preserving horizontal orientation and requested vertical target order.
+  Both are constructors of ordinary selections; neither leaves a persisted
+  selection-kind flag or defines input/replacement policy. Advanced selections do not calculate grapheme/tab
   widths, inspect UTF-16 source offsets or write to the document.
 
   The representation supplies logical row widths and neutral coordinate
