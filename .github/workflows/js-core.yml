@@ -1,0 +1,33 @@
+name: JavaScript core compilation and runtime
+
+on:
+  push:
+    paths:
+      - 'lib/sys/js/core/**'
+      - 'lib/sys/js/jsc.lib.js'
+      - '.github/workflows/js-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out current product
+        uses: actions/checkout@v4
+      - name: Check out permanent tests at known revision
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 4e0fb3142e6a9fc4a91ab43d76049216cbfd1fa7
+          path: .js-core-test-suite
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exercise real compiler and core browser/CommonJS API
+        shell: bash
+        run: |
+          export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
+          ./.js-core-test-suite/tests/rumiai-os/js-core/compile.test
