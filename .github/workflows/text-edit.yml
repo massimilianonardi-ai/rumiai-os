@@ -27,7 +27,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 9da9700ef06ef99e5a05633fcf30c973f095994f
+          ref: b8d5cbea34784d1a42af2b00bf22c09fec9d478c
           path: .text-edit-tests
       - uses: actions/setup-node@v4
         with:
@@ -45,17 +45,17 @@ jobs:
           cp lib/sys/js/text-edit.lib.js dist/text-edit.lib.js
           cp res/sys/manual/text-edit.lib.js dist/README.txt
           cd dist
-          zip -q -9 ../TextEdit-v0.8.1.zip text-edit.lib.js README.txt
+          zip -q -9 ../TextEdit-v0.8.2.zip text-edit.lib.js README.txt
       - name: Publish installable release archive
         uses: actions/upload-artifact@v4
         with:
-          name: TextEdit-v0.8.1
-          path: TextEdit-v0.8.1.zip
+          name: TextEdit-v0.8.2
+          path: TextEdit-v0.8.2.zip
           if-no-files-found: error
 
   publish-release:
-    name: Publish TextEdit v0.8.1
-    if: github.ref == 'refs/heads/release/text-edit-v0.8.1'
+    name: Publish TextEdit v0.8.2
+    if: github.ref == 'refs/heads/release/text-edit-v0.8.2'
     needs: text-edit
     runs-on: ubuntu-latest
     permissions:
@@ -64,17 +64,17 @@ jobs:
       - name: Download exactly validated distribution
         uses: actions/download-artifact@v4
         with:
-          name: TextEdit-v0.8.1
+          name: TextEdit-v0.8.2
       - name: Create immutable version tag and GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          if gh release view text-edit-v0.8.1 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
-            echo 'TextEdit v0.8.1 release already exists; refusing to overwrite'
+          if gh release view text-edit-v0.8.2 --repo massimilianonardi-ai/rumiai-os >/dev/null 2>&1; then
+            echo 'TextEdit v0.8.2 release already exists; refusing to overwrite'
             exit 1
           fi
-          gh release create text-edit-v0.8.1 TextEdit-v0.8.1.zip \
+          gh release create text-edit-v0.8.2 TextEdit-v0.8.2.zip \
             --repo massimilianonardi-ai/rumiai-os \
             --target "$GITHUB_SHA" \
-            --title "TextEdit v0.8.1" \
-            --notes "TextEdit v0.8.1: finalized standalone GUI-independent text core. Atomic multicaret editing, nullish and missing selected-value deletion, number/boolean normalization, separate logical representation, facade-owned subscription disposal and no CommonJS global pollution. PieceDocument diagnostic counts are corrected. History, input interpretation, GUI and host adapters remain separate."
+            --title "TextEdit v0.8.2" \
+            --notes "TextEdit v0.8.2: finalized standalone GUI-independent text core. Oriented post-edit carets: forward at payload end and reverse at payload start; lineSelection always constructs a forward selection. Virtual/clipped selection geometry remains supported. Input grapheme reversal, GUI and host adapters remain separate."
