@@ -7,40 +7,40 @@
       [
         {"name": "util", "modules":
         [
-          {"file": "m/util/environment.js", "symbols": "environment,deviceMobility,isMobile"},
-          {"file": "m/util/timestamp.js", "symbols": "timestamp"},
-          {"file": "m/util/performance.js", "symbols": "performance"},
-          {"file": "m/util/uniqueID.js", "symbols": "uniqueID"},
-          {"file": "m/util/clone.js", "symbols": "clone"},
-          {"file": "m/util/merge.js", "symbols": "merge"},
-          {"file": "m/util/link.js", "symbols": "link,linkProperty"},
-          {"file": "m/util/ajax.js", "symbols": "ajax,ajaxAdvanced"},
-          {"file": "m/util/translate.js", "symbols": "translate"},
-          {"file": "m/util/jsonToObject.js", "symbols": "jsonToObject"},
-          {"file": "m/util/keyBindEnterEsc.js", "symbols": "keyBindEnterEsc"}
+          {"file": "m/util/environment.js", "exports": "environment,deviceMobility,isMobile"},
+          {"file": "m/util/timestamp.js", "exports": "timestamp"},
+          {"file": "m/util/performance.js", "exports": "performance"},
+          {"file": "m/util/uniqueID.js", "exports": "uniqueID"},
+          {"file": "m/util/clone.js", "exports": "clone"},
+          {"file": "m/util/merge.js", "exports": "merge"},
+          {"file": "m/util/link.js", "exports": "link,linkProperty"},
+          {"file": "m/util/ajax.js", "exports": "ajax,ajaxAdvanced"},
+          {"file": "m/util/translate.js", "exports": "translate"},
+          {"file": "m/util/jsonToObject.js", "exports": "jsonToObject"},
+          {"file": "m/util/keyBindEnterEsc.js", "exports": "keyBindEnterEsc"}
         ]},
         {"name": "json", "modules":
         [
-          {"file": "m/json/path.js", "symbols": "path"},
-          {"file": "m/json/canonicalize.js", "symbols": "canonicalize"},
-          {"file": "m/json/traverse.js", "symbols": "traverse"},
-          {"file": "m/json/resolve.js", "symbols": "resolve"}
+          {"file": "m/json/path.js", "exports": "path"},
+          {"file": "m/json/canonicalize.js", "exports": "canonicalize"},
+          {"file": "m/json/traverse.js", "exports": "traverse"},
+          {"file": "m/json/resolve.js", "exports": "resolve"}
         ]},
-        {"file": "m/sys.js", "symbols": "sys"},
-        {"file": "m/Class.js", "symbols": "Class"},
+        {"file": "m/sys.js", "exports": "sys"},
+        {"file": "m/Class.js", "exports": "Class"},
         {"name": "log", "modules":
         [
-          {"file": "m/log/Log.js", "symbols": "Log"},
-          {"file": "m/log/Logger.js", "symbols": "Logger"},
-          {"file": "m/log/LoggerConsoleSimple.js", "symbols": "LoggerConsoleSimple"},
-          {"file": "m/log/LoggerConsoleTrace.js", "symbols": "LoggerConsoleTrace"},
-          {"file": "m/log/LoggerStore.js", "symbols": "LoggerStore"}
+          {"file": "m/log/Log.js", "exports": "Log"},
+          {"file": "m/log/Logger.js", "exports": "Logger"},
+          {"file": "m/log/LoggerConsoleSimple.js", "exports": "LoggerConsoleSimple"},
+          {"file": "m/log/LoggerConsoleTrace.js", "exports": "LoggerConsoleTrace"},
+          {"file": "m/log/LoggerStore.js", "exports": "LoggerStore"}
         ]},
         {"name": "mod", "modules":
         [
-          {"file": "m/mod/Queue.js", "symbols": "Queue"}
+          {"file": "m/mod/Queue.js", "exports": "Queue"}
         ]},
-        {"file": "m/init.js", "symbols": ""}
+        {"file": "m/init.js", "exports": ""}
       ]
     }
   ]
