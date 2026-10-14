@@ -13,11 +13,11 @@ modules_file=${1##*/}
 [ "$source_dir" != "$1" ] || source_dir=.
 
 if [ "$#" -eq 1 ]; then
-  node "$m_COMMAND_BIN.js" "$source_dir" "$modules_file" || fatal 2 jsc compilation-failed
+  node "$m_ROOT/lib/sys/js/jsc.lib.js" "$1" || fatal 2 jsc compilation-failed
 else
   output="$2"
 
-  node "$m_COMMAND_BIN.js" "$source_dir" "$modules_file" > "$output" || fatal 2 jsc compilation-failed
+  node "$m_ROOT/lib/sys/js/jsc.lib.js" "$1" > "$output" || fatal 2 jsc compilation-failed
 
   case $output in
     *.js)
