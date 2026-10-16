@@ -24,13 +24,14 @@
           {"file": "m/object/clone.js", "exports": "clone"},
           {"file": "m/object/merge.js", "exports": "merge"},
           {"file": "m/object/link.js", "exports": "link,linkProperty"},
-          {"file": "m/object/canonicalize.js", "exports": "canonicalize"}
+          {"file": "m/object/canonicalize.js", "exports": "canonicalize"},
+          {"file": "m/object/traverse.js", "exports": "traverse"}
         ]},
         {"name": "json", "modules":
         [
           {"file": "m/json/path.js", "exports": "path"},
           {"file": "m/json/canonicalize.js", "exports": "canonicalize", "imports": {"objectCanonicalize": "m.object.canonicalize"}},
-          {"file": "m/json/traverse.js", "exports": "traverse"},
+          {"file": "m/json/traverse.js", "exports": "traverse", "imports": {"objectTraverse": "m.object.traverse"}},
           {"file": "m/json/resolve.js", "exports": "resolve"}
         ]},
         {"file": "m/sys.js", "exports": "sys"},
