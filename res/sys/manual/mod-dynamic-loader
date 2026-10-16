@@ -1,0 +1,115 @@
+NAME
+    mod-dynamic-loader - browser source composition via m.mod.DynamicLoader
+
+DESCRIPTION
+    m.mod.DynamicLoader fetches an HTTP-accessible JSON source descriptor
+    and its listed JavaScript or CSS files, assembles sources in descriptor
+    order and optionally inserts the assembled code in the browser DOM.
+
+    This is a jsc-built browser module, not the separately maintained
+    lib/sys/js/dynamic-loader.lib.js library. It does not provide the old
+    global loadModulesDynamically or loadLibraryDynamically functions.
+
+SETUP
+    Compile the dedicated descriptor with the existing jsc command:
+
+        jsc lib/sys/js/core/modules-dynamic-loader.json output.js
+
+    The output filename is chosen by the caller. Serve the result to the
+    browser as a classic script:
+
+        <script src="/assets/output.js"></script>
+
+    It publishes m.mod.Queue and m.mod.DynamicLoader in the browser.
+
+PUBLIC METHODS
+    new m.mod.DynamicLoader()
+        Construct a browser dynamic source loader.
+
+    compose(manifest, {signal} = {})
+        Return Promise<{kind, code}> where kind is "js" or "css".
+        Fetch the descriptor and source files; assemble in declared order,
+        regardless of download completion order. Does not execute code.
+
+    load(manifest, {replace = null, signal, nonce} = {})
+        Return Promise<Element>. Compose the sources, append a classic
+        script or style element to document.head and return that element.
+        If replace is an attached same-tag element, remove it after the
+        new element has been appended. Incorrect replacement type rejects.
+
+        The Promise reports successful fetching, composition and DOM
+        insertion, NOT successful parsing/execution or correctness of the
+        loaded bundle. The bundle and calling application are responsible
+        for correctness, runtime errors, readiness and recovery.
+
+    manifest
+        URL string resolved against document.baseURI, constrained to the
+        document origin. The descriptor lists ordered modules/name/file
+        nodes. File paths are resolved relative to the descriptor URL.
+        A descriptor must select at least one source and only one kind:
+        JavaScript or CSS.
+
+    signal
+        Optional AbortSignal passed to fetch. Stopping the internal Queue
+        does not automatically cancel already started HTTP requests.
+
+    nonce
+        Optional nonce assigned to the new script/style element. Under a
+        nonce-based Content Security Policy, supply the nonce on EVERY
+        script load or replacement; it is not copied from replace.
+
+EXAMPLE
+    With /demo/modules-js.json and its JavaScript sources served from
+    the same origin, after output.js has loaded:
+
+        const loader = new m.mod.DynamicLoader();
+
+        const assembled = await loader.compose("/demo/modules-js.json");
+        console.log(assembled.kind, assembled.code);
+
+        const element = await loader.load
+        (
+          "/demo/modules-js.json",
+          {nonce: "the-current-page-nonce"}
+        );
+
+        // Inserting an element is not proof that application code ran.
+        // The application checks its own readiness or exported API.
+
+    For replacement, pass the returned element back as replace:
+
+        const next = await loader.load
+        (
+          "/demo/updated-js.json",
+          {replace: element, nonce: "the-current-page-nonce"}
+        );
+
+ERRORS AND LIMITS
+    Descriptor errors, disallowed paths, cross-origin requests, network
+    failures, non-success HTTP status, and invalid replacement targets
+    reject the corresponding Promise. A source download failure stops
+    assembly and prevents a partial bundle from being reported as success.
+
+    Browser CSP may prevent an inserted script from running without
+    causing load() to reject. Runtime syntax errors, thrown exceptions,
+    missing dependencies and application-level failures are not caught
+    or reported by load(). No successful-execution guarantee exists.
+
+    The loader does not reverse side effects from executed JavaScript.
+    Removal of an old script element does not undo globals, timers,
+    listeners or other effects. Replacement is not transactional and
+    is not rollback-safe if the new script is blocked or fails at runtime.
+
+    The loader is browser-only. A web server must serve the manifest and
+    source files. The legacy dynamic-loader.lib.js manual remains a
+    separate operational reference while that library is present.
+
+FILES
+    lib/sys/js/core/m/mod/DynamicLoader.js
+    lib/sys/js/core/m/mod/Queue.js
+    lib/sys/js/core/modules-dynamic-loader.json
+    res/sys/manual/mod-dynamic-loader
+
+SEE ALSO
+    manual sys jsc
+    manual sys dynamic-loader.lib.js
