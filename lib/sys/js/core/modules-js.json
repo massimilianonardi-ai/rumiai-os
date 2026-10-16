@@ -19,6 +19,10 @@
           {"file": "m/util/jsonToObject.js", "exports": "jsonToObject"},
           {"file": "m/util/keyBindEnterEsc.js", "exports": "keyBindEnterEsc"}
         ]},
+        {"name": "object", "modules":
+        [
+          {"file": "m/object/clone.js", "exports": "clone"}
+        ]},
         {"name": "json", "modules":
         [
           {"file": "m/json/path.js", "exports": "path"},
