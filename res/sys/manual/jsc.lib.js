@@ -49,5 +49,6 @@ FILES
     bin/sys/jsc
 
 SEE ALSO
+    manual sys mod-dynamic-loader
     manual sys jsc
     manual sys dynamic-loader.lib.js
