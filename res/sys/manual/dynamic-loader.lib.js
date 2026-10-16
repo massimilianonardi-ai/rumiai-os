@@ -2,6 +2,8 @@ NAME
     dynamic-loader.lib.js - independent browser JavaScript/CSS source loader
 
 DESCRIPTION
+    This is the maintained legacy standalone library, distinct from the
+    jsc-assembled m.mod.DynamicLoader module (manual sys mod-dynamic-loader).
     Classic browser JavaScript library providing the original named loader
     functions. It fetches ordered JSON source descriptors and source files
     over HTTP, then assembles and inserts classic script/style elements.
@@ -73,5 +75,6 @@ FILES
     res/sys/manual/dynamic-loader.lib.js
 
 SEE ALSO
+    manual sys mod-dynamic-loader
     manual sys jsc
     manual sys jsc.lib.js
