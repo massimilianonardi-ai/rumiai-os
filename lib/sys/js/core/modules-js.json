@@ -21,12 +21,13 @@
         ]},
         {"name": "object", "modules":
         [
-          {"file": "m/object/clone.js", "exports": "clone"}
+          {"file": "m/object/clone.js", "exports": "clone"},
+          {"file": "m/object/canonicalize.js", "exports": "canonicalize"}
         ]},
         {"name": "json", "modules":
         [
           {"file": "m/json/path.js", "exports": "path"},
-          {"file": "m/json/canonicalize.js", "exports": "canonicalize"},
+          {"file": "m/json/canonicalize.js", "exports": "canonicalize", "imports": {"objectCanonicalize": "m.object.canonicalize"}},
           {"file": "m/json/traverse.js", "exports": "traverse"},
           {"file": "m/json/resolve.js", "exports": "resolve"}
         ]},
