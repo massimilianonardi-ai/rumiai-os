@@ -1,0 +1,25 @@
+{
+  "modules":
+  [
+    {
+      "name": "m",
+      "modules":
+      [
+        {
+          "name": "mod",
+          "modules":
+          [
+            {
+              "file": "m/mod/Queue.js",
+              "exports": "Queue"
+            },
+            {
+              "file": "m/mod/DynamicLoader.js",
+              "exports": "DynamicLoader"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
