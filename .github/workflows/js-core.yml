@@ -21,7 +21,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: f7e790d9d0197ac7e681ff4963401a9402508c5f
+          ref: 67cdf0f1c1a370a4c31078b082cc14eb7d2ce66d
           path: .js-core-test-suite
       - uses: actions/setup-node@v4
         with:
