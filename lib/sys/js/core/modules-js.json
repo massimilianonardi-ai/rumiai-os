@@ -22,6 +22,7 @@
         {"name": "object", "modules":
         [
           {"file": "m/object/clone.js", "exports": "clone"},
+          {"file": "m/object/merge.js", "exports": "merge"},
           {"file": "m/object/canonicalize.js", "exports": "canonicalize"}
         ]},
         {"name": "json", "modules":
