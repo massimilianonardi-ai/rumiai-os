@@ -1,0 +1,39 @@
+name: m.text.selection core extraction verification
+
+on:
+  push:
+    paths:
+      - 'lib/sys/js/core/m/text/selection/**'
+      - 'lib/sys/js/core/modules-js.json'
+      - '.github/workflows/text-selection-core.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  text-selection:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out current product code
+        uses: actions/checkout@v4
+      - name: Check out permanent selection extraction tests
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 8e904afe6e0e5d0bb3cc1d279744acab7cb40a91
+          path: .text-selection-tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Verify selection source and test syntax
+        run: |
+          node --check lib/sys/js/core/m/text/selection/helpers.js
+          node --check lib/sys/js/core/m/text/selection/TextEditSelections.js
+          node --check .text-selection-tests/tests/rumiai-os/text-selection/core.test.mjs
+          node --check lib/sys/js/text-edit.lib.js
+      - name: Verify actual jsc export and differential selector behavior
+        run: |
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE" ./.text-selection-tests/tests/rumiai-os/text-selection/core.test
