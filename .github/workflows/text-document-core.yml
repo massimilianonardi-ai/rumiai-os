@@ -22,13 +22,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 6cee734dab9a79e24d50fd01e26900f8018fe13f
+          ref: 6f1c34a5dbc31d309ff2d4b39e5cbd9ced761e3c
           path: .text-document-tests
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify extracted source syntax
         run: |
+          node --check lib/sys/js/core/m/text/document/Document.js
           node --check lib/sys/js/core/m/text/document/base.js
           node --check lib/sys/js/core/m/text/document/flat.js
           node --check lib/sys/js/core/m/text/document/piece.js

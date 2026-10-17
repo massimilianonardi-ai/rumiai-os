@@ -38,6 +38,7 @@
         [
           {"name": "document", "modules":
           [
+            {"file": "m/text/document/Document.js", "exports": "Document"},
             {"file": "m/text/document/base.js"},
             {"file": "m/text/document/flat.js", "exports": "FlatDocument"},
             {"file": "m/text/document/piece.js", "exports": "PieceDocument"}
@@ -45,7 +46,7 @@
           {"name": "selection", "modules":
           [
             {"file": "m/text/selection/helpers.js"},
-            {"file": "m/text/selection/TextEditSelections.js", "exports": "TextEditSelections"}
+            {"file": "m/text/selection/TextEditSelections.js", "exports": "TextEditSelections", "imports": {"Document": "m.text.document.Document"}}
           ]}
         ]},
         {"file": "m/sys.js", "exports": "sys"},
