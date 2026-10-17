@@ -30,9 +30,9 @@ jobs:
       - name: Verify extracted source syntax
         run: |
           node --check lib/sys/js/core/m/text/document/Document.js
-          node --check lib/sys/js/core/m/text/document/base.js
-          node --check lib/sys/js/core/m/text/document/flat.js
-          node --check lib/sys/js/core/m/text/document/piece.js
+          node --check lib/sys/js/core/m/text/document/_DocumentStore.js
+          node --check lib/sys/js/core/m/text/document/FlatDocument.js
+          node --check lib/sys/js/core/m/text/document/PieceDocument.js
           node --check .text-document-tests/tests/rumiai-os/text-document/core.test.mjs
           node --check lib/sys/js/text-edit.lib.js
       - name: Verify actual core compiler and extracted document semantics
