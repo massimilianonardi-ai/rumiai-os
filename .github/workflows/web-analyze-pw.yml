@@ -4,8 +4,7 @@ on:
   push:
     paths:
       - "lib/sys/js/web-analyze-pw.lib.js"
-      - "bin/sys/web-analyze-pw"
-      - "res/sys/manual/web-analyze-pw*"
+      - "res/sys/manual/web-analyze-pw.lib.js"
       - ".github/workflows/web-analyze-pw.yml"
   workflow_dispatch:
 
@@ -51,19 +50,22 @@ jobs:
           ' &
           server=$!
           trap 'kill "$server" 2>/dev/null || :' 0
-          node lib/sys/js/web-analyze-pw.lib.js \
-            http://127.0.0.1:18765/ \
-            --headless --max-steps 3 --settle-ms 150 \
-            --output "$RUNNER_TEMP/web-analyze-pw-fixture"
-          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/summary.json"
-          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/events.jsonl"
-          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/0000-initial.html"
-          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/0000-initial.png"
-          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/trace.zip"
+          xvfb-run -a node -e '
+            const a = require("./lib/sys/js/web-analyze-pw.lib.js");
+            a.webAnalyzePw({url:"http://127.0.0.1:18765/", output:process.argv[1], maxSteps:3, settleMs:150})
+            .then(r => process.stdout.write(r.output+"\\n"), e => {console.error(e);process.exitCode=1;});
+          ' "$RUNNER_TEMP/web-analyze-pw-fixture"
+          summary=$(find "$RUNNER_TEMP/web-analyze-pw-fixture" -name summary.json -type f -print -quit)
+          test -n "$summary"
+          run_dir=${summary%/summary.json}
+          test -s "$run_dir/events.jsonl"
+          test -s "$run_dir/0000-initial.html"
+          test -s "$run_dir/0000-initial.png"
+          test -s "$run_dir/trace.zip"
           node -e '
-          const s = require(process.argv[1]);
-          if (s.failure || s.captures.length < 2 || s.eventCount < 5) process.exit(1);
-          ' "$RUNNER_TEMP/web-analyze-pw-fixture/summary.json"
+            const s = require(process.argv[1]);
+            if (s.failure || s.captures.length < 2 || s.eventCount < 5) process.exit(1);
+          ' "$summary"
 
       - name: Attempt target ChatGPT share analysis
         continue-on-error: true
@@ -71,8 +73,9 @@ jobs:
         run: |
           set -eu
           export PATH="$(pwd)/node_modules/.bin:$PATH"
-          node lib/sys/js/web-analyze-pw.lib.js \
+          xvfb-run -a timeout 180 node lib/sys/js/web-analyze-pw.lib.js \
             https://chatgpt.com/share/6ad1c0d5-49ec-83eb-a79b-85b04b938835 \
-            --headless --max-steps 6 --settle-ms 500 \
-            --output "$RUNNER_TEMP/web-analyze-pw-chatgpt"
-          test -s "$RUNNER_TEMP/web-analyze-pw-chatgpt/summary.json"
+            "$RUNNER_TEMP/web-analyze-pw-chatgpt"
+          summary=$(find "$RUNNER_TEMP/web-analyze-pw-chatgpt" -name summary.json -type f -print -quit)
+          test -n "$summary"
+          test -s "$summary"
