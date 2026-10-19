@@ -1,0 +1,78 @@
+name: Web Analyze Playwright
+
+on:
+  push:
+    paths:
+      - "lib/sys/js/web-analyze-pw.lib.js"
+      - "bin/sys/web-analyze-pw"
+      - "res/sys/manual/web-analyze-pw*"
+      - ".github/workflows/web-analyze-pw.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  analysis:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "26"
+
+      - name: Syntax, API and argument checks
+        shell: sh
+        run: |
+          set -eu
+          node --check lib/sys/js/web-analyze-pw.lib.js
+          node -e '
+          const lib = require("./lib/sys/js/web-analyze-pw.lib.js");
+          if (typeof lib.webAnalyzePw !== "function" || typeof lib.webAnalyzePwMain !== "function") process.exit(1);
+          lib.webAnalyzePwMain([]).then(status => process.exit(status === 1 ? 0 : 2));
+          '
+
+      - name: Install upstream Playwright and Chromium
+        shell: sh
+        run: |
+          set -eu
+          PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.63.0
+          ./node_modules/.bin/playwright install --with-deps chromium
+
+      - name: Analyze real locally served scrollable page
+        shell: sh
+        run: |
+          set -eu
+          export PATH="$(pwd)/node_modules/.bin:$PATH"
+          node -e '
+            const http = require("node:http");
+            const html = "<html><head><title>PW deep scan fixture</title></head><body><div style=\"height:500px; overflow-y:auto\"><main style=\"height:3500px\"><h1>Nested long document</h1></main></div><script>console.log(\"fixture ready\");setTimeout(()=>{document.querySelector(\"h1\").textContent=\"DOM mutated\"},100);</script></body></html>";
+            http.createServer((req,res)=>{res.setHeader("Content-Type","text/html");res.end(html)}).listen(18765,"127.0.0.1");
+          ' &
+          server=$!
+          trap 'kill "$server" 2>/dev/null || :' 0
+          node lib/sys/js/web-analyze-pw.lib.js \
+            http://127.0.0.1:18765/ \
+            --headless --max-steps 3 --settle-ms 150 \
+            --output "$RUNNER_TEMP/web-analyze-pw-fixture"
+          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/summary.json"
+          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/events.jsonl"
+          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/0000-initial.html"
+          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/0000-initial.png"
+          test -s "$RUNNER_TEMP/web-analyze-pw-fixture/trace.zip"
+          node -e '
+          const s = require(process.argv[1]);
+          if (s.failure || s.captures.length < 2 || s.eventCount < 5) process.exit(1);
+          ' "$RUNNER_TEMP/web-analyze-pw-fixture/summary.json"
+
+      - name: Attempt target ChatGPT share analysis
+        continue-on-error: true
+        shell: sh
+        run: |
+          set -eu
+          export PATH="$(pwd)/node_modules/.bin:$PATH"
+          node lib/sys/js/web-analyze-pw.lib.js \
+            https://chatgpt.com/share/6ad1c0d5-49ec-83eb-a79b-85b04b938835 \
+            --headless --max-steps 6 --settle-ms 500 \
+            --output "$RUNNER_TEMP/web-analyze-pw-chatgpt"
+          test -s "$RUNNER_TEMP/web-analyze-pw-chatgpt/summary.json"
