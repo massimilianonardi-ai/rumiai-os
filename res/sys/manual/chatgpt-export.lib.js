@@ -33,7 +33,9 @@ DIRECT INVOCATION
     It opens about:blank first, discovers the actual ephemeral CDP port via
     DevToolsActivePort, attaches to that page, navigates to <url>, waits
     for document loading to complete, enables Runtime and Debugger, and
-    reads embedded share data from Remix/React Router loader state or
+    verifies the loaded document is still at the requested page origin and
+    share route (rather than an authentication redirect or Chromium error),
+    then reads embedded share data from Remix/React Router loader state or
     React Router's inline streamed hydration payload. It recognizes an
     original mapping/current_node snapshot or a linear_conversation array.
     For linear_conversation it creates an active-branch projection for the
