@@ -36,13 +36,53 @@ jobs:
         run: |
           set -eu
           PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --no-save --ignore-scripts --no-audit --no-fund playwright@1.63.0
-          ./node_modules/.bin/playwright install --with-deps chromium
+          # Deliberately use a browser cache outside Node's default HOME.
+          PLAYWRIGHT_BROWSERS_PATH="$RUNNER_TEMP/pw-owned-browsers" \
+            ./node_modules/.bin/playwright install --with-deps chromium
+          mkdir -p "$RUNNER_TEMP/playwright-bin"
+          printf '%s\n' '#!/bin/sh' \
+            'PLAYWRIGHT_BROWSERS_PATH="'$RUNNER_TEMP'/pw-owned-browsers"' \
+            'export PLAYWRIGHT_BROWSERS_PATH' \
+            'exec "'$GITHUB_WORKSPACE'/node_modules/.bin/playwright" "$@"' \
+            > "$RUNNER_TEMP/playwright-bin/playwright"
+          chmod +x "$RUNNER_TEMP/playwright-bin/playwright"
+
+      - name: Verify CLI-owned browser cache survives Node package isolation
+        shell: sh
+        run: |
+          set -eu
+          export PATH="$RUNNER_TEMP/playwright-bin:$PATH"
+          unset PLAYWRIGHT_BROWSERS_PATH
+          node -e '
+            const api = require("./lib/sys/js/web-analyze-pw.lib.js");
+            api.webAnalyzePw({
+              url: "http://127.0.0.1:1/",
+              output: process.argv[1],
+              headless: true,
+              maxSteps: 1,
+              settleMs: 100
+            }).then(() => { console.error("unexpected navigation success"); process.exitCode=1; },
+            e => {
+              if (e.id !== "navigation-failed") {
+                console.error("browser did not reach navigation", e);
+                process.exitCode=1;
+              }
+            });
+          ' "$RUNNER_TEMP/pw-cache-regression"
+          summary=$(find "$RUNNER_TEMP/pw-cache-regression" -name summary.json -type f -print -quit)
+          test -n "$summary"
+          node -e '
+            const s = require(process.argv[1]);
+            if (s.failure?.id !== "navigation-failed") process.exit(1);
+            const events = require("node:fs").readFileSync(process.argv[2], "utf8");
+            if (!events.includes("navigation-failed")) process.exit(1);
+          ' "$summary" "${summary%/summary.json}/events.jsonl"
 
       - name: Analyze real locally served scrollable page
         shell: sh
         run: |
           set -eu
-          export PATH="$(pwd)/node_modules/.bin:$PATH"
+          export PATH="$RUNNER_TEMP/playwright-bin:$PATH"
           node -e '
             const http = require("node:http");
             const html = "<html><head><title>PW deep scan fixture</title></head><body><div style=\"height:500px; overflow-y:auto\"><main style=\"height:3500px\"><h1>Nested long document</h1></main></div><script>console.log(\"fixture ready\");setTimeout(()=>{document.querySelector(\"h1\").textContent=\"DOM mutated\"},100);</script></body></html>";
@@ -50,9 +90,9 @@ jobs:
           ' &
           server=$!
           trap 'kill "$server" 2>/dev/null || :' 0
-          xvfb-run -a node -e '
+          node -e '
             const a = require("./lib/sys/js/web-analyze-pw.lib.js");
-            a.webAnalyzePw({url:"http://127.0.0.1:18765/", output:process.argv[1], maxSteps:3, settleMs:150})
+            a.webAnalyzePw({url:"http://127.0.0.1:18765/", output:process.argv[1], headless:true, maxSteps:3, settleMs:150})
             .then(r => process.stdout.write(r.output+"\\n"), e => {console.error(e);process.exitCode=1;});
           ' "$RUNNER_TEMP/web-analyze-pw-fixture"
           summary=$(find "$RUNNER_TEMP/web-analyze-pw-fixture" -name summary.json -type f -print -quit)
@@ -72,10 +112,17 @@ jobs:
         shell: sh
         run: |
           set -eu
-          export PATH="$(pwd)/node_modules/.bin:$PATH"
-          xvfb-run -a timeout 180 node lib/sys/js/web-analyze-pw.lib.js \
-            https://chatgpt.com/share/6ad1c0d5-49ec-83eb-a79b-85b04b938835 \
-            "$RUNNER_TEMP/web-analyze-pw-chatgpt"
+          export PATH="$RUNNER_TEMP/playwright-bin:$PATH"
+          timeout 180 node -e '
+            const a = require("./lib/sys/js/web-analyze-pw.lib.js");
+            a.webAnalyzePw({
+              url:"https://chatgpt.com/share/6ad1c0d5-49ec-83eb-a79b-85b04b938835",
+              output:process.argv[1],
+              headless:true,
+              maxSteps:6,
+              settleMs:500
+            }).catch(e => {console.error(e); process.exitCode=1;});
+          ' "$RUNNER_TEMP/web-analyze-pw-chatgpt"
           summary=$(find "$RUNNER_TEMP/web-analyze-pw-chatgpt" -name summary.json -type f -print -quit)
           test -n "$summary"
           test -s "$summary"
