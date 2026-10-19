@@ -1,0 +1,42 @@
+name: Native Chromium web-analyze resource capture
+
+on:
+  push:
+    paths:
+      - 'lib/sys/js/web-analyze.lib.js'
+      - 'res/sys/manual/web-analyze.lib.js'
+      - '.github/workflows/web-analyze.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  archive:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          path: .web-analyze-tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Exercise native CDP archive against real Chromium
+        shell: bash
+        run: |
+          set -eu
+          node --check lib/sys/js/web-analyze.lib.js
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser"
+          mkdir -p "$RUNNER_TEMP/web-analyze-bin"
+          cat > "$RUNNER_TEMP/web-analyze-bin/chromium" <<EOF
+          #!/bin/sh
+          exec "$browser" "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/web-analyze-bin/chromium"
+          export PATH="$RUNNER_TEMP/web-analyze-bin:$PATH"
+          export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/web-analyze.test
