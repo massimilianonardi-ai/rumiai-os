@@ -28,12 +28,19 @@ INVOCATION
     The final argument is the directory for this recording. It and any
     missing parent directories are created automatically. An existing
     directory is accepted when it contains no conflicting evidence files.
-    Existing JSONL files or summary.json are never overwritten: if found,
+    Existing JSONL files, resource/script indexes, resource directories or
+    summary.json are never overwritten: if found,
     the invocation fails and the previous evidence remains unchanged.
 
     Chromium opens visibly and remains under observation while the operator
     browses. Closing Chromium, pressing Ctrl+C or sending a termination
-    signal ends the capture and writes summary.json. Normal completion returns status 0;
+    signal ends the capture and writes summary.json. On requested shutdown,
+    it first waits for network completion and outstanding CDP body/source reads
+    for up to 6 seconds, requiring 750 ms of network quiet. Long-lived
+    requests (including SSE) can prevent quiescence; the index and summary
+    mark unfinished and unrecoverable resources. Closing the Chromium window
+    externally cannot wait for network completion after CDP disconnects.
+    Normal completion returns status 0;
     invalid argument count returns 2; start or recording failures return 1.
     The caller does not need to write a launcher or import the JavaScript
     module to use this command.
@@ -76,7 +83,8 @@ EVIDENCE
     network.jsonl, console.jsonl, performance.jsonl and error.jsonl.
     Events contain a globally increasing sequence, UTC timestamp, monotonic
     elapsed time in milliseconds and topic/type metadata. summary.json
-    records event counts, dropped event counts and duration. Evidence is
+    records event counts, dropped event counts, duration and resourceCapture
+    totals including saved/missing/pending resources and compiled scripts. Evidence is
     created with private permissions (new directory and evidence files)
     and is not overwritten. Existing directory permissions are preserved.
 
@@ -85,16 +93,43 @@ EVIDENCE
     batches; click/pointer/keyboard-classification/input/focus/scroll events;
     browser performance entries. A bounded writer reports dropped records.
 
-    Browser instrumentation is deliberately privacy-aware. It does not
-    record passwords, typed values, request/response bodies, cookies or
-    WebSocket payloads. It removes URL query strings and fragments; URL paths
-    and HTTP status/error metadata may still be sensitive. Chrome itself may
-    store authenticated session material in profileDir. Handle the directory
-    as confidential and delete it when no longer needed.
+    The ordinary seven event streams remain privacy-redacted: they do not
+    record entered values, cookies, raw requests/responses or WebSocket
+    frames, and remove URL query strings/fragments. The new raw evidence
+    files are intentionally different and can contain sensitive data:
+
+      resources.jsonl    one indexed outcome per observed completed request,
+                         redirect or failure; full original response URL,
+                         type, status, SHA-256, bytes and saved pathname
+      resources/         exact decoded response bodies from CDP
+                         Network.getResponseBody, content-hash filenames
+      scripts.jsonl      parsed-script metadata, source availability,
+                         SHA-256 and pathname
+      scripts/           JavaScript sources from Debugger.getScriptSource,
+                         including dynamically compiled or inline scripts
+
+    The resource index records request failures, CDP-unavailable bodies,
+    redirect responses without bodies, and unfinished requests. Two
+    identical bodies may share a content-addressed file. CDP can expose
+    bodies from cache/service workers, but cannot guarantee bytes for all
+    network activity, streaming requests, WebSocket traffic or response
+    bodies evicted before retrieval. The saved bytes are the body returned
+    by CDP (after transport/content decoding where applicable), not a raw
+    packet capture. JavaScript compilation metadata is captured for
+    parsed scripts, but this does not itself enumerate registered event
+    listeners or prove causality for DOM changes.
+
+    IMPORTANT: resources.jsonl preserves full original URLs including
+    query strings; bodies, compiled JavaScript and HTML can expose signed
+    URLs, access tokens or personal information. Treat the entire analysis
+    directory as confidential, do not commit it to Git, and securely
+    review/discard it after analysis. Existing directory permissions are
+    preserved, so use an isolated private output directory. Chromium also
+    writes potentially sensitive session state under profileDir.
 
     Sampling, lifecycle races, debugger permissions and browser policies can
-    result in incomplete observation; the logs are detailed diagnostic
-    evidence, not a guaranteed lossless recording of all browser activity.
+    result in incomplete observation; inspect resourceCapture and per-request
+    statuses rather than assuming that every downloaded response was saved.
 
 LIBRARY EXAMPLE
     A program may also import the library instead of executing it:
