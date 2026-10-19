@@ -45,6 +45,7 @@
           ]},
           {"name": "selection", "modules":
           [
+            {"file": "m/text/selection/Selections.js", "exports": "Selections"},
             {"file": "m/text/selection/helpers.js"},
             {"file": "m/text/selection/TextEditSelections.js", "exports": "TextEditSelections", "imports": {"Document": "m.text.document.Document"}}
           ]}

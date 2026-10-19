@@ -22,13 +22,14 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 45e520abbca429d45ed6daf4298aa19b89dc981a
+          ref: 94debe2d5b68cb848ba820d3a192d1231153d6a6
           path: .text-selection-tests
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
       - name: Verify selection source and test syntax
         run: |
+          node --check lib/sys/js/core/m/text/selection/Selections.js
           node --check lib/sys/js/core/m/text/selection/helpers.js
           node --check lib/sys/js/core/m/text/selection/TextEditSelections.js
           node --check .text-selection-tests/tests/rumiai-os/text-selection/core.test.mjs
