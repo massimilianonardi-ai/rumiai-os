@@ -1,0 +1,33 @@
+name: Git tracking boundaries
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  tracked-paths:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out product repository
+        uses: actions/checkout@v4
+
+      - name: Reject ignored and operational files in the Git index
+        shell: bash
+        run: |
+          set -euo pipefail
+          tracked="$(
+            {
+              git ls-files --cached --ignored --exclude-standard
+              git ls-files -- pkg/ src/ state/user/
+            } | LC_ALL=C sort -u
+          )"
+          if [[ -n "$tracked" ]]; then
+            printf '%s\n' 'ERROR: Git tracks ignored or operational files.' >&2
+            printf '%s\n' "$tracked" | sed -n '1,60p' >&2
+            printf '%s\n' 'Remove the paths from the index, preserving working files (git rm --cached).' >&2
+            exit 1
+          fi
