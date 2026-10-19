@@ -57,7 +57,7 @@
           {"name": "document", "modules":
           [
             {"file": "m/text/document/RawDocument2D.js", "exports": "RawDocument2D", "imports": {"Document": "m.text.document.Document", "Document2D": "m.text.document.Document2D", "TextEditSelections": "m.text.selection.TextEditSelections", "LineSelections": "m.text.selection.LineSelections", "RectangleSelections": "m.text.selection.RectangleSelections", "FreeFormSelections": "m.text.selection.FreeFormSelections"}}
-          ]},
+          ]}
         ]},
         {"file": "m/sys.js", "exports": "sys"},
         {"file": "m/Class.js", "exports": "Class"},
