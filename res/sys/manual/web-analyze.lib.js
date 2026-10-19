@@ -32,8 +32,8 @@ INVOCATION
     the invocation fails and the previous evidence remains unchanged.
 
     Chromium opens visibly and remains under observation while the operator
-    browses. Closing Chromium or pressing Ctrl+C or a termination signal terminates the
-    capture and writes summary.json. Normal completion returns status 0;
+    browses. Closing Chromium, pressing Ctrl+C or sending a termination
+    signal ends the capture and writes summary.json. Normal completion returns status 0;
     invalid argument count returns 2; start or recording failures return 1.
     The caller does not need to write a launcher or import the JavaScript
     module to use this command.
