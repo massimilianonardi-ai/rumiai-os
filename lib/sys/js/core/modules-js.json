@@ -39,6 +39,7 @@
           {"name": "document", "modules":
           [
             {"file": "m/text/document/Document.js", "exports": "Document"},
+            {"file": "m/text/document/Document2D.js", "exports": "Document2D"},
             {"file": "m/text/document/_DocumentStore.js"},
             {"file": "m/text/document/FlatDocument.js", "exports": "FlatDocument"},
             {"file": "m/text/document/PieceDocument.js", "exports": "PieceDocument"}
