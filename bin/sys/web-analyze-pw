@@ -1,0 +1,20 @@
+#!/usr/bin/env m
+
+main()
+{
+  [ "$#" -ge 1 ] ||
+    fatal 1 web-analyze-pw invalid-arguments
+
+  command -v playwright >/dev/null 2>&1 ||
+    fatal 2 web-analyze-pw playwright-command-unavailable
+
+  command -v node >/dev/null 2>&1 ||
+    fatal 3 web-analyze-pw node-command-unavailable
+
+  [ -f "$m_LIB_DIR/sys/js/web-analyze-pw.lib.js" ] ||
+    fatal 4 web-analyze-pw library-unavailable
+
+  exec node "$m_LIB_DIR/sys/js/web-analyze-pw.lib.js" "$@"
+}
+
+main "$@"
