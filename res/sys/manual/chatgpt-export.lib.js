@@ -6,8 +6,9 @@ DESCRIPTION
     analysis directory, it launches 'chromium' from the effective PATH,
     opens a dedicated temporary Chromium profile with an ephemeral TCP CDP
     listener restricted to 127.0.0.1, navigates to the requested URL, then
-    runs the original Python exporter's CDP snapshot breakpoint and forensic
-    serialization pipeline.
+    examines public share-page hydration data for a conversation snapshot,
+    then reuses the Python exporter's forensic serialization pipeline. The
+    prior Electron breakpoint path remains available separately.
 
     The original converter is preserved. No Python, SQLite or Playwright
     dependency is required. This exporter targets the in-memory ChatGPT
@@ -32,18 +33,21 @@ DIRECT INVOCATION
     It opens about:blank first, discovers the actual ephemeral CDP port via
     DevToolsActivePort, attaches to that page, navigates to <url>, waits
     for document loading to complete, enables Runtime and Debugger, and
-    searches app:// and HTTP(S) JavaScript for mergeActiveBranch. After
-    setting the breakpoint it reloads the web page to trigger snapshot
-    processing. Once a valid conversation snapshot is captured, the same
-    converter writes the forensic artifacts. The owned browser is closed
+    reads embedded share data from Remix/React Router loader state or
+    React Router's inline streamed hydration payload. It recognizes an
+    original mapping/current_node snapshot or a linear_conversation array.
+    For linear_conversation it creates an active-branch projection for the
+    existing transcript converter, without inventing missing branches.
+    The captured decoded source is retained in the RAW file. Once recognized,
+    the existing converter writes the forensic artifacts. The owned browser is closed
     and its temporary profile removed on success and handled failure.
 
-    IMPORTANT: The original Python breakpoint logic targets a specific
-    ChatGPT Electron JavaScript snapshot applicator signature. Web share
-    pages can have a different application bundle or data loading path.
-    When the marker or expected argument is missing, acquisition fails
-    explicitly; the tool does not pretend that a page DOM capture is an
-    equivalent complete conversation export.
+    IMPORTANT: Shared-page loader/stream representations are undocumented
+    and may change. If neither recognized structure is available, the tool
+    fails explicitly with share-snapshot-not-found and reports whether loader
+    globals or React Router chunks were observed. It does not use mounted
+    DOM fragments to claim a complete export. Shared linear snapshots may
+    omit alternate branches, internal state and attachment bytes.
 
 PUBLIC FUNCTIONS
     exportChatgptUrl(url, analysisDir, options)
@@ -57,6 +61,8 @@ PUBLIC FUNCTIONS
           timeoutMs            Snapshot breakpoint wait; default 0 means
                                unbounded as in the original Python exporter.
           onEvent              function(level, code, data) for diagnostics.
+          shareTimeoutMs       Time to discover shared-page hydration data;
+                               default 12000 ms.
         Resolves with an export summary, or rejects with a branch-specific
         chatgpt-export.* code. Chromium and CDP belong to this invocation.
 
@@ -95,15 +101,18 @@ OUTPUT
         README.md                   export metadata and file explanation
         SHA256SUMS                  uncompressed-RAW and artifact hashes
 
-    Tool traffic, assistant analysis and inactive branches stay in RAW
-    while the derived transcript contains only the classified active branch.
+    Original mapping snapshots retain tool traffic, assistant analysis and
+    inactive branches in RAW; derived transcript uses the active branch.
+    For a linear share snapshot, RAW holds the decoded linear source and
+    AUDIT.json explicitly marks the mapping as a derived projection.
     No attachment download is performed. Temporary Chromium profile data
     is not part of the completed export.
 
 DEPENDENCIES
     Node.js >= 22 (native WebSocket), the 'chromium' executable available
-    through PATH, a functional local CDP TCP/WebSocket endpoint and a page
-    bundle with a compatible ChatGPT snapshot applicator.
+    through PATH, a functional local CDP TCP/WebSocket endpoint and a
+    share page with recognized hydration data; the older Electron API
+    retains its compatible snapshot-applicator requirement.
 
 EXIT STATUS
     0   Snapshot captured and artifacts written.
