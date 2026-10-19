@@ -59,10 +59,16 @@ PUBLIC FUNCTION
           headless      Optional boolean; default false (visible browser).
           timeoutMs     Optional startup time limit; default 20000.
 
-        The function launches Chromium and instruments targets, then attempts
-        the initial navigation. If browser policy/network blocks that
-        navigation, the failure is logged and the capture stays active so
-        the operator may navigate manually. A process, CDP or instrumentation
+        The function launches Chromium and instruments targets, then starts
+        initial navigation without requiring the remote page to finish loading.
+        It allows up to 1 second for a fast navigation acknowledgement; a slow
+        Page.navigate response continues asynchronously while Chromium stays
+        open and all CDP evidence continues to be recorded. The navigation
+        command may itself time out after 120 seconds, but this is logged as
+        page.initial-navigation-command-failed rather than shutting down the
+        observation session. A blocked navigation is likewise logged without
+        closing Chromium. The capture.ready record contains navigationPending
+        to distinguish a pending navigation acknowledgement from a settled one. A process, CDP or instrumentation
         startup failure rejects the promise with a distinguishable
         web-analyze.<condition> error code. It never disables browser sandbox
         or certificate verification automatically.
