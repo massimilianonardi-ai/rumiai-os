@@ -2,7 +2,8 @@ NAME
     web-analyze.lib.js - Chromium manual-session analyzer over native CDP/TCP
 
 DESCRIPTION
-    Node.js CommonJS library within the m sys runtime. Launches the chromium
+    Directly executable Node.js CommonJS library within the m sys runtime.
+    Launches the chromium
     executable resolved through the current process PATH (including the m
     shell's package/provider PATH), opens a dedicated Chromium profile, and
     observes a human-operated browser session using Chromium's native Chrome
@@ -13,12 +14,38 @@ DESCRIPTION
     inside the profile. The library connects only to 127.0.0.1; it does not
     require Playwright, a bundled browser, or an external CDP driver package.
 
+INVOCATION
+    From the m shell or an environment exposing nodejs and chromium:
+
+      nodejs <path-to-lib> <url> <analisys-dir>
+
+    For the library distributed with m:
+
+      nodejs "$m_LIB_DIR/sys/js/web-analyze.lib.js" \
+        "https://chatgpt.com/share/6ad1c0d5-49ec-83eb-a79b-85b04b938835" \
+        "./analysis"
+
+    The final argument is the directory for this recording. It and any
+    missing parent directories are created automatically. An existing
+    directory is accepted when it contains no conflicting evidence files.
+    Existing JSONL files or summary.json are never overwritten: if found,
+    the invocation fails and the previous evidence remains unchanged.
+
+    Chromium opens visibly and remains under observation while the operator
+    browses. Closing Chromium or pressing Ctrl+C or a termination signal terminates the
+    capture and writes summary.json. Normal completion returns status 0;
+    invalid argument count returns 2; start or recording failures return 1.
+    The caller does not need to write a launcher or import the JavaScript
+    module to use this command.
+
 PUBLIC FUNCTION
     startWebAnalyze(options)
         Returns Promise<session>. options is an object containing:
 
           url           Required absolute http:// or https:// URL.
-          outputDir     Required NEW pathname for the evidence directory.
+          outputDir     Required evidence directory; created if missing,
+                        including missing parents, or reused if it contains
+                        no conflicting previous analysis evidence.
           profileDir    Optional dedicated Chromium profile directory.
                         Default: <outputDir>/profile.
           chromium      Optional executable identity/path. Default: chromium.
@@ -50,7 +77,8 @@ EVIDENCE
     Events contain a globally increasing sequence, UTC timestamp, monotonic
     elapsed time in milliseconds and topic/type metadata. summary.json
     records event counts, dropped event counts and duration. Evidence is
-    created with private directory/file permissions and is not overwritten.
+    created with private permissions (new directory and evidence files)
+    and is not overwritten. Existing directory permissions are preserved.
 
     Captures page/frame/target lifecycle; HTTP requests/responses and errors;
     WebSocket/SSE metadata; JavaScript console calls/exceptions; DOM mutation
@@ -68,8 +96,8 @@ EVIDENCE
     result in incomplete observation; the logs are detailed diagnostic
     evidence, not a guaranteed lossless recording of all browser activity.
 
-EXAMPLE
-    From the m shell:
+LIBRARY EXAMPLE
+    A program may also import the library instead of executing it:
 
       node - <<'NODE'
       const {startWebAnalyze} = require(
