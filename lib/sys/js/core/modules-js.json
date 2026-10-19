@@ -46,6 +46,10 @@
           {"name": "selection", "modules":
           [
             {"file": "m/text/selection/Selections.js", "exports": "Selections"},
+            {"file": "m/text/selection/_ModeSelections.js"},
+            {"file": "m/text/selection/LineSelections.js", "exports": "LineSelections"},
+            {"file": "m/text/selection/RectangleSelections.js", "exports": "RectangleSelections"},
+            {"file": "m/text/selection/FreeFormSelections.js", "exports": "FreeFormSelections"},
             {"file": "m/text/selection/helpers.js"},
             {"file": "m/text/selection/TextEditSelections.js", "exports": "TextEditSelections", "imports": {"Document": "m.text.document.Document"}}
           ]}
