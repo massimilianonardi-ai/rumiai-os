@@ -44,6 +44,11 @@ PACKAGE STATE
 
         state-path user pkg <package> home
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m state-path [arguments].
+
+
 EXIT STATUS
     0   The pathname was resolved and written successfully.
     2   The invocation, scope, owner, identity, area, or State Instance is invalid.

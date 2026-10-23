@@ -26,6 +26,9 @@ DESCRIPTION
     directly.
 
 ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m ssh-askpass [arguments].
+
     m_SSH_ASKPASS_FIFO
         Absolute private FIFO pathname established by ssh_auth for repeatable
         secret delivery.

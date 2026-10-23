@@ -1,4 +1,6 @@
-#!/usr/bin/env m
+#!/bin/sh
+
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'tls-ca: m environment not initialized' >&2; exit 1; }
 
 # System-scoped public CA authority. The OS filesystem owner of the selected
 # system conf grants administrative write access; consumers are read-only.

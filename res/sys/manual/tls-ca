@@ -39,6 +39,11 @@ DEPENDENCIES
     must be permitted to modify system sys/tls/conf/ca. Readers require
     traversal/read permission to use the public certificates.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m tls-ca [arguments].
+
+
 EXIT STATUS
     0    Operation completed, including idempotent add and empty list.
     2    Invalid command syntax.
