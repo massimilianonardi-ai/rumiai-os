@@ -329,6 +329,11 @@ SIDE EFFECTS
     execution. Sync + Push may stage, commit, merge remote changes and push the
     resulting branch.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m gitman [arguments].
+
+
 EXIT STATUS
     0     Normal user exit or cancellation.
     1     Interactive/runtime execution failure.

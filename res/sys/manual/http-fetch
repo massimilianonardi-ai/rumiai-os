@@ -38,6 +38,11 @@ OPERANDS
     <url>
         One http:// or https:// URL after the mandatory -- delimiter.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m http-fetch [arguments].
+
+
 EXIT STATUS
     0   Success.
     1   Transfer, backend or response-validation failure.
