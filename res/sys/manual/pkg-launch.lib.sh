@@ -63,6 +63,16 @@ FUNCTIONS
         The launcher replaces the current process with the upstream command and
         therefore returns only when validation/runtime preparation fails.
 
+    launcher_nss <package> [<argument>...]
+        Browser-specific trusted package entrypoints use this variant of
+        launcher to request Linux NSS CA reconciliation immediately before
+        executing the real target. It preserves all normal launcher semantics.
+        The sync receives the HOME actually delivered to the browser, including
+        the inherited HOME preserved by a one-shot m_ENV_DO_NOT_OVERRIDE=HOME
+        request for nested Electron execution. It invokes the fixed m-owned
+        tls-nss-sync entrypoint and fails launch if synchronization fails.
+        This is not a general callback facility or a TLS bypass.
+
 RETURN STATUS
     2   Invalid invocation.
     1   Managed command, package state, dependency/provider resolution or runtime
@@ -72,6 +82,7 @@ RETURN STATUS
     5   Environment-preservation list includes a launcher control variable.
     6   Trusted POSIX env executor unavailable for the requested preservation.
     7   Environment-preservation list contains duplicate names.
+    8   Requested NSS trust synchronization failed; browser was not launched.
     On successful preparation, the upstream process exit status becomes the process
     exit status because launcher uses exec.
 
@@ -84,3 +95,4 @@ SEE ALSO
     pkg
     pkg-dependency.lib.sh
     pkg-provider.lib.sh
+    tls-nss-sync
