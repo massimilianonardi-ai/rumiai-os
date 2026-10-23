@@ -202,6 +202,11 @@ FILES
     lib/sys/js/jsc.lib.js
     res/sys/manual/jsc
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m jsc [arguments].
+
+
 SEE ALSO
     manual sys mod-dynamic-loader
     manual sys jsc.lib.js

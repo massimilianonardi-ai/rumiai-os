@@ -20,6 +20,11 @@ DESCRIPTION
 
     Package-local language resources are not modified.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m lang-set [arguments].
+
+
 EXIT STATUS
     0   Query or selection succeeded.
     Non-zero status indicates invalid invocation, invalid selector/locale or an

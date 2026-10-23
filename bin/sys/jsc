@@ -1,4 +1,8 @@
-#!/usr/bin/env m
+#!/bin/sh
+
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'jsc: m environment not initialized' >&2; exit 1; }
+
+. "$m_LIB_DIR/sys/sh/core.lib.sh" || { printf '%s\n' 'jsc: m shell runtime unavailable' >&2; exit 2; }
 
 [ "$#" -le 2 ] && [ -n "$1" ] || fatal 1 jsc invalid-arguments
 
