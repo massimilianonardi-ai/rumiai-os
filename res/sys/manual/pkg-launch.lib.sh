@@ -30,6 +30,13 @@ FUNCTIONS
         Normal invocation selects user state. An internal srv system-host context
         selects system package state with the service identity as State Instance.
 
+        When the consumer package's installed env source is evaluated,
+        pkg_launch_root names the already validated canonical useful root of
+        that concrete. Package env source may derive package payload paths
+        from this launcher-local value; it must not use the retired
+        m_COMMAND_BIN inherited command identity. This local evaluation
+        context is not an exported process environment API.
+
         Runtime precedence is:
 
             consumer package environment
