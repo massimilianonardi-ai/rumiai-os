@@ -442,7 +442,7 @@ srv_host_systemd_install()
     printf '%s' 'ExecStart=/bin/sh '
     srv_host_systemd_arg_write "$m_BOOTSTRAP_BIN" || exit 1
     printf ' '
-    srv_host_systemd_arg_write "$m_COMMAND_BIN" || exit 1
+    srv_host_systemd_arg_write "$srv_host_command_bin" || exit 1
     printf ' '
     srv_host_systemd_arg_write '--host-user-run' || exit 1
     printf ' '
@@ -567,7 +567,7 @@ srv_host_launchd_install()
   "$srv_plutil" -insert Label -string "$srv_host_label" "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments -array "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.0 -string "$m_BOOTSTRAP_BIN" "$srv_host_tmp" &&
-  "$srv_plutil" -insert ProgramArguments.1 -string "$m_COMMAND_BIN" "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.1 -string "$srv_host_command_bin" "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.2 -string '--host-user-run' "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.3 -string "$srv_name" "$srv_host_tmp" &&
   "$srv_plutil" -insert RunAtLoad -bool true "$srv_host_tmp" ||
@@ -973,7 +973,7 @@ srv_host_systemd_system_install()
     printf '%s' 'ExecStart=/bin/sh '
     srv_host_systemd_arg_write "$m_BOOTSTRAP_BIN" || exit 1
     printf ' '
-    srv_host_systemd_arg_write "$m_COMMAND_BIN" || exit 1
+    srv_host_systemd_arg_write "$srv_host_command_bin" || exit 1
     printf ' '
     srv_host_systemd_arg_write '--host-system-run' || exit 1
     printf ' '
@@ -1079,7 +1079,7 @@ srv_host_launchd_system_install()
   "$srv_plutil" -insert Label -string "$srv_host_label" "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments -array "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.0 -string "$m_BOOTSTRAP_BIN" "$srv_host_tmp" &&
-  "$srv_plutil" -insert ProgramArguments.1 -string "$m_COMMAND_BIN" "$srv_host_tmp" &&
+  "$srv_plutil" -insert ProgramArguments.1 -string "$srv_host_command_bin" "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.2 -string '--host-system-run' "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.3 -string "$srv_name" "$srv_host_tmp" &&
   "$srv_plutil" -insert ProgramArguments.4 -string "$srv_provider" "$srv_host_tmp" &&
@@ -1230,6 +1230,12 @@ srv_host()
   [ "$#" -ge 1 ] || fatal 2 execution invalid-arguments operation srv subcommand host
   srv_host_scope=$1
   shift
+
+  if [ "${1-}" = install ]
+  then
+    readpathce srv_host_command_bin "$0" ||
+      fatal 1 srv host-command-resolution-failed command "$0"
+  fi
 
   case "$srv_host_scope" in
     user) srv_host_user "$@" ;;

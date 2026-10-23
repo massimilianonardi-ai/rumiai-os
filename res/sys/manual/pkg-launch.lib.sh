@@ -23,9 +23,10 @@ DESCRIPTION
 
 FUNCTIONS
     launcher <package> [<argument>...]
-        Launch the integrated command identified by m_COMMAND_BIN for the named
-        package. The function validates the managed concrete/root/link target,
-        creates the selected package HOME when needed and preserves caller arguments.
+        Launch the integrated command identified by the invoking native shell
+        script's $0 for the named package. The function resolves that pathname
+        physically, validates the managed concrete/root/link target, creates
+        the selected package HOME when needed and preserves caller arguments.
         Normal invocation selects user state. An internal srv system-host context
         selects system package state with the service identity as State Instance.
 
@@ -87,9 +88,10 @@ RETURN STATUS
     exit status because launcher uses exec.
 
 DEPENDENCIES
-    The library runs inside the m bootstrap environment and uses state-path,
-    pkg-dependency.lib.sh and provider projection metadata materialized by package
-    integration.
+    The library runs in the invoking package command's native POSIX shell,
+    with an initialized m environment and the required m shell libraries loaded
+    by the command. It uses state-path, pkg-dependency.lib.sh and provider
+    projection metadata materialized by package integration.
 
 SEE ALSO
     pkg

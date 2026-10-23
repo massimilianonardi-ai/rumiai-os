@@ -120,7 +120,9 @@ HOST USER SUPERVISION
     and persists a user unit below the account home at .config/systemd/user. The
     unit uses /bin/sh as the fixed
     ExecStart executable and carries the exact m bootstrap, srv command, internal
-    foreground runner and service identity as separately serialized arguments. This
+    foreground runner and service identity as separately serialized arguments.
+    At registration, srv obtains its own physical command pathname from $0
+    rather than depending on a command identity exported by the bootstrap. This
     avoids systemd executable-path restrictions for relocatable m roots
     containing spaces or metacharacters.
 

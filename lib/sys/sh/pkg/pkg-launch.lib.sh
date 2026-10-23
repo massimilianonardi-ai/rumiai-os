@@ -127,13 +127,14 @@ launcher()
 
   _pkg_launch_name_valid "$pkg_launch_pkg" || return 2
 
-  [ -n "${m_COMMAND_BIN-}" ] && \
   [ -n "${m_PKG_DIR-}" ] || {
     _pkg_launch_error runtime-variable-missing
     return 1
   }
 
-  readpathce pkg_launch_command_bin "$m_COMMAND_BIN" || {
+  # The native shell command owns its own identity, not an inherited
+  # identity from the m bootstrap or a previously executed command.
+  readpathce pkg_launch_command_bin "$0" || {
     _pkg_launch_error command-invalid
     return 1
   }
