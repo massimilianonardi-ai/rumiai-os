@@ -206,7 +206,7 @@ tls_nss_main()
     then
       if tls_nss_present "$tls_nss_sha"
       then
-        certutil -D -d "sql:$tls_nss_db" -n "m-tls-$tls_nss_sha" >/dev/null 2>&1 ||
+        certutil -D -d "sql:$tls_nss_db" -f /dev/null -n "m-tls-$tls_nss_sha" >/dev/null 2>&1 ||
           tls_nss_fail certificate-remove-failed 'cannot revoke managed NSS certificate' 25
       fi
     fi
@@ -216,7 +216,7 @@ tls_nss_main()
   do
     if ! tls_nss_present "$tls_nss_sha"
     then
-      certutil -A -d "sql:$tls_nss_db" -n "m-tls-$tls_nss_sha" -t 'C,,' -i "$tls_nss_ca/$tls_nss_sha.pem" >/dev/null 2>&1 ||
+      certutil -A -d "sql:$tls_nss_db" -f /dev/null -n "m-tls-$tls_nss_sha" -t 'C,,' -i "$tls_nss_ca/$tls_nss_sha.pem" >/dev/null 2>&1 ||
         tls_nss_fail certificate-import-failed 'cannot import approved NSS CA' 26
     fi
     tls_nss_validate_owned "$tls_nss_sha" ||
