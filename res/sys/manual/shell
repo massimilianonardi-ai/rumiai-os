@@ -16,6 +16,9 @@ DESCRIPTION
     Arguments are forwarded to the selected shell.
 
 ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m shell [arguments].
+
     SHELL
         Shell executable to start. Defaults to sh when unset or empty.
     m_SHELL_EXT

@@ -146,6 +146,11 @@ SECURITY
     shell cannot guarantee memory zeroization or protection from operating-system
     paging, process inspection, terminal capture or equivalent host mechanisms.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m rsudo-admin [arguments].
+
+
 EXIT STATUS
     0   main menu exited normally
     1   invalid command invocation

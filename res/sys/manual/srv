@@ -168,6 +168,11 @@ READINESS
     Successful start establishes that the launched process survived the initial
     launch check. It does not establish application-specific readiness or health.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m srv [arguments].
+
+
 EXIT STATUS
     0     The requested lifecycle operation completed successfully. This includes
           idempotent stop cases where the service is not running.

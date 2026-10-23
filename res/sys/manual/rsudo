@@ -95,6 +95,9 @@ RECURSIVE CALLS
     cleared at each rsudo call and therefore are not inherited implicitly.
 
 ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m rsudo [arguments].
+
     RSUDO_HOST
         Remote SSH host.
 
