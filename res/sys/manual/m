@@ -1,5 +1,5 @@
 NAME
-    m - bootstrap the technical m runtime and dispatch integrated commands
+    m - initialize the technical runtime and dispatch native commands
 
 SYNOPSIS
     m
@@ -60,7 +60,9 @@ GLOBAL EXECUTION ENVIRONMENT
         inherited host PATH
 
 CORE-PROVIDED RUNTIME FUNCTIONS
-    After core.lib.sh has been loaded, the initialized runtime provides:
+    Once a shell process loads core.lib.sh, that shell provides the following
+    functions. They are not inherited by independently executed commands:
+    each shell command needing them loads core.lib.sh itself.
 
     loadlib <library-reference>
         Load exactly one m-owned POSIX-shell library reference relative to
