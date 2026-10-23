@@ -141,6 +141,46 @@ COMMANDS
             >=21
             >=21 <26
 
+NATIVE-COMMAND MIGRATION
+    Installed package concretes contain copies of launcher and package env
+    definitions from the catalog revision used during installation. After
+    migrating m from #!/usr/bin/env m to native command entrypoints, older
+    installed concretes remain incompatible until they are reinstalled.
+
+    Coordinate a maintenance window for the affected packages and services;
+    do not publish the new m dispatcher independently of the compatible
+    catalog. Before any removal, inventory every exact installed concrete
+    with pkg versions <package-class>, record defaults with pkg default
+    <package-class>, and preserve provider bindings and system service
+    registrations. Verify that each exact version can be restored from the
+    selected new catalog, including artifact availability/integrity, and
+    prepare restorable backups of both the installation and package state
+    (user, system and any service state instances). Inspect unmanaged mutable
+    data inside the package root as well.
+
+    Stop affected consumers/services. For each recorded exact concrete use:
+
+        m pkg uninstall <package>@<version>[!<osarch>]
+        m pkg install   <package>@<version>[!<osarch>]
+
+    After all required versions of a class are installed, restore only a
+    previously recorded current/default selection:
+
+        m pkg default <package>@<selected-version>[!<osarch>]
+
+    Leave previously unselected classes without a default. Confirm native
+    cmd/env content, command execution, managed configuration and service
+    state before restarting consumers. Respect provider references: the
+    manager can refuse removal of a still-referenced provider. Handle
+    consumer/provider dependency order accordingly and do not force-delete
+    directories or edit immutable installed concretions.
+
+    Each uninstall/install is a separate operation; the complete migration
+    is not transactional. If artifact acquisition, provider compatibility or
+    reinstall fails, stop and reconcile explicitly using the recorded state
+    and verified compatible backup. Do not replace an unavailable exact
+    version with latest and do not assume pkg depend proves artifact access.
+
 STATE
     Mutable package state is resolved through state-path rather than reconstructed
     by callers. Package HOME and configuration used at launch are user-scoped state.
