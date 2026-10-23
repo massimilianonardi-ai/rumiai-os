@@ -109,6 +109,16 @@ $pkg_launch_dependency_set
 EOF_DEPENDENCIES
 }
 
+# Called only by browser package entrypoints. The generic launcher keeps all
+# normal state, dependency and environment semantics; this requests one trusted
+# NSS projection at the final effective HOME immediately before exec.
+launcher_nss()
+{
+  [ "$#" -ge 1 ] || return 2
+  pkg_launch_nss_enabled=1
+  launcher "$@"
+}
+
 launcher()
 {
   [ "$#" -ge 1 ] || return 2
@@ -268,6 +278,7 @@ launcher()
   # Snapshot caller values before package/provider environment is applied.
   # Keep assignments in argv: variable values are never evaluated as shell code.
   pkg_launch_override_active=0
+  pkg_launch_nss_override_present=0
   if [ "${m_ENV_DO_NOT_OVERRIDE+x}" = x ]
   then
     pkg_launch_override_active=1
@@ -319,6 +330,11 @@ launcher()
         return 4
       }
       eval "pkg_launch_override_value=\${$pkg_launch_override_name}"
+      if [ "$pkg_launch_override_name" = HOME ] && [ "${pkg_launch_nss_enabled-0}" -eq 1 ]
+      then
+        pkg_launch_nss_override_present=1
+        pkg_launch_nss_override_home=$pkg_launch_override_value
+      fi
       set -- "$pkg_launch_override_name=$pkg_launch_override_value" "$@"
     done
 
@@ -353,6 +369,21 @@ launcher()
     _pkg_launch_error user-env-invalid
     return 1
   }
+
+  if [ "${pkg_launch_nss_enabled-0}" -eq 1 ]
+  then
+    pkg_launch_nss_home=$HOME
+    if [ "$pkg_launch_nss_override_present" -eq 1 ]
+    then
+      pkg_launch_nss_home=$pkg_launch_nss_override_home
+    fi
+    # The integration point sees the effective HOME, including the one-shot
+    # nested Electron override. Never mutate the application's browser profile.
+    command -- tls-nss-sync "$pkg_launch_nss_home" || {
+      printf 'pkg-launch.tls-nss-sync-failed: package=%s home=%s\\n' "$pkg_launch_pkg" "$pkg_launch_nss_home" >&2
+      return 8
+    }
+  fi
 
   if [ "$pkg_launch_override_active" -eq 1 ]
   then
