@@ -49,7 +49,7 @@ tls_nss_main()
     *) tls_nss_fail backend-unavailable 'NSS projection is currently Linux-only' 4 ;;
   esac
 
-  tls_nss_conf=$(command -- state-path system sys tls conf) ||
+  tls_nss_conf=$( "$m_ROOT/m" "$m_BIN_DIR/sys/state-path" system sys tls conf ) ||
     tls_nss_fail authority-resolution-failed 'cannot resolve system TLS configuration' 5
   tls_nss_ca="$tls_nss_conf/ca"
   tls_nss_state="$tls_nss_home/.m"
