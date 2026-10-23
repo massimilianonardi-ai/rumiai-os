@@ -16,6 +16,9 @@ DESCRIPTION
     All command-line arguments are forwarded unchanged to shell.
 
 ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m rssh [arguments].
+
     m_SHELL_EXT
         Exported as $m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh before shell startup.
 

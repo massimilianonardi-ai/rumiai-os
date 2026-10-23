@@ -155,6 +155,11 @@ FILES
         Managed package store root. pkg install does not create this directory for
         an invocation whose request list contains a syntactically invalid operand.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m pkg [arguments].
+
+
 EXIT STATUS
     0   The requested operation succeeded.
     1   The requested package operation could not be completed after a valid

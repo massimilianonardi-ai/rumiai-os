@@ -1,4 +1,8 @@
-#!/usr/bin/env m
+#!/bin/sh
+
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'pkg: m environment not initialized' >&2; exit 1; }
+
+. "$m_LIB_DIR/sys/sh/core.lib.sh" || { printf '%s\n' 'pkg: m shell runtime unavailable' >&2; exit 2; }
 
 loadsyslib "osarch"
 

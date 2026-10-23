@@ -1,4 +1,8 @@
-#!/usr/bin/env m
+#!/bin/sh
+
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'rssh: m environment not initialized' >&2; exit 1; }
+
+. "$m_LIB_DIR/sys/sh/core.lib.sh" || { printf '%s\n' 'rssh: m shell runtime unavailable' >&2; exit 2; }
 
 export m_SHELL_EXT="$m_LIB_DIR/sys/sh/rsudo/rsudo.lib.sh"
 

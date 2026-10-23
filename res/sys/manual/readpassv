@@ -24,6 +24,11 @@ OUTPUT
     A mismatch produces no standard output. When supplied, mismatch-message is
     written to /dev/tty.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m readpassv [arguments].
+
+
 EXIT STATUS
     0   The two values match and the secret was written successfully.
     1   Operational failure, including a readpass failure.

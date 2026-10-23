@@ -25,6 +25,11 @@ OPERANDS
         Artifact format and artifact consumed through the package extraction
         facility before analysis.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m pkg-analyze [arguments].
+
+
 EXIT STATUS
     0   Analysis completed.
     2   Invalid invocation.
