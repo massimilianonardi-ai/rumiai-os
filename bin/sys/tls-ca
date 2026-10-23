@@ -47,7 +47,7 @@ tls_ca_main()
     *) tls_ca_die invalid-arguments 'unknown operation' 2 ;;
   esac
 
-  tls_ca_conf=$(command -- state-path system sys tls conf) ||
+  tls_ca_conf=$( "$m_ROOT/m" "$m_BIN_DIR/sys/state-path" system sys tls conf ) ||
     tls_ca_die state-resolution-failed 'unable to resolve system TLS configuration' 3
   tls_ca_dir="$tls_ca_conf/ca"
 
