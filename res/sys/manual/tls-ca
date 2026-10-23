@@ -42,7 +42,7 @@ DEPENDENCIES
 EXIT STATUS
     0    Operation completed, including idempotent add and empty list.
     2    Invalid command syntax.
-    3-18 Distinct authorization-state, certificate, dependency or filesystem
+    3-19 Distinct authorization-state, certificate, dependency or filesystem
          failures, diagnosed on standard error with tls-ca.<branch> identity.
 
 EXAMPLES
