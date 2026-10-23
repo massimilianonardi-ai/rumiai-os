@@ -88,6 +88,11 @@ OUTPUT
 
     Successful update and set operations produce no output.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m osarch [arguments].
+
+
 EXIT STATUS
     0   Query, display or selection completed successfully.
     Non-zero status indicates invalid arguments, an invalid/misaligned selector,

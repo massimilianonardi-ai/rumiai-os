@@ -53,6 +53,11 @@ FILES
     res/<owner>/manual/<topic>
         Owner-qualified global operational manual topic.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m manual [arguments].
+
+
 EXIT STATUS
     0   Success, including a non-empty substring-search result list.
     1   Invalid invocation or invalid owner/topic identifier.

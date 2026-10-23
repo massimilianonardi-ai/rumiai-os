@@ -571,6 +571,11 @@ OUTPUT
     up-to-date, completed or failed. Provider states are pending, resolved or
     completed; collection states are pending or resolved.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m mk [arguments].
+
+
 EXIT STATUS
     0   Success.
     1   Project/configuration/resolution/execution/runtime failure.
