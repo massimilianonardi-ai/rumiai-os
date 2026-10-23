@@ -222,10 +222,18 @@ tls_nss_main()
       tls_nss_fail certificate-verify-failed 'imported NSS CA or trust flags are invalid' 27
   done < "$tls_nss_tmp/desired"
 
-  command -p -- cp -- "$tls_nss_tmp/desired" "$tls_nss_tmp/final" ||
-    tls_nss_fail manifest-write-failed 'cannot stage final NSS ownership' 24
-  command -p -- mv -- "$tls_nss_tmp/final" "$tls_nss_owned" ||
-    tls_nss_fail manifest-write-failed 'cannot finalize NSS ownership record' 24
+  if [ ! -s "$tls_nss_tmp/desired" ]
+  then
+    # Once all managed CAs are revoked, subsequent launches are true no-ops.
+    # Remove the write-ahead ownership file only after NSS deletion succeeds.
+    command -p -- rm -f -- "$tls_nss_owned" ||
+      tls_nss_fail manifest-write-failed 'cannot remove empty NSS ownership record' 24
+  else
+    command -p -- cp -- "$tls_nss_tmp/desired" "$tls_nss_tmp/final" ||
+      tls_nss_fail manifest-write-failed 'cannot stage final NSS ownership' 24
+    command -p -- mv -- "$tls_nss_tmp/final" "$tls_nss_owned" ||
+      tls_nss_fail manifest-write-failed 'cannot finalize NSS ownership record' 24
+  fi
 }
 
 tls_nss_main "$@"
