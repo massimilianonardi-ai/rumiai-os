@@ -393,7 +393,11 @@ _pkg_dependency_implicit_resolve()
     _pkg_dependency_compatible_providers       "$pkg_dependency_implicit_facility"       "$pkg_dependency_implicit_constraints"       "$pkg_dependency_implicit_osarch"
   )"
   pkg_dependency_implicit_status=$?
-  [ "$pkg_dependency_implicit_status" -eq 0 ] || return "$pkg_dependency_implicit_status"
+  case "$pkg_dependency_implicit_status" in
+    0) : ;;
+    1) return 5 ;;
+    *) return "$pkg_dependency_implicit_status" ;;
+  esac
   [ -n "$pkg_dependency_implicit_candidates" ] || return 1
 
   pkg_dependency_implicit_lf='
