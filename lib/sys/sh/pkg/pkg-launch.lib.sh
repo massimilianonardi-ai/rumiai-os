@@ -379,8 +379,8 @@ launcher()
     fi
     # The integration point sees the effective HOME, including the one-shot
     # nested Electron override. Never mutate the application's browser profile.
-    command -- tls-nss-sync "$pkg_launch_nss_home" || {
-      printf 'pkg-launch.tls-nss-sync-failed: package=%s home=%s\\n' "$pkg_launch_pkg" "$pkg_launch_nss_home" >&2
+    "$m_ROOT/m" "$m_BIN_DIR/sys/tls-nss-sync" "$pkg_launch_nss_home" || {
+      printf 'pkg-launch.tls-nss-sync-failed: package=%s home=%s\n' "$pkg_launch_pkg" "$pkg_launch_nss_home" >&2
       return 8
     }
   fi
