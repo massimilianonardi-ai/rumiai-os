@@ -37,6 +37,11 @@ DEPENDENCIES
     Existing NSS DBs with unsupported/password-protected configurations may
     require separate administrator handling; verification is never bypassed.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m tls-nss-sync [arguments].
+
+
 EXIT STATUS
     0     The owned NSS projection is reconciled or no work is necessary.
     2-28  Specific validation, dependency, locking, NSS or filesystem

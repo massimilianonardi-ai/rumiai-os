@@ -1,4 +1,6 @@
-#!/usr/bin/env m
+#!/bin/sh
+
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'tls-nss-sync: m environment not initialized' >&2; exit 1; }
 
 # Linux NSS projection of the additional public CAs authorized in m system conf.
 # This command does not change browser profiles, client keys or the host store.

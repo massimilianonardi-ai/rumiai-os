@@ -105,6 +105,11 @@ OPERANDS
         non-existing pathname to create on save from an initially empty
         document.
 
+ENVIRONMENT
+    Requires a nonempty m_ROOT inherited from an initialized m environment.
+    From an uninitialized host shell, invoke m vsed [arguments].
+
+
 EXIT STATUS
     0
         Saved successfully.
