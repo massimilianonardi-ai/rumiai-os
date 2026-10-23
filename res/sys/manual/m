@@ -15,18 +15,16 @@ DESCRIPTION
     With no command operand, m starts the managed shell through the shell
     facility.
 
-    With a command operand, m first attempts to resolve and canonicalize the
-    first operand. If the resolved file begins with the exact line:
+    With a command operand, m attempts to resolve and canonicalize the first
+    operand to reject recursive execution of the bootstrap. It then executes
+    the original argument vector externally via its native interpreter, with
+    exported initialized m environment and PATH. m does not interpret command
+    shebangs, source command bodies, or export a per-command identity.
 
-        #!/usr/bin/env m
-
-    m treats it as an integrated command: it exports the canonical pathname as
-    readonly m_COMMAND_BIN, removes the command operand from the argument
-    vector, sources the command body inside the initialized runtime and returns
-    its status.
-
-    Otherwise m clears m_COMMAND_BIN and executes the original command vector
-    externally in the initialized environment.
+    Environment-dependent commands use their native shebangs, require nonempty
+    m_ROOT, and load any shell libraries they need inside their own process.
+    To invoke one from an uninitialized shell, use m <command>. A command
+    already inheriting initialized m environment can be invoked directly.
 
     The bootstrap refuses to dispatch itself recursively as a command.
 
