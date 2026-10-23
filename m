@@ -122,23 +122,10 @@ then
   exit "$?"
 fi
 
-if m_COMMAND_BIN="$(command -v -- "$1" 2>/dev/null)" && [ "${m_COMMAND_BIN#*/}" != "$m_COMMAND_BIN" ] && readpathce "m_COMMAND_BIN" "$m_COMMAND_BIN"
+if m_COMMAND_RESOLVED="$(command -v -- "$1" 2>/dev/null)" && [ "${m_COMMAND_RESOLVED#*/}" != "$m_COMMAND_RESOLVED" ] && readpathce "m_COMMAND_RESOLVED" "$m_COMMAND_RESOLVED"
 then
-  [ "$m_COMMAND_BIN" != "$m_BOOTSTRAP_BIN" ] || fatal filesystem path-invalid command-original "$1" command-resolved "$m_COMMAND_BIN"
-
-  m_COMMAND_HEADER=''
-  IFS= read -r m_COMMAND_HEADER < "$m_COMMAND_BIN" || :
-  if [ "$m_COMMAND_HEADER" = '#!/usr/bin/env m' ]
-  then
-    unset m_COMMAND_HEADER
-    shift
-    export_readonly m_COMMAND_BIN
-    . "$m_COMMAND_BIN"
-    exit "$?"
-  fi
-  unset m_COMMAND_HEADER
+  [ "$m_COMMAND_RESOLVED" != "$m_BOOTSTRAP_BIN" ] || fatal filesystem path-invalid command-original "$1" command-resolved "$m_COMMAND_RESOLVED"
 fi
-unset m_COMMAND_BIN
+unset m_COMMAND_RESOLVED
 
-"$@"
-exit "$?"
+exec "$@"
