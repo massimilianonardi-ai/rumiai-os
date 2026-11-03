@@ -87,6 +87,15 @@ PUBLIC FUNCTION
                        captured page/session exists. It is intended for
                        deterministic read/scroll/screenshot probes; callers
                        own their effects and error handling.
+          sendTarget(targetId, method, params = {}, timeoutMs = 12000)
+                       Sends a CDP request to a live attached target,
+                       including out-of-process iframe targets. Unknown
+                       or detached targets fail explicitly.
+          targets()    Returns current attached target IDs, types,
+                       readiness and main-target indicator.
+          styleSheets()
+                       Returns CSS stylesheet headers exposed by CDP,
+                       including target identity, after CSS.enable.
           networkActivity()
                        Returns a read-only observation containing
                        inFlightRequests, pendingReads and quietForMs.
