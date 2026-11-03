@@ -1,0 +1,321 @@
+#!/bin/sh
+# Strict RFC 8259 JSON grammar and UTF-8 parser, using POSIX sh, od and awk.
+# A private staging area prevents invalid documents from leaking partial output.
+
+json_usage()
+{
+  printf '%s\n' 'usage: json [-c] [-- file]' >&2
+  return 2
+}
+
+json_main()
+{
+  json_check=0
+  json_file_given=0
+  json_file=
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in
+      -c)
+        [ "$json_check" -eq 0 ] || { json_usage; return 2; }
+        json_check=1
+        shift
+        ;;
+      --)
+        shift
+        [ "$#" -eq 1 ] || { json_usage; return 2; }
+        json_file_given=1
+        json_file=$1
+        shift
+        break
+        ;;
+      *) json_usage; return 2;;
+    esac
+  done
+  [ "$#" -eq 0 ] || { json_usage; return 2; }
+  if [ "$json_file_given" -eq 1 ]
+  then
+    [ -f "$json_file" ] && [ -r "$json_file" ] || {
+      printf '%s\n' 'json: input-file-unreadable' >&2
+      return 3
+    }
+  fi
+
+  # mkdir is atomic. Never use an insecure, predictable regular temp file.
+  umask 077
+  json_attempt=0
+  json_temp=
+  while [ "$json_attempt" -lt 10 ]
+  do
+    json_temp=${TMPDIR:-/tmp}/json-$$-$json_attempt
+    if (umask 077; mkdir -m 700 -- "$json_temp") 2>/dev/null
+    then
+      break
+    fi
+    json_temp=
+    json_attempt=$((json_attempt + 1))
+  done
+  [ -n "$json_temp" ] || {
+    printf '%s\n' 'json: temporary-directory-creation-failed' >&2
+    return 7
+  }
+  trap 'rm -f -- "$json_temp/bytes" "$json_temp/normalized"; rmdir -- "$json_temp"' 0
+  trap 'exit 1' 1 2 3 15
+
+  if [ "$json_file_given" -eq 1 ]
+  then
+    LC_ALL=C command -p od -A n -t u1 -v < "$json_file" > "$json_temp/bytes" || {
+      printf '%s\n' 'json: input-read-failed' >&2
+      return 8
+    }
+  else
+    LC_ALL=C command -p od -A n -t u1 -v > "$json_temp/bytes" || {
+      printf '%s\n' 'json: standard-input-read-failed' >&2
+      return 9
+    }
+  fi
+
+  # The normalized stream is staged and published only after full validation.
+  LC_ALL=C command -p awk -v check="$json_check" '
+# All input octets are decimal numbers from POSIX od. awk never has to parse
+# an invalidly encoded character, a NUL, or an oversized source line.
+function invalid(status, message) {
+  printf "json: %s at byte %.0f\n", message, offset | "cat >&2"
+  exit status
+}
+function emit_byte(b) {
+  if (check == 0) {
+    buffer=buffer sprintf("%c", b)
+    if (length(buffer) >= 8192) {
+      printf "%s", buffer
+      buffer=""
+    }
+  }
+}
+function flush_output() {
+  if (check == 0) {
+    printf "%s\n", buffer
+    buffer=""
+  }
+}
+function get_octet(    n, line) {
+  while (part_index > part_count) {
+    if ((getline line) <= 0) return -1
+    part_count=split(line, parts, /[[:space:]]+/)
+    part_index=1
+  }
+  while (part_index <= part_count && parts[part_index] == "") part_index++
+  if (part_index > part_count) return get_octet()
+  n=parts[part_index++]
+  if (n !~ /^[0-9]+$/ || n + 0 > 255) invalid(10,"invalid-byte-stream")
+  return n + 0
+}
+function peek_byte() {
+  if (next_byte == -2) next_byte=get_octet()
+  return next_byte
+}
+function take_byte(    b) {
+  b=peek_byte()
+  if (b != -1) {
+    offset++
+    next_byte=-2
+  }
+  return b
+}
+function append_byte() {
+  emit_byte(take_byte())
+}
+function digit(b) { return b >= 48 && b <= 57 }
+function hex(b) {
+  return digit(b) || (b >= 65 && b <= 70) || (b >= 97 && b <= 102)
+}
+function continuation(lo, hi,    b) {
+  b=peek_byte()
+  if (b < lo || b > hi) invalid(5,"invalid-utf8")
+  append_byte()
+}
+function utf8_character(first) {
+  # RFC 3629 shortest forms and Unicode scalar range, no surrogate encodings.
+  if (first >= 194 && first <= 223) { continuation(128,191); return }
+  if (first == 224) { continuation(160,191); continuation(128,191); return }
+  if (first >= 225 && first <= 236) {
+    continuation(128,191); continuation(128,191); return
+  }
+  if (first == 237) { continuation(128,159); continuation(128,191); return }
+  if (first >= 238 && first <= 239) {
+    continuation(128,191); continuation(128,191); return
+  }
+  if (first == 240) {
+    continuation(144,191); continuation(128,191); continuation(128,191); return
+  }
+  if (first >= 241 && first <= 243) {
+    continuation(128,191); continuation(128,191); continuation(128,191); return
+  }
+  if (first == 244) {
+    continuation(128,143); continuation(128,191); continuation(128,191); return
+  }
+  invalid(5,"invalid-utf8")
+}
+function read_string(    b, e, i) {
+  append_byte() # opening quote
+  while (1) {
+    b=peek_byte()
+    if (b == -1) invalid(4,"unterminated-string")
+    if (b == 34) { append_byte(); return }
+    if (b < 32) invalid(4,"unescaped-control-character")
+    if (b == 92) {
+      append_byte()
+      e=peek_byte()
+      if (e == 34 || e == 92 || e == 47 || e == 98 || e == 102 ||
+          e == 110 || e == 114 || e == 116) {
+        append_byte()
+      } else if (e == 117) {
+        append_byte()
+        for (i=0; i<4; i++) {
+          if (!hex(peek_byte())) invalid(4,"invalid-unicode-escape")
+          append_byte()
+        }
+      } else invalid(4,"invalid-string-escape")
+      continue
+    }
+    append_byte()
+    if (b >= 128) utf8_character(b)
+  }
+}
+function read_number(    b) {
+  b=peek_byte()
+  if (b == 45) { append_byte(); b=peek_byte() }
+  if (b == 48) append_byte()
+  else {
+    if (b < 49 || b > 57) invalid(4,"invalid-number-integer")
+    do { append_byte(); b=peek_byte() } while (digit(b))
+  }
+  if (peek_byte() == 46) {
+    append_byte()
+    if (!digit(peek_byte())) invalid(4,"invalid-number-fraction")
+    do { append_byte(); b=peek_byte() } while (digit(b))
+  }
+  b=peek_byte()
+  if (b == 69 || b == 101) {
+    append_byte()
+    b=peek_byte()
+    if (b == 43 || b == 45) append_byte()
+    if (!digit(peek_byte())) invalid(4,"invalid-number-exponent")
+    do { append_byte(); b=peek_byte() } while (digit(b))
+  }
+}
+function read_literal(word,    i, b) {
+  for (i=1; i<=length(word); i++) {
+    b=peek_byte()
+    if (b != literal_byte(word,i)) invalid(4,"invalid-literal")
+    append_byte()
+  }
+}
+function literal_byte(word, i,    c) {
+  c=substr(word,i,1)
+  return index("abcdefghijklmnopqrstuvwxyz",c) + 96
+}
+function read_token(    b) {
+  while (1) {
+    b=peek_byte()
+    if (b == 9 || b == 10 || b == 13 || b == 32) take_byte()
+    else break
+  }
+  if (b == -1) return "end"
+  if (b == 34) { read_string(); return "string" }
+  if (b == 123 || b == 125 || b == 91 || b == 93 || b == 44 || b == 58) {
+    append_byte()
+    return sprintf("%c",b)
+  }
+  if (b == 45 || digit(b)) { read_number(); return "scalar" }
+  if (b == 116) { read_literal("true"); return "scalar" }
+  if (b == 102) { read_literal("false"); return "scalar" }
+  if (b == 110) { read_literal("null"); return "scalar" }
+  invalid(4,"unexpected-character")
+}
+function value(t,    k) {
+  k=kind[depth]
+  if (k == "root") state[depth]="end"
+  else state[depth]="separator"
+  if (t == "{") {
+    depth++
+    kind[depth]="object"
+    state[depth]="first-key"
+    return
+  }
+  if (t == "[") {
+    depth++
+    kind[depth]="array"
+    state[depth]="first-value"
+    return
+  }
+  if (t == "scalar" || t == "string") return
+  invalid(6,"expected-value")
+}
+BEGIN {
+  next_byte=-2
+  part_index=1
+  part_count=0
+  offset=0
+  depth=1
+  kind[1]="root"
+  state[1]="value"
+  buffer=""
+  while (1) {
+    t=read_token()
+    s=state[depth]
+    k=kind[depth]
+    if (s == "end") {
+      if (t != "end") invalid(6,"trailing-content")
+      break
+    }
+    if (t == "end") invalid(6,"unexpected-end-of-document")
+    if (s == "value") { value(t); continue }
+    if (s == "first-value") {
+      if (t == "]") { depth--; continue }
+      value(t)
+      continue
+    }
+    if (s == "next-value") { value(t); continue }
+    if (s == "first-key") {
+      if (t == "}") { depth--; continue }
+      if (t != "string") invalid(6,"expected-object-key")
+      state[depth]="colon"
+      continue
+    }
+    if (s == "next-key") {
+      if (t != "string") invalid(6,"expected-object-key-after-comma")
+      state[depth]="colon"
+      continue
+    }
+    if (s == "colon") {
+      if (t != ":") invalid(6,"expected-colon")
+      state[depth]="value"
+      continue
+    }
+    if (s == "separator") {
+      if (k == "array" && t == "]") { depth--; continue }
+      if (k == "object" && t == "}") { depth--; continue }
+      if (t != ",") invalid(6,"expected-comma-or-closing-delimiter")
+      state[depth]=(k == "array" ? "next-value" : "next-key")
+      continue
+    }
+    invalid(10,"internal-parser-state")
+  }
+  flush_output()
+  exit 0
+}
+' "$json_temp/bytes" > "$json_temp/normalized"
+  json_status=$?
+  [ "$json_status" -eq 0 ] || return "$json_status"
+  if [ "$json_check" -eq 0 ]
+  then
+    command -p cat < "$json_temp/normalized" || {
+      printf '%s\n' 'json: output-write-failed' >&2
+      return 11
+    }
+  fi
+  return 0
+}
+
+json_main "$@"

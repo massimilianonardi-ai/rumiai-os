@@ -1,0 +1,81 @@
+NAME
+    json - strictly parse and compact a JSON document with POSIX utilities
+
+SYNOPSIS
+    json [-c]
+    json [-c] -- <file>
+
+DESCRIPTION
+    json reads one complete UTF-8 JSON document from standard input or from
+    the selected file. A successful default invocation writes the equivalent
+    compact JSON text followed by one newline. It removes insignificant
+    whitespace but does not change string escape spellings, number lexemes,
+    object member order or repeated member names. This is compaction, not
+    semantic canonicalization, key sorting or numeric conversion.
+
+    The parser implements the JSON grammar of RFC 8259 / ECMA-404, including
+    top-level scalar values, arrays, objects, empty containers, escaped
+    strings, and arbitrary-length decimal number lexemes. The grammar is
+    checked through to end of input; trailing non-whitespace is an error.
+
+    Actual UTF-8 bytes in strings are checked against the shortest-form
+    Unicode scalar encoding rules; NUL and unescaped controls are invalid.
+    Escaped UTF-16 surrogate code units (including unmatched surrogates) are
+    admitted as the JSON ABNF permits, although unmatched surrogates are not
+    interoperable Unicode text. A leading UTF-8 BOM is rejected. Repeated
+    object member names are preserved, not resolved into a map.
+
+    On any validation error, standard output stays empty; diagnostics identify
+    the failure class and the number of input bytes already consumed.
+    Temporary files are created in an exclusive
+    directory and cleaned on normal exit or handled signals. The input is
+    never interpreted as shell commands or evaluated as awk program text.
+
+    This command is a standalone POSIX utility; it can be invoked directly
+    without a preinitialized m environment.
+
+OPTIONS
+    -c
+        Validate the entire JSON input and return a status; suppress output.
+
+    --
+        End options and introduce exactly one input file operand.
+        Without --, input is always read from standard input.
+
+OPERANDS
+    <file>
+        Read one existing, readable regular file. Use -- before the name.
+
+ENVIRONMENT
+    TMPDIR
+        Optional temporary-directory parent; defaults to /tmp.
+    LC_ALL
+        Ignored for JSON parsing. The parser runs the POSIX utilities in
+        the C locale for deterministic byte treatment.
+
+DEPENDENCIES
+    POSIX sh, od, awk, mkdir, rm, rmdir and cat.
+
+EXIT STATUS
+    0    Valid JSON and successful output (or successful check).
+    1    Process interrupted by a handled signal.
+    2    Invalid invocation or command option.
+    3    File operand absent, unreadable or not a regular file.
+    4    Invalid JSON lexical token or escape.
+    5    Invalid UTF-8 within a JSON string.
+    6    Invalid JSON structure or trailing data.
+    7    Failed to create a private temporary directory.
+    8    Error reading the input file.
+    9    Error reading standard input.
+    10   Internal byte-stream/parser state error.
+    11   Error writing normalized output.
+
+EXAMPLES
+    printf '%s\n' '{ "a": [1, true, null] }' | json
+        Output: {"a":[1,true,null]}
+
+    json -c -- config.json
+        Validate a complete JSON document without printing it.
+
+SEE ALSO
+    RFC 8259, ECMA-404 (second edition).
