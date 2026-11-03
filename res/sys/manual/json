@@ -1,81 +1,120 @@
 NAME
-    json - strictly parse and compact a JSON document with POSIX utilities
+    json - POSIX JSON query and validation utility
 
 SYNOPSIS
-    json [-c]
-    json [-c] -- <file>
+    json [-c] [-r] [-e] [filter] [file ...]
+    json [-c] [-r] [-e] -f filter-file [file ...]
+    json --check [file ...]
 
 DESCRIPTION
-    json reads one complete UTF-8 JSON document from standard input or from
-    the selected file. A successful default invocation writes the equivalent
-    compact JSON text followed by one newline. It removes insignificant
-    whitespace but does not change string escape spellings, number lexemes,
-    object member order or repeated member names. This is compaction, not
-    semantic canonicalization, key sorting or numeric conversion.
+    json extracts values from JSON documents by evaluating a small, read-only
+    subset of the jq filter syntax. It is a standalone POSIX shell command and
+    does not require jq, Node.js, Python, an initialized m environment, or
+    non-POSIX utilities.
 
-    The parser implements the JSON grammar of RFC 8259 / ECMA-404, including
-    top-level scalar values, arrays, objects, empty containers, escaped
-    strings, and arbitrary-length decimal number lexemes. The grammar is
-    checked through to end of input; trailing non-whitespace is an error.
+    With no filter, '.' selects each complete JSON input. With no input files,
+    standard input is read. With multiple file operands, each is read
+    independently, in order. A '-' file operand selects standard input.
+    A stream may contain multiple JSON values, which are processed separately.
 
-    Actual UTF-8 bytes in strings are checked against the shortest-form
-    Unicode scalar encoding rules; NUL and unescaped controls are invalid.
-    Escaped UTF-16 surrogate code units (including unmatched surrogates) are
-    admitted as the JSON ABNF permits, although unmatched surrogates are not
-    interoperable Unicode text. A leading UTF-8 BOM is rejected. Repeated
-    object member names are preserved, not resolved into a map.
+    The supported filter language includes '.', '.key', '.["any key"]',
+    '.[0]', '.[-1]', '.[]', chained selectors, optional '?' access, '|' to
+    compose filters, and ',' to produce multiple alternatives. ',' binds more
+    tightly than '|'. Only read-only structural queries are implemented;
+    jq's expressions, functions, arithmetic and mutations are not supported.
 
-    On any validation error, standard output stays empty; diagnostics identify
-    the failure class and the number of input bytes already consumed.
-    Temporary files are created in an exclusive
-    directory and cleaned on normal exit or handled signals. The input is
-    never interpreted as shell commands or evaluated as awk program text.
+    A missing key or out-of-range array index returns JSON null. An empty
+    collection iterated with '.[]' returns no values. Access to incompatible
+    non-null types is an error unless '?' is used. Object member names are
+    matched after decoding JSON Unicode escapes. Duplicate object names use
+    the last value, retaining the first occurrence's position in output.
 
-    This command is a standalone POSIX utility; it can be invoked directly
-    without a preinitialized m environment.
+    JSON input is validated strictly, including UTF-8, all JSON tokens,
+    nested structures, and trailing content. Escaped unpaired surrogate
+    code units are allowed by the JSON ABNF; raw string output replaces them
+    with valid Unicode replacement characters. Numeric lexemes are preserved
+    without floating-point conversion. To avoid leaking partial output from
+    malformed input, output is held in private temporary storage until all
+    input has been validated.
 
 OPTIONS
-    -c
-        Validate the entire JSON input and return a status; suppress output.
+    -c, --compact-output
+        Output compact JSON, one result per line. Default JSON output uses
+        two-space indentation for objects and arrays. NOTE: -c means compact
+        output, not validation; the old -c interpretation was removed.
+
+    -r, --raw-output
+        Output decoded JSON string values without surrounding JSON quotes;
+        other JSON result types retain JSON formatting.
+
+    -e, --exit-status
+        Base status on the last result: 0 for values other than false/null;
+        1 for false or null; 4 for no results.
+
+    -f, --from-file <filter-file>
+        Read the filter expression from a file instead of a filter argument.
+
+    --check
+        Validate exactly one JSON value in each input stream without
+        producing output. A missing or additional JSON value is an error. No filter or
+        formatting/exit-status options may accompany --check.
 
     --
-        End options and introduce exactly one input file operand.
-        Without --, input is always read from standard input.
+        Stop option processing. The first remaining argument still denotes
+        a filter (unless --check or -f already selected the mode/filter).
+
+    -h, --help
+        Print brief usage information.
 
 OPERANDS
-    <file>
-        Read one existing, readable regular file. Use -- before the name.
+    filter
+        Optional read-only jq-style filter; default '.'.
+    file
+        Optional path to an input file; '-' means standard input.
 
 ENVIRONMENT
     TMPDIR
-        Optional temporary-directory parent; defaults to /tmp.
-    LC_ALL
-        Ignored for JSON parsing. The parser runs the POSIX utilities in
-        the C locale for deterministic byte treatment.
+        Directory for private staging; defaults to /tmp.
 
 DEPENDENCIES
     POSIX sh, od, awk, mkdir, rm, rmdir and cat.
 
 EXIT STATUS
-    0    Valid JSON and successful output (or successful check).
-    1    Process interrupted by a handled signal.
-    2    Invalid invocation or command option.
-    3    File operand absent, unreadable or not a regular file.
-    4    Invalid JSON lexical token or escape.
-    5    Invalid UTF-8 within a JSON string.
-    6    Invalid JSON structure or trailing data.
-    7    Failed to create a private temporary directory.
-    8    Error reading the input file.
-    9    Error reading standard input.
-    10   Internal byte-stream/parser state error.
-    11   Error writing normalized output.
+    0    Successful query/validation, or -e with true/non-null last result.
+    1    -e last result false or null.
+    2    Invalid CLI arguments or option.
+    3    Invalid/unsupported filter syntax.
+    4    -e with no results.
+    7    Could not create private temporary storage.
+    8    Input/filter file unavailable.
+    9    Input/filter file read failure.
+    10   Invalid JSON lexical token or escape.
+    11   Invalid UTF-8.
+    12   Invalid JSON structure, or --check without exactly one value.
+    13   Query type error.
+    15   Internal parser/byte stream error.
+    16   Output write failure.
+    17   Standard-input read failure.
+    18   Filter file unavailable.
+    19   Filter file read failure.
+    20   Filter staging failure.
+    129+ Termination by handled signal.
 
 EXAMPLES
-    printf '%s\n' '{ "a": [1, true, null] }' | json
-        Output: {"a":[1,true,null]}
+    printf '%s\n' '{"user":{"name":"Ada"}}' | json -r '.user.name'
+        Ada
 
-    json -c -- config.json
-        Validate a complete JSON document without printing it.
+    json -r '.servers[].host' config.json
+        Each server hostname on a separate line.
+
+    json -c '.packages[0]' packages.json
+        Compact JSON for the first package.
+
+    json -e '.enabled' config.json >/dev/null
+        Exit 0 if the final value is neither false nor null.
+
+    json --check config.json
+        Validate the entire file without printing it.
 
 SEE ALSO
-    RFC 8259, ECMA-404 (second edition).
+    jq(1) (CLI/filter-language reference), RFC 8259, ECMA-404.
