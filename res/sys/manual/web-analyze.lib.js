@@ -94,6 +94,12 @@ PUBLIC FUNCTION
                        or detached targets fail explicitly.
           targets()    Returns current attached target IDs, types,
                        readiness and main-target indicator.
+          targetGraph()
+                       Async read-only inventory using Target.getTargets:
+                       discovered targets, parent/child attachments,
+                       enabled instrumentation domains, execution contexts,
+                       missing/unready targets and capability errors.
+                       Includes previously detached/destroyed identities.
           styleSheets()
                        Returns CSS stylesheet headers exposed by CDP,
                        including target identity, after CSS.enable.
@@ -119,6 +125,11 @@ EVIDENCE
     created with private permissions (new directory and evidence files)
     and is not overwritten. Existing directory permissions are preserved.
 
+    Recursively configures target auto-attach for page, iframe, worker,
+    shared_worker and service_worker targets. Context creation/destruction
+    is preserved, with per-target instrumentation failures; workers need
+    not provide DOM or Page domains. Browser target enumeration does not
+    prove that every discovered target was successfully attached.
     Captures page/frame/target lifecycle; HTTP requests/responses and errors;
     WebSocket/SSE metadata; JavaScript console calls/exceptions; DOM mutation
     batches; click/pointer/keyboard-classification/input/focus/scroll events;
