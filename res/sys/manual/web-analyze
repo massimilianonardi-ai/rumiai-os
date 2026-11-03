@@ -45,6 +45,10 @@ OUTPUT
       SCRIPTS.md       Compiled JS assets and best-effort React/Next evidence
       FLOWS.md         Mermaid diagram and table of observed scroll transitions
       LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
+      rest/target-graph-initial.json
+                       Discovered/attached target and execution contexts
+      rest/target-graph-final.json
+                       Refreshed target hierarchy and unresolved attachments
       rest/            Rest-phase indexed evidence, cookies, per-target
                        local/session/IndexedDB/Cache Storage, DOM/layout/CSS,
                        listeners, runtime environment and native MHTML
@@ -98,6 +102,12 @@ OUTPUT
     The bounded exploration captures at most 29 states, with up to 1,200
     controls and 2 MB rendered HTML per-state JSON. Its final Markdown tables
     summarize a bounded prefix; the raw indexes retain all indexed outcomes.
+    Recursively attached iframe/worker targets are inventoried with their
+    parent target, execution contexts, enabled instrumentation domains and
+    errors. Worker globals have separate snapshots instead of page DOM/CSS.
+    Chromium can render cross-origin frames in one process or a separate
+    OOPIF, so frame tree and target graph remain distinct evidence.
+
     The raw packet ledger does not filter by known CDP event names; it
     includes outgoing commands and incoming responses/notifications while
     the debugger is connected. The summary reports packets and local write
