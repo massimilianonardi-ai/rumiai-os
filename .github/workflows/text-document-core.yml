@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: acd79644c253792252350be1571dd0c0807a739e
+          ref: a1000b45d0a4faed474faac907e9b0f96fae5551
           path: .text-document-tests
       - uses: actions/setup-node@v4
         with:
@@ -49,6 +49,7 @@ jobs:
           node --check .text-document-tests/tests/rumiai-os/text-document/cell-precommit-chain.test.mjs
           node --check .text-document-tests/tests/rumiai-os/text-document/annotation-precommit-chain.test.mjs
           node --check .text-document-tests/tests/rumiai-os/text-document/cell-annotated-input.test.mjs
+          node --check .text-document-tests/tests/rumiai-os/text-document/cell-cell-precommit.test.mjs
           node --check lib/sys/js/text-edit.lib.js
       - name: Verify actual core compiler and extracted document semantics
         run: |
