@@ -91,7 +91,10 @@ LIMITATIONS
     stores may consume substantial time and disk space.
 
     Target graph outcomes distinguish discovered but not attached relevant
-    targets, attached but unready targets, and earlier destroyed targets.
+    targets, attached but unready targets, previously destroyed targets, and
+    attached-ready targets discovered too late for the per-target snapshot.
+    The initial graph is rechecked for up to 3 seconds, requiring at least
+    800 ms of stable attached/ready target identities before proceeding.
     Worker globals are evaluated in their own attached CDP sessions.
     Cross-origin iframe documents can have separate OOPIF targets when
     Chromium isolates their process; the frame tree is archived regardless.
