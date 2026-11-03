@@ -27,6 +27,10 @@ PUBLIC FUNCTIONS
 OUTPUT
     rest/manifest.json          Capture ledger: status, per-artifact failures
     rest/README.md              Human-readable evidence index
+    rest/target-graph-initial.json
+                                Discovered/attached targets at rest entry
+    rest/target-graph-final.json
+                                Refreshed target/worker/context graph and gaps
     rest/cookies.json           Browser-context cookies, including HttpOnly
     rest/network-details-at-rest.jsonl
                                 Raw network events frozen before interaction
@@ -37,6 +41,9 @@ OUTPUT
                                 adopted sheets, open shadow roots, iframe
                                 readable markup, resource timing, globals,
                                 storage, caches, service workers, IDB names
+         worker-environment.json
+                                Own worker Runtime global snapshot, for
+                                worker/shared_worker/service_worker targets
          storage.json           localStorage/sessionStorage keys and values
          storage-usage.json     Origin usage and quota breakdown
          indexeddb/index.json  Database/store schemas and capture outcomes
@@ -82,6 +89,12 @@ LIMITATIONS
     values or failed requests are marked partial. Cache Storage bodies are
     read locally without requesting their URLs from the network. Large
     stores may consume substantial time and disk space.
+
+    Target graph outcomes distinguish discovered but not attached relevant
+    targets, attached but unready targets, and earlier destroyed targets.
+    Worker globals are evaluated in their own attached CDP sessions.
+    Cross-origin iframe documents can have separate OOPIF targets when
+    Chromium isolates their process; the frame tree is archived regardless.
 
     The capture runs after the initial DOM-settlement heuristic, not from
     one globally frozen instant. Renderer DOM may still change while
