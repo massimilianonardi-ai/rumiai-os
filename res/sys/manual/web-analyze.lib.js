@@ -127,6 +127,10 @@ EVIDENCE
     frames, and remove URL query strings/fragments. The new raw evidence
     files are intentionally different and can contain sensitive data:
 
+      network-details.jsonl
+                         unredacted CDP request/response metadata, available
+                         request headers and POST content, WebSocket frames,
+                         EventSource events and handshake messages; private
       resources.jsonl    one indexed outcome per observed completed request,
                          redirect or failure; full original response URL,
                          type, status, SHA-256, bytes and saved pathname
@@ -148,7 +152,10 @@ EVIDENCE
     parsed scripts, but this does not itself enumerate registered event
     listeners or prove causality for DOM changes.
 
-    IMPORTANT: resources.jsonl preserves full original URLs including
+    IMPORTANT: network-details.jsonl can include authorization headers,
+    session credentials, cookies, request data and real-time message bodies;
+    do not share it or include it in external diagnostics.
+    resources.jsonl preserves full original URLs including
     query strings; bodies, compiled JavaScript and HTML can expose signed
     URLs, access tokens or personal information. Treat the entire analysis
     directory as confidential, do not commit it to Git, and securely
