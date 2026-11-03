@@ -522,7 +522,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- Initial rest evidence includes CDP tree, layout/styling, event listeners, runtime state and native MHTML when supported.',
     '- Rest files were captured before any programmed scroll, but are not an atomic snapshot of one instant.',
     `- Rest evidence status: ${rest?.status || 'unavailable'}.`,
-    '- Loaded resources and script sources are preserved in the root archive, with raw request metadata in transport.jsonl.',
+    '- Loaded resources and script sources are preserved in the root archive; private network events are in network-details.jsonl.',
     '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
     '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
     '', '## Warnings', '', ...(warnings.length ? warnings.map(item => '- ' + item) : ['- None reported.']), ''
