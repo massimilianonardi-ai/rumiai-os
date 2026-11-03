@@ -30,7 +30,7 @@ OUTPUT
     rest/page.mhtml             Native Chromium MHTML, where supported
     rest/viewport.png           Current viewport screenshot
     rest/targets/target-NNN/
-         environment.json       DOM, live form values, scripts/links, CSSOM,
+         environment.json       DOM, form value lengths, scripts/links, CSSOM,
                                 adopted sheets, open shadow roots, iframe
                                 readable markup, resource timing, globals,
                                 storage, caches, service workers, IDB names
@@ -39,6 +39,8 @@ OUTPUT
          frame-tree.json        CDP frame tree
          layout.json            Current layout metrics
          event-listeners.json   CDP listeners for window/document/root subtree
+    rest/resources-at-rest.jsonl  Indexed response outcomes before input
+    rest/scripts-at-rest.jsonl    Indexed compiled scripts before input
     rest/stylesheets/index.json CDP CSS stylesheet headers/provenance/outcomes
     rest/stylesheets/<sha>.css  Exact stylesheet source as exposed by CDP
 
