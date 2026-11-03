@@ -29,7 +29,8 @@ INVOCATION
     missing parent directories are created automatically. An existing
     directory is accepted when it contains no conflicting evidence files.
     Existing JSONL files, resource/script indexes, resource directories or
-    summary.json are never overwritten: if found,
+    summary.json, cdp-wire.jsonl, cdp-capabilities.json and cdp-protocol.json
+    are never overwritten: if found,
     the invocation fails and the previous evidence remains unchanged.
 
     Chromium opens visibly and remains under observation while the operator
@@ -113,7 +114,8 @@ EVIDENCE
     Events contain a globally increasing sequence, UTC timestamp, monotonic
     elapsed time in milliseconds and topic/type metadata. summary.json
     records event counts, dropped event counts, duration and resourceCapture
-    totals including saved/missing/pending resources and compiled scripts. Evidence is
+    totals including saved/missing/pending resources, compiled scripts and
+    cdp wireCapture packet/write-error counts. Evidence is
     created with private permissions (new directory and evidence files)
     and is not overwritten. Existing directory permissions are preserved.
 
@@ -127,6 +129,17 @@ EVIDENCE
     frames, and remove URL query strings/fragments. The new raw evidence
     files are intentionally different and can contain sensitive data:
 
+      cdp-capabilities.json
+                         Browser.getVersion result; attempted version-specific
+                         local protocol retrieval and success/failure outcome;
+                         enumerated browser-supported CDP domains, commands
+                         and events when the protocol endpoint is available
+      cdp-protocol.json  Unmodified /json/protocol schema from the running
+                         Chromium build; absent on retrieval failure
+      cdp-wire.jsonl     Private chronological inbound/outbound connected-CDP
+                         message ledger, including unhandled notifications,
+                         browser commands, target sessions and full results;
+                         no filter by domain and no bounded diagnostic queue
       network-details.jsonl
                          unredacted CDP request/response metadata, headers,
                          available POST content (including best-effort CDP
@@ -142,6 +155,14 @@ EVIDENCE
       scripts/           JavaScript sources from Debugger.getScriptSource,
                          including dynamically compiled or inline scripts
 
+    All wire packets received or sent on the connected debugger WebSocket
+    are archived, including command results. The ledger cannot recover
+    events from before attachment, disabled domains or unconnected targets.
+    A disk write failure is exposed as wireCapture.status=partial in the
+    final summary and must never be interpreted as a lossless archive.
+    Browser capabilities identify the local Chromium protocol, not a
+    guarantee that every available method was invoked.
+
     The resource index records request failures, CDP-unavailable bodies,
     redirect responses without bodies, and unfinished requests. Two
     identical bodies may share a content-addressed file. CDP can expose
@@ -153,7 +174,10 @@ EVIDENCE
     parsed scripts, but this does not itself enumerate registered event
     listeners or prove causality for DOM changes.
 
-    IMPORTANT: network-details.jsonl can include authorization headers,
+    IMPORTANT: cdp-wire.jsonl contains unredacted CDP messages and may
+    include session keys, passwords, authorization headers, cookies, storage
+    data and entire private responses. Handle it as highly confidential.
+    network-details.jsonl can include authorization headers,
     session credentials, cookies, request data and real-time message bodies;
     do not share it or include it in external diagnostics.
     resources.jsonl preserves full original URLs including
