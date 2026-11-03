@@ -41,11 +41,12 @@ OUTPUT
       SCRIPTS.md       Compiled JS assets and best-effort React/Next evidence
       FLOWS.md         Mermaid diagram and table of observed scroll transitions
       LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
-      rest/            Rest-phase indexed evidence, per-target introspection,
-                       CDP DOM, layout, CSS, listeners, environment, MHTML
+      rest/            Rest-phase indexed evidence, cookies, per-target
+                       storage, DOM/layout/CSS/listeners, environment, MHTML
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
+      network-details.jsonl  Private, full CDP HTTP/request and live-message details
       resources.jsonl  Complete CDP response capture index
       resources/       Decoded HTTP response body artifacts by content hash
       scripts.jsonl    Complete Debugger.scriptParsed source index
@@ -70,6 +71,10 @@ OUTPUT
     These are heuristics, not proof of final application state.
     If settlement times out (e.g. continuous DOM updates), the command
     still saves best-effort DOM evidence with status timeout/unavailable.
+    The rest phase captures observed browser cookies (including HttpOnly)
+    and readable localStorage/sessionStorage values. It freezes a copy of the
+    private CDP network detail stream at this point. Values may include active
+    credentials; do not transmit the output or publish it to GitHub.
     The phase-zero rest snapshot is taken BEFORE any programmatic scroll.
     The existing bounded scroll sweep still follows as a separate operation.
     Rest artifacts include per-artifact saved/unavailable outcomes and SHA-256.
@@ -93,7 +98,7 @@ ENVIRONMENT
 SECURITY
     Private run directories and report/evidence files are created with
     restrictive permissions. Raw URLs, HTML, JS, response bodies, browser
-    profile, archived responses, storage metadata and screenshots may contain
+    profile, HTTP headers, cookies, browser storage and screenshots may contain
     credentials, personal information
     or signed URLs. Do not commit or share output without review.
     CDP is bound to 127.0.0.1 with an ephemeral port and retains local
