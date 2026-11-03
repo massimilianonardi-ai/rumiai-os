@@ -981,7 +981,9 @@ function serialize_node(root,    sp,id,t,child,raw,open_char,close_char)
   printf "%s\n",serialized_buffer
 }
 
-BEGIN {
+## POSIX awk needs an explicit continued line to vertically align BEGIN braces.
+BEGIN \
+{
   byte_offset=0
   lookahead=-2
   part_count=0
