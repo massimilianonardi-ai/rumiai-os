@@ -51,6 +51,12 @@ OUTPUT
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
+      cdp-capabilities.json  Browser version, schema discovery status,
+                             supported domains/commands/events
+      cdp-protocol.json      Version-specific native Chromium CDP schema;
+                             only present when discovery succeeds
+      cdp-wire.jsonl         Every CDP packet observed by the connected
+                             debugger, including unhandled events and results
       network-details.jsonl  Private, full CDP HTTP/request and live-message details
       resources.jsonl  Complete CDP response capture index
       resources/       Decoded HTTP response body artifacts by content hash
@@ -92,6 +98,15 @@ OUTPUT
     The bounded exploration captures at most 29 states, with up to 1,200
     controls and 2 MB rendered HTML per-state JSON. Its final Markdown tables
     summarize a bounded prefix; the raw indexes retain all indexed outcomes.
+    The raw packet ledger does not filter by known CDP event names; it
+    includes outgoing commands and incoming responses/notifications while
+    the debugger is connected. The summary reports packets and local write
+    errors. A complete ledger of *observed* packets is not a guarantee that
+    disabled CDP domains, unattached targets or future activity were observed.
+    The protocol schema is retrieved from this browser's local debugging
+    endpoint and is not assumed to be identical to a remote specification.
+    A missing schema is recorded as unavailable, not silently substituted.
+
     Resource capture is best effort. CDP cannot always retrieve bodies from
     redirects, active streams or evicted responses; inspect statuses instead
     of assuming complete acquisition.
