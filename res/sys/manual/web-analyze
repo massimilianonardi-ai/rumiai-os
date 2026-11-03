@@ -51,11 +51,15 @@ OUTPUT
     A DOM snapshot is considered settled when document.readyState is
     complete, document fonts are loaded, DOM mutations and network events
     have been quiet for 1,500 ms, and no HTTP requests or body reads remain
-    in flight. Initial settlement is allowed up to 15 seconds; subsequent
-    states up to 6 seconds. These are heuristics, not proof of final state.
-    If settlement times out (e.g. continuous updates, polling, live streams),
-    the command still saves a best-effort DOM, marking the result as
-    timeout/unavailable rather than falsely claiming completion.
+    in flight. If requests remain open after 4,500 ms without a network
+    event and DOM mutations are quiet, the snapshot is saved as
+    dom-quiet-network-pending rather than settled. This avoids indefinite
+    waits on persistent streams while reporting unresolved network work.
+    Initial settlement is allowed up to 15 seconds; subsequent states
+    up to 6 seconds, within an overall 45-second exploration budget.
+    These are heuristics, not proof of final application state.
+    If settlement times out (e.g. continuous DOM updates), the command
+    still saves best-effort DOM evidence with status timeout/unavailable.
     Full initial/final rendered HTML is stored separately from the bounded
     exploratory JSON snapshots; consult the adjacent JSON metadata.
 

@@ -6,7 +6,8 @@ const fs = require('node:fs');
 const path = require('node:path');
 
 const LIMIT = {steps: 28, controls: 1200, html: 2_000_000, text: 200_000,
-  quietMs: 1500, initialSettleMs: 15000, scrollSettleMs: 6000};
+  quietMs: 1500, pendingQuietMs: 4500, initialSettleMs: 15000,
+  scrollSettleMs: 6000, analysisMs: 45000};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function failure(status, identity, message)
@@ -163,10 +164,15 @@ async function waitForRest(session, durationMs, warnings, interrupted)
       const network = session.networkActivity();
       observation = {...dom, ...network};
       if (dom.readyState === 'complete' && dom.fontsLoaded &&
-          dom.domQuietMs >= LIMIT.quietMs && network.quietForMs >= LIMIT.quietMs &&
-          network.inFlightRequests === 0 && network.pendingReads === 0)
+          dom.domQuietMs >= LIMIT.quietMs && network.quietForMs >= LIMIT.quietMs)
       {
-        return {...observation, status: 'settled', waitedMs: Date.now() - start};
+        if (network.inFlightRequests === 0 && network.pendingReads === 0)
+          return {...observation, status: 'settled', waitedMs: Date.now() - start};
+        // SSE, WebSockets and detached targets can leave requests open.
+        // Save the DOM after extended quiet, but retain the unresolved status.
+        if (network.quietForMs >= LIMIT.pendingQuietMs)
+          return {...observation, status: 'dom-quiet-network-pending',
+            waitedMs: Date.now() - start};
       }
     }
     catch (error)
@@ -244,11 +250,22 @@ async function explore(session, directory, warnings, interrupted)
   }
   let lastScroll = null;
   let idle = 0;
+  const analysisDeadline = Date.now() + LIMIT.analysisMs;
   for (let step = 0; step <= LIMIT.steps && !interrupted(); step++)
   {
+    const remainingMs = analysisDeadline - Date.now();
+    if (remainingMs <= 0)
+    {
+      warnings.push('exploration time budget exhausted before the next DOM state');
+      break;
+    }
     const settlement = await waitForRest(session,
-      step === 0 ? LIMIT.initialSettleMs : LIMIT.scrollSettleMs, warnings, interrupted);
+      Math.min(remainingMs, step === 0 ? LIMIT.initialSettleMs : LIMIT.scrollSettleMs),
+      warnings, interrupted);
     if (interrupted()) break;
+    process.stderr.write(`web-analyze: state=${step} settlement=${settlement.status} ` +
+      `domQuietMs=${settlement.domQuietMs ?? '-'} networkQuietMs=${settlement.quietForMs ?? '-'} ` +
+      `inFlight=${settlement.inFlightRequests ?? '-'} pendingReads=${settlement.pendingReads ?? '-'}\n`);
     let state;
     try {state = await evaluate(session, observeExpression);}
     catch (error) {warnings.push(`DOM snapshot ${step}: ${error.message}`); break;}
@@ -436,6 +453,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
     `- States without confirmed settlement: ${nonSettled.length ? nonSettled.join(', ') : 'none'}.`,
     `- Settlement: document complete, fonts loaded, DOM and network quiet for ${LIMIT.quietMs} ms, no pending reads or in-flight HTTP requests.`,
     `- Settlement time limits: initial ${LIMIT.initialSettleMs} ms; subsequent ${LIMIT.scrollSettleMs} ms.`,
+    `- Requests still active after ${LIMIT.pendingQuietMs} ms of network quiet are recorded as dom-quiet-network-pending, never settled.`,
+    `- Overall passive exploration time budget: ${LIMIT.analysisMs} ms.`,
     '- Continuous DOM mutation, requests, long-lived streams or late tasks can prevent settlement.',
     '- A settled observation is a bounded heuristic, not proof that all future work has finished.',
     '- `states/dom-rest-initial.html` and `states/dom-rest-final.html` contain full outerHTML if capture succeeded;',
