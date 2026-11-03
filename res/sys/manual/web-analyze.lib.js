@@ -87,6 +87,13 @@ PUBLIC FUNCTION
                        captured page/session exists. It is intended for
                        deterministic read/scroll/screenshot probes; callers
                        own their effects and error handling.
+          networkActivity()
+                       Returns a read-only observation containing
+                       inFlightRequests, pendingReads and quietForMs.
+                       The counts reflect CDP-observed resources attached
+                       to this recorder; quietForMs is milliseconds since
+                       the last request/response/end/failure event.
+                       This does not prove the page will remain idle.
 
         The consumer must retain and stop the session when finished. Closing
         Chromium externally also triggers finalization.

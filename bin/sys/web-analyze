@@ -5,7 +5,8 @@
 const fs = require('node:fs');
 const path = require('node:path');
 
-const LIMIT = {steps: 28, controls: 1200, html: 2_000_000, text: 200_000};
+const LIMIT = {steps: 28, controls: 1200, html: 2_000_000, text: 200_000,
+  quietMs: 1500, initialSettleMs: 15000, scrollSettleMs: 6000};
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
 function failure(status, identity, message)
@@ -128,6 +129,76 @@ const scrollExpression = String.raw`(() => {
   return {moved: false, candidates: candidates.length};
 })()`;
 
+// The observer watches the rendered DOM without changing the application's
+// fetch/XHR interfaces. Each navigation receives a new document tracker.
+const restExpression = String.raw`(() => {
+  let tracker = globalThis.__mWebAnalyzeDomQuiet;
+  if (!tracker || tracker.document !== document) {
+    tracker = {document, lastMutationAt: performance.now(), mutations: 0};
+    const observer = new MutationObserver(records => {
+      tracker.lastMutationAt = performance.now();
+      tracker.mutations += records.length;
+    });
+    observer.observe(document.documentElement,
+      {subtree: true, childList: true, attributes: true, characterData: true});
+    Object.defineProperty(globalThis, '__mWebAnalyzeDomQuiet',
+      {value: tracker, writable: true, configurable: true});
+  }
+  return {url: location.href, readyState: document.readyState,
+    domQuietMs: Math.max(0, Math.round(performance.now() - tracker.lastMutationAt)),
+    mutationCount: tracker.mutations,
+    fontsLoaded: !document.fonts || document.fonts.status === 'loaded'};
+})()`;
+
+async function waitForRest(session, durationMs, warnings, interrupted)
+{
+  const start = Date.now();
+  const deadline = start + durationMs;
+  let observation = null;
+  while (!interrupted())
+  {
+    try
+    {
+      const dom = await evaluate(session, restExpression);
+      const network = session.networkActivity();
+      observation = {...dom, ...network};
+      if (dom.readyState === 'complete' && dom.fontsLoaded &&
+          dom.domQuietMs >= LIMIT.quietMs && network.quietForMs >= LIMIT.quietMs &&
+          network.inFlightRequests === 0 && network.pendingReads === 0)
+      {
+        return {...observation, status: 'settled', waitedMs: Date.now() - start};
+      }
+    }
+    catch (error)
+    {
+      warnings.push(`DOM settlement observation unavailable: ${error.message}`);
+      return {...observation, status: 'unavailable', waitedMs: Date.now() - start};
+    }
+    if (Date.now() >= deadline) break;
+    await wait(200);
+  }
+  return {...observation, status: interrupted() ? 'interrupted' : 'timeout',
+    waitedMs: Date.now() - start};
+}
+
+async function saveRestDom(session, directory, stage, state, warnings)
+{
+  try
+  {
+    // Full rendered outerHTML, independent of the limited exploratory JSON.
+    const html = await evaluate(session, 'document.documentElement?.outerHTML || ""');
+    const filename = `dom-rest-${stage}.html`;
+    save(path.join(directory, filename), html);
+    save(path.join(directory, `dom-rest-${stage}.json`),
+      {state: state.step, capturedAt: new Date().toISOString(), url: state.url,
+        settlement: state.settlement, htmlBytes: Buffer.byteLength(html, 'utf8')});
+  }
+  catch (error)
+  {
+    warnings.push(`resting DOM ${stage}: ${error.message}`);
+  }
+}
+
 async function evaluate(session, expression)
 {
   const response = await session.sendPage('Runtime.evaluate',
@@ -171,20 +242,25 @@ async function explore(session, directory, warnings, interrupted)
     catch (error) {if (attempt === 39) warnings.push(`navigation: ${error.message}`);}
     await wait(500);
   }
-  await wait(900);
   let lastScroll = null;
   let idle = 0;
   for (let step = 0; step <= LIMIT.steps && !interrupted(); step++)
   {
+    const settlement = await waitForRest(session,
+      step === 0 ? LIMIT.initialSettleMs : LIMIT.scrollSettleMs, warnings, interrupted);
+    if (interrupted()) break;
     let state;
     try {state = await evaluate(session, observeExpression);}
     catch (error) {warnings.push(`DOM snapshot ${step}: ${error.message}`); break;}
     state.step = step;
     state.trigger = lastScroll || {kind: 'initial-navigation'};
+    state.settlement = settlement;
     if (step === 0 || step % 5 === 0)
       state.screenshot = await screenshot(session, statesDir, step, warnings);
     save(path.join(statesDir, `state-${String(step).padStart(3, '0')}.json`), state);
     states.push(state);
+    if (step === 0)
+      await saveRestDom(session, statesDir, 'initial', state, warnings);
     if (step === LIMIT.steps) break;
     let scroll;
     try {scroll = await evaluate(session, scrollExpression);}
@@ -193,13 +269,14 @@ async function explore(session, directory, warnings, interrupted)
     {
       idle++;
       if (idle >= 3) break;
-      await wait(900);
+      await wait(350);
       continue;
     }
     idle = 0;
     lastScroll = {kind: 'scroll', ...scroll};
-    await wait(700);
   }
+  if (states.length)
+    await saveRestDom(session, statesDir, 'final', states[states.length - 1], warnings);
   return states;
 }
 
@@ -249,6 +326,9 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
     `- Initial document: ${first ? first.url : '(not observed)'}`,
     `- Title: ${first ? markdown(first.title) : '(not observed)'}`,
     `- Observed DOM states: ${states.length}; distinct controls: ${knownControls.length}`,
+    `- Initial DOM settlement: ${first?.settlement?.status || 'not observed'}`,
+    '- [Initial resting DOM](states/dom-rest-initial.html) and [final resting DOM](states/dom-rest-final.html)',
+    '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
     `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
     `- Compiled scripts archived: ${summary.resourceCapture?.scriptsSaved ?? 0}`,
     `- Interrupted: ${interrupted}; logged-event drops: ${JSON.stringify(summary.dropped)}`,
@@ -267,6 +347,18 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
 
   const dom = ['# Observed DOM and interface', '',
     'This is an inventory of rendered states, not proof that every possible route or interaction was exercised.',
+    '', '## DOM settlement before each observation', '',
+    `A settled state requires readyState=complete, loaded fonts, ${LIMIT.quietMs} ms without`,
+    'observed DOM mutations or network events, no pending body reads and no in-flight HTTP requests.',
+    'A timeout/unavailable status means the DOM was preserved without a completion claim.', '',
+    table(states.map(state => [state.step, state.settlement?.status,
+      state.settlement?.readyState, state.settlement?.domQuietMs,
+      state.settlement?.quietForMs, state.settlement?.inFlightRequests,
+      state.settlement?.waitedMs]),
+    ['State', 'Settlement', 'readyState', 'DOM quiet ms', 'Network quiet ms',
+      'In-flight requests', 'Wait ms']),
+    '', 'Full initial and final rendered HTML and their metadata are in',
+    '`states/dom-rest-{initial,final}.{html,json}`.',
     '', '## Pages', '',
     table([...pages].map(page => [page]), ['Observed URL']),
     '## Headings (first observed state)', '',
@@ -336,10 +428,18 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
 
   const dropped = Object.entries(summary.dropped || {}).filter(([,count]) => count > 0);
   const limited = states.filter(s => Object.values(s.truncated || {}).some(Boolean)).map(s => s.step);
+  const nonSettled = states.filter(s => s.settlement?.status !== 'settled').map(s => s.step);
   const limits = ['# Coverage, confidence and limitations', '',
     'Evidence is limited to this browser profile, permissions, viewport, execution interval and observed route.',
     'A single visit cannot exhaust the states of a dynamic React application.', '',
     `- Observed DOM states: ${states.length} (bounded to ${LIMIT.steps + 1}).`,
+    `- States without confirmed settlement: ${nonSettled.length ? nonSettled.join(', ') : 'none'}.`,
+    `- Settlement: document complete, fonts loaded, DOM and network quiet for ${LIMIT.quietMs} ms, no pending reads or in-flight HTTP requests.`,
+    `- Settlement time limits: initial ${LIMIT.initialSettleMs} ms; subsequent ${LIMIT.scrollSettleMs} ms.`,
+    '- Continuous DOM mutation, requests, long-lived streams or late tasks can prevent settlement.',
+    '- A settled observation is a bounded heuristic, not proof that all future work has finished.',
+    '- `states/dom-rest-initial.html` and `states/dom-rest-final.html` contain full outerHTML if capture succeeded;',
+    '  check adjacent JSON metadata and warnings, especially when settlement timed out.',
     `- DOM snapshots with truncated HTML/text/control inventories: ${limited.length ? limited.join(', ') : 'none observed'}.`,
     `- Event streams with dropped records: ${dropped.length ? JSON.stringify(dropped) : 'none reported'}.`,
     `- Response bodies unavailable/redirected/unfinished: ${resources.length - saved.length}.`,
