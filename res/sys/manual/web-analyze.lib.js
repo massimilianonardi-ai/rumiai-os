@@ -128,8 +128,9 @@ EVIDENCE
     files are intentionally different and can contain sensitive data:
 
       network-details.jsonl
-                         unredacted CDP request/response metadata, available
-                         request headers and POST content, WebSocket frames,
+                         unredacted CDP request/response metadata, headers,
+                         available POST content (including best-effort CDP
+                         Network.getRequestPostData results), WebSocket frames,
                          EventSource events and handshake messages; private
       resources.jsonl    one indexed outcome per observed completed request,
                          redirect or failure; full original response URL,
