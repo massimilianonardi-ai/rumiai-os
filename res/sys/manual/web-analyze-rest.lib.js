@@ -27,6 +27,9 @@ PUBLIC FUNCTIONS
 OUTPUT
     rest/manifest.json          Capture ledger: status, per-artifact failures
     rest/README.md              Human-readable evidence index
+    rest/cookies.json           Browser-context cookies, including HttpOnly
+    rest/network-details-at-rest.jsonl
+                                Raw network events frozen before interaction
     rest/page.mhtml             Native Chromium MHTML, where supported
     rest/viewport.png           Current viewport screenshot
     rest/targets/target-NNN/
@@ -34,6 +37,7 @@ OUTPUT
                                 adopted sheets, open shadow roots, iframe
                                 readable markup, resource timing, globals,
                                 storage, caches, service workers, IDB names
+         storage.json           localStorage/sessionStorage keys and values
          dom-tree.json          CDP DOM.getDocument(depth=-1,pierce=true)
          dom-snapshot.json      CDP DOM/layout/selected computed style table
          frame-tree.json        CDP frame tree
@@ -47,15 +51,20 @@ OUTPUT
     The companion native CDP recorder separately saves all observed and
     recoverable response bodies and compiled script sources under the run
     root. Privacy-redacted event logs retain HTTP and WebSocket activity
-    metadata, not authorization headers, request POST contents or frame
-    payloads. Not all response bodies or code are exposed; inspect archive
+    metadata; separate restricted network-details.jsonl preserves
+    HTTP headers, available POST data and real-time messaging payloads.
+    Not all response bodies or code are exposed; inspect archive
     statuses, time bounds and the manifest.
 
 SECURITY
     This is private debugger evidence. Page markup, bodies, browser
     resources and signed URLs may expose credentials and private content.
-    environment.json records storage value lengths, not their raw values;
-    form values are not serialized, only type/length/checked state.
+    environment.json records storage value lengths, not raw values.
+    storage.json preserves unredacted local/session storage values; cookies.json
+    includes browser cookie values. Those may be active credentials and must
+    never be included in shared reports, logs or repository commits.
+    Form values are not individually serialized except where already present
+    in the captured page or network material.
     Use private local analysis directories and never publish raw files or
     browser profiles without reviewing their contents.
 
