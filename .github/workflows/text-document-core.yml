@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 10da9e544c06552b2b33424e8640560a78508a7c
+          ref: 1c36abce2d5dbf7c69ddc99ee9b3ac6295b09d03
           path: .text-document-tests
       - uses: actions/setup-node@v4
         with:
@@ -45,6 +45,7 @@ jobs:
           node --check .text-document-tests/tests/rumiai-os/text-document/fold-geometry.test.mjs
           node --check .text-document-tests/tests/rumiai-os/text-document/substitution-geometry.test.mjs
           node --check .text-document-tests/tests/rumiai-os/text-document/fold-precommit.test.mjs
+          node --check .text-document-tests/tests/rumiai-os/text-document/substitution-precommit.test.mjs
           node --check lib/sys/js/text-edit.lib.js
       - name: Verify actual core compiler and extracted document semantics
         run: |
