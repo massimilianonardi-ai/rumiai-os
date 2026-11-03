@@ -11,7 +11,7 @@ DESCRIPTION
     full rendered-DOM snapshot, then acquires a read-only deep-rest phase
     (CDP DOM tree including Shadow DOM, layout/style snapshots, native MHTML,
     CSSOM/style source, runtime element/storage details, listener locations,
-    frame targets, unredacted request metadata and captured assets).
+    frame targets, redacted network event metadata and archived responses).
     It inventories controls/forms/headings and
     best-effort React runtime markers, scrolls the document and nested
     scroll containers, and records bounded states after settlement checks.
@@ -53,6 +53,10 @@ OUTPUT
       *.jsonl          Lifecycle, DOM, interaction, network and runtime events
       summary.json     Recording totals and incomplete-resource counters
       profile/         Dedicated Chromium browsing profile for this run
+
+    DOM quiet observation also watches discovered open Shadow DOM trees and
+    readable same-origin iframe documents, but inaccessible frames cannot
+    be treated as completely observed.
 
     A DOM snapshot is considered settled when document.readyState is
     complete, document fonts are loaded, DOM mutations and network events
