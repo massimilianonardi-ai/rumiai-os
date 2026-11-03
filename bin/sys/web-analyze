@@ -233,7 +233,7 @@ async function screenshot(session, directory, index, warnings)
   }
 }
 
-async function explore(session, directory, warnings, interrupted)
+async function explore(session, directory, warnings, interrupted, captureRestEvidence)
 {
   const states = [];
   const statesDir = path.join(directory, 'states');
@@ -277,7 +277,21 @@ async function explore(session, directory, warnings, interrupted)
     save(path.join(statesDir, `state-${String(step).padStart(3, '0')}.json`), state);
     states.push(state);
     if (step === 0)
+    {
       await saveRestDom(session, statesDir, 'initial', state, warnings);
+      try
+      {
+        const result = await captureRestEvidence(session, directory, {interrupted});
+        process.stderr.write('web-analyze: resting-page evidence=' + result.status +
+          ' artifacts=' + result.artifacts.length + '\n');
+        if (result.status !== 'captured')
+          warnings.push('resting-page evidence incomplete; inspect rest/manifest.json');
+      }
+      catch (error)
+      {
+        warnings.push('resting-page evidence unavailable: ' + error.message);
+      }
+    }
     if (step === LIMIT.steps) break;
     let scroll;
     try {scroll = await evaluate(session, scrollExpression);}
@@ -337,6 +351,12 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
   }
   const knownControls = [...controls.values()];
   const first = states[0];
+  let rest = null;
+  try
+  {
+    rest = JSON.parse(fs.readFileSync(path.join(directory,'rest/manifest.json'),'utf8'));
+  }
+  catch (_) { /* Missing rest evidence is explicitly reported below. */ }
   const overview = [
     '# Web analysis — observed evidence', '',
     `- Requested URL: ${url}`,
@@ -344,6 +364,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
     `- Title: ${first ? markdown(first.title) : '(not observed)'}`,
     `- Observed DOM states: ${states.length}; distinct controls: ${knownControls.length}`,
     `- Initial DOM settlement: ${first?.settlement?.status || 'not observed'}`,
+    '- [Deep resting-page evidence](rest/README.md) and [manifest](rest/manifest.json)',
+    `- Rest evidence: ${rest?.status || 'unavailable'}; artifacts: ${rest?.artifacts?.length ?? 0}`,
     '- [Initial resting DOM](states/dom-rest-initial.html) and [final resting DOM](states/dom-rest-final.html)',
     '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
     `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
@@ -469,6 +491,10 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
     '- No automatic link clicks, form submissions, logins, payments, consent changes or challenge bypass.',
     '- No mutation-based workflow replay; scroll-only transitions are observed, not causally attributed to source functions.',
     '- CDP may miss resources on redirects, websocket streams, caches, service workers or debugger attachment races.',
+    '- Initial rest evidence includes CDP tree, layout/styling, event listeners, runtime state and native MHTML when supported.',
+    '- Rest files were captured before any programmed scroll, but are not an atomic snapshot of one instant.',
+    `- Rest evidence status: ${rest?.status || 'unavailable'}.`,
+    '- Loaded resources and script sources are preserved in the root archive, with raw request metadata in transport.jsonl.',
     '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
     '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
     '', '## Warnings', '', ...(warnings.length ? warnings.map(item => '- ' + item) : ['- None reported.']), ''
@@ -490,7 +516,13 @@ async function main(args)
   if (!process.env.m_LIB_DIR)
     throw failure(6, 'm-library-root-missing', 'm_LIB_DIR is unavailable');
   let startWebAnalyze;
-  try {({startWebAnalyze} = require(path.join(process.env.m_LIB_DIR, 'sys/js/web-analyze.lib.js')));}
+  let captureRestEvidence;
+  try
+  {
+    ({startWebAnalyze} = require(path.join(process.env.m_LIB_DIR, 'sys/js/web-analyze.lib.js')));
+    ({captureRestEvidence} = require(path.join(process.env.m_LIB_DIR,
+      'sys/js/web-analyze-rest.lib.js')));
+  }
   catch (error) {throw failure(7, 'capture-library-unavailable', error.message);}
   const directory = runDirectory(path.resolve(args[1]));
   process.stderr.write(`web-analyze: capture started in ${directory}\n`);
@@ -506,7 +538,7 @@ async function main(args)
   {
     try {session = await startWebAnalyze({url: url.href, outputDir: directory, headless: true});}
     catch (error) {throw failure(8, 'chromium-capture-start-failed', error.message);}
-    states = await explore(session, directory, warnings, () => interrupted);
+    states = await explore(session, directory, warnings, () => interrupted, captureRestEvidence);
   }
   finally
   {
