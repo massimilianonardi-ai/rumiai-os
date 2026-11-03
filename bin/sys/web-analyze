@@ -378,6 +378,13 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   }
   const knownControls = [...controls.values()];
   const first = states[0];
+  let capabilities = null;
+  try
+  {
+    capabilities = JSON.parse(fs.readFileSync(
+      path.join(directory, 'cdp-capabilities.json'), 'utf8'));
+  }
+  catch (_) { /* The report must not misrepresent missing CDP capabilities. */ }
   let rest = null;
   try
   {
@@ -398,14 +405,19 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
     `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
     `- Compiled scripts archived: ${summary.resourceCapture?.scriptsSaved ?? 0}`,
+    `- Browser CDP schema: ${capabilities?.protocol?.status || 'unavailable'}; domains: ${capabilities?.protocol?.domains?.length ?? 0}`,
+    `- CDP packet ledger: ${summary.resourceCapture?.wireCapture?.status || 'unavailable'}; packets: ${summary.resourceCapture?.wireCapture?.packets ?? 0}`,
     `- Interrupted: ${interrupted}; logged-event drops: ${JSON.stringify(summary.dropped)}`,
     '', '## Documents', '',
     '- [DOM and interfaces](DOM.md)', '- [Network and archived resources](NETWORK.md)',
     '- [JavaScript and React evidence](SCRIPTS.md)', '- [Observed flows](FLOWS.md)',
     '- [Coverage and limitations](LIMITATIONS.md)',
+    '- [Browser CDP capabilities](cdp-capabilities.json) and [version-specific protocol](cdp-protocol.json) (when available)',
     '', '## Raw evidence', '',
     '`resources.jsonl` and `resources/` preserve decoded HTTP response bodies; `scripts.jsonl` and',
     '`scripts/` preserve compiled JavaScript sources; `states/` contains rendered DOM snapshots and screenshots.',
+    '`cdp-wire.jsonl` preserves all CDP packets observed by the connected debugger, including otherwise unhandled events.',
+    'The ledger is not evidence for disabled domains, unavailable targets, or events predating attachment.',
     'Other JSONL files record browser lifecycle, network, interaction, DOM mutation, console, performance and errors.',
     '', '**Sensitive:** Treat the entire directory, including the Chromium `profile/`, as private.',
     'Raw bodies, HTML, query strings and browser state may contain authentication data. Do not publish or commit it.', ''
@@ -523,6 +535,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- Rest files were captured before any programmed scroll, but are not an atomic snapshot of one instant.',
     `- Rest evidence status: ${rest?.status || 'unavailable'}.`,
     '- Loaded resources and script sources are preserved in the root archive; private network events are in network-details.jsonl.',
+    `- Raw connected-CDP packet ledger: ${summary.resourceCapture?.wireCapture?.status || 'unavailable'}; write errors: ${summary.resourceCapture?.wireCapture?.errors?.length ?? 0}.`,
+    `- Browser-specific CDP schema retrieval: ${capabilities?.protocol?.status || 'unavailable'}.`,
     '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
     '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
     '', '## Warnings', '', ...(warnings.length ? warnings.map(item => '- ' + item) : ['- None reported.']), ''
