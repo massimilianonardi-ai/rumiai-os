@@ -274,7 +274,7 @@ async function explore(session, directory, warnings, interrupted, captureRestEvi
   }
   let lastScroll = null;
   let idle = 0;
-  const analysisDeadline = Date.now() + LIMIT.analysisMs;
+  let analysisDeadline = Date.now() + LIMIT.analysisMs;
   for (let step = 0; step <= LIMIT.steps && !interrupted(); step++)
   {
     const remainingMs = analysisDeadline - Date.now();
@@ -315,6 +315,9 @@ async function explore(session, directory, warnings, interrupted, captureRestEvi
       {
         warnings.push('resting-page evidence unavailable: ' + error.message);
       }
+      // Deep passive inspection has its own lifecycle and must not consume
+      // the optional post-rest scroll exploration time budget.
+      analysisDeadline = Date.now() + LIMIT.analysisMs;
     }
     if (step === LIMIT.steps || (step === 0 && !scrollEnabled)) break;
     let scroll;
