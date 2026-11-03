@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 32999e72f383adec7658045d398866090e718c1e
+          ref: 34b48997050bf5e5e6ca0141348381065e9eaa46
           path: .text-document-tests
       - uses: actions/setup-node@v4
         with:
@@ -32,6 +32,7 @@ jobs:
           node --check lib/sys/js/core/m/text/document/Document.js
           node --check lib/sys/js/core/m/text/document/Document2D.js
           node --check lib/sys/js/core/m/text/document/RawDocument2D.js
+          node --check lib/sys/js/core/m/text/document/CellDocument2D.js
           node --check lib/sys/js/core/m/text/document/_DocumentStore.js
           node --check lib/sys/js/core/m/text/document/FlatDocument.js
           node --check lib/sys/js/core/m/text/document/PieceDocument.js
