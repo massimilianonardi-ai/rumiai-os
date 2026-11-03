@@ -1,0 +1,88 @@
+NAME
+    web-analyze - passive Chromium/CDP website evidence and Markdown analysis
+
+SYNOPSIS
+    web-analyze <http(s)-url> <analysis-path>
+
+DESCRIPTION
+    Launches a fresh headless Chromium session through the existing native-CDP
+    web-analyze.lib.js recorder. The command waits for a rendered document,
+    inventories controls/forms/headings and best-effort React runtime markers,
+    scrolls the document and nested scroll containers, and records bounded
+    rendered DOM states and viewport screenshots. It then stops Chromium,
+    allowing the recorder's normal network/resource drain, and generates
+    analytical Markdown documents from the acquired evidence.
+
+    This is observation, not autonomous proof of every application behavior.
+    The command does not click buttons, submit forms, authenticate, follow
+    links, modify account state, bypass challenges or claim unseen states.
+    An initial visit and scroll sweep cannot exhaust a dynamic React app.
+
+OPERANDS
+    http(s)-url       Required absolute HTTP or HTTPS URL to navigate.
+    analysis-path     Parent folder for analysis runs. Created if missing.
+                      Each invocation creates a unique private run-* folder;
+                      pre-existing analyses are preserved unchanged.
+
+OUTPUT
+    Prints the absolute path to the generated README.md on stdout.
+    Progress and diagnostics go to stderr.
+
+    Inside each run-* folder:
+      README.md        Analysis index, evidence counts, confidentiality notice
+      DOM.md           Observed routes, headings, forms and interactive controls
+      NETWORK.md       Request catalog (bounded summary), resource outcomes
+      SCRIPTS.md       Compiled JS assets and best-effort React/Next evidence
+      FLOWS.md         Mermaid diagram and table of observed scroll transitions
+      LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
+      states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
+      resources.jsonl  Complete CDP response capture index
+      resources/       Decoded HTTP response body artifacts by content hash
+      scripts.jsonl    Complete Debugger.scriptParsed source index
+      scripts/         JavaScript source artifacts by content hash
+      *.jsonl          Lifecycle, DOM, interaction, network and runtime events
+      summary.json     Recording totals and incomplete-resource counters
+      profile/         Dedicated Chromium browsing profile for this run
+
+    The bounded exploration captures at most 29 states, with up to 1,200
+    controls and 2 MB rendered HTML per state. Its final Markdown tables
+    summarize a bounded prefix; the raw indexes retain all indexed outcomes.
+    Resource capture is best effort. CDP cannot always retrieve bodies from
+    redirects, active streams or evicted responses; inspect statuses instead
+    of assuming complete acquisition.
+
+ENVIRONMENT
+    Requires an initialized m environment (nonempty m_ROOT and m_LIB_DIR),
+    Node.js >= 22 (native WebSocket) and chromium on effective PATH.
+    From a clean shell invoke through: m web-analyze <url> <analysis-path>.
+    Browser sandbox and TLS verification remain enabled; no Playwright needed.
+
+SECURITY
+    Private run directories and report/evidence files are created with
+    restrictive permissions. Raw URLs, HTML, JS, response bodies, browser
+    profile and screenshots may contain credentials, personal information
+    or signed URLs. Do not commit or share output without review.
+    CDP is bound to 127.0.0.1 with an ephemeral port and retains local
+    debugger-level access during execution.
+
+EXIT STATUS
+    0   Completed and at least one rendered DOM state was observed.
+    1   m environment is missing.
+    2   Invalid/missing operands.
+    3   Invalid URL.
+    4   Unsupported URL scheme.
+    5   Could not allocate a unique run directory.
+    6   m library root unavailable.
+    7   Existing web-analyze CDP recorder unavailable.
+    8   Chromium capture initialization failed.
+    9   Recorder finalization failed.
+    10  Markdown report generation failed.
+    11  No rendered DOM state observed (inspect partial evidence).
+    12  Unexpected execution failure.
+
+EXAMPLE
+    m web-analyze https://example.org ./analysis
+
+SEE ALSO
+    manual sys web-analyze.lib.js
+    manual sys web-analyze-pw.lib.js

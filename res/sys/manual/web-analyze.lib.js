@@ -80,6 +80,13 @@ PUBLIC FUNCTION
           outputDir    Absolute evidence directory pathname.
           profileDir   Absolute Chromium profile pathname.
           pid          Launched Chromium process identifier.
+          sendPage(method, params = {})
+                       Sends one raw CDP method in the session's initial
+                       page target and resolves with its unmodified result.
+                       Chromium-specific, privileged, valid only while the
+                       captured page/session exists. It is intended for
+                       deterministic read/scroll/screenshot probes; callers
+                       own their effects and error handling.
 
         The consumer must retain and stop the session when finished. Closing
         Chromium externally also triggers finalization.

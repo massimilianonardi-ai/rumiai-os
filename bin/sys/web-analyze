@@ -1,0 +1,415 @@
+#!/usr/bin/env node
+'use strict';
+
+// Bounded, passive reconnaissance. Raw evidence is intentionally private.
+const fs = require('node:fs');
+const path = require('node:path');
+
+const LIMIT = {steps: 28, controls: 1200, html: 2_000_000, text: 200_000};
+const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+function failure(status, identity, message)
+{
+  const error = new Error(message);
+  error.status = status;
+  error.identity = identity;
+  return error;
+}
+
+function save(file, data)
+{
+  fs.writeFileSync(file, Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data, null, 2) + '\n',
+    {flag: 'wx', mode: 0o600});
+}
+
+function runDirectory(root)
+{
+  fs.mkdirSync(root, {recursive: true, mode: 0o700});
+  for (let attempt = 0; attempt < 100; attempt++)
+  {
+    const leaf = `run-${new Date().toISOString().replace(/[:.]/g, '-')}-${process.pid}-${attempt}`;
+    const directory = path.join(root, leaf);
+    try
+    {
+      fs.mkdirSync(directory, {mode: 0o700});
+      return directory;
+    }
+    catch (error)
+    {
+      if (error.code !== 'EEXIST') throw error;
+    }
+  }
+  throw failure(5, 'run-directory-exhausted', 'cannot allocate a unique evidence directory');
+}
+
+const observeExpression = String.raw`(() => {
+  const clean = (value, max = 180) => String(value || '').replace(/\s+/g, ' ').trim().slice(0, max);
+  const identify = element => {
+    const segments = [];
+    for (let node = element; node && node.nodeType === 1 && segments.length < 7; node = node.parentElement) {
+      let part = node.localName;
+      if (node.id) { part += '#' + CSS.escape(node.id); segments.unshift(part); break; }
+      let nth = 1;
+      for (let sibling = node.previousElementSibling; sibling; sibling = sibling.previousElementSibling)
+        if (sibling.localName === node.localName) nth++;
+      segments.unshift(part + ':nth-of-type(' + nth + ')');
+    }
+    return segments.join(' > ');
+  };
+  const controls = Array.from(document.querySelectorAll(
+    'a,button,input,select,textarea,summary,[role="button"],[role="link"],[role="tab"],[contenteditable="true"],[tabindex]'))
+    .slice(0, ${LIMIT.controls}).map(node => ({
+      selector: identify(node), tag: node.localName, type: node.getAttribute('type'),
+      role: node.getAttribute('role'), label: clean(node.getAttribute('aria-label') ||
+        node.labels?.[0]?.innerText || node.getAttribute('title') || node.innerText),
+      href: node.getAttribute('href'), action: node.getAttribute('formaction'),
+      disabled: !!node.disabled, hidden: node.getClientRects().length === 0,
+      expanded: node.getAttribute('aria-expanded'), checked: node.checked === undefined ? null : !!node.checked,
+      inlineHandlers: node.getAttributeNames().filter(name => /^on[a-z]+$/.test(name))
+    }));
+  const forms = Array.from(document.forms).slice(0, 100).map(form => ({
+    selector: identify(form), action: form.action, method: form.method,
+    inputs: Array.from(form.elements).slice(0, 100).map(node => ({
+      tag: node.localName, name: node.getAttribute('name'), type: node.getAttribute('type'),
+      required: !!node.required
+    }))
+  }));
+  const frameworks = {nextData: !!document.getElementById('__NEXT_DATA__'),
+    reactDomMarkers: 0, reactComponentNames: []};
+  const names = new Set();
+  for (const node of Array.from(document.querySelectorAll('*')).slice(0, 3000)) {
+    const marker = Object.keys(node).find(key => /^__react(?:Fiber|Container)\$/.test(key));
+    if (!marker) continue;
+    frameworks.reactDomMarkers++;
+    let fiber = node[marker];
+    for (let depth = 0; fiber && depth < 12; fiber = fiber.return, depth++) {
+      const type = fiber.type;
+      const name = type && (type.displayName || type.name);
+      if (typeof name === 'string' && name.length < 100) names.add(name);
+      if (names.size >= 100) break;
+    }
+  }
+  frameworks.reactComponentNames = Array.from(names).sort();
+  return {url: location.href, title: document.title, readyState: document.readyState,
+    capturedAt: new Date().toISOString(),
+    headings: Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0, 200)
+      .map(node => ({level: node.getAttribute('aria-level') || node.localName, text: clean(node.innerText)})),
+    controls, forms, frameworks, html: document.documentElement?.outerHTML.slice(0, ${LIMIT.html}) || '',
+    text: document.body?.innerText.slice(0, ${LIMIT.text}) || '',
+    documentHeight: document.scrollingElement?.scrollHeight || 0,
+    viewportHeight: window.innerHeight,
+    truncated: {html: (document.documentElement?.outerHTML.length || 0) > ${LIMIT.html},
+      text: (document.body?.innerText.length || 0) > ${LIMIT.text},
+      controls: document.querySelectorAll('a,button,input,select,textarea,summary,[role="button"],[role="link"],[role="tab"],[contenteditable="true"],[tabindex]').length > ${LIMIT.controls}}
+  };
+})()`;
+
+const scrollExpression = String.raw`(() => {
+  const root = document.scrollingElement;
+  const elements = [root, ...Array.from(document.querySelectorAll('*')).filter(node => {
+    if (node === root || node.clientHeight < 70 || node.scrollHeight - node.clientHeight < 25) return false;
+    return /^(auto|scroll|overlay)$/.test(getComputedStyle(node).overflowY);
+  })];
+  const candidates = elements.filter(Boolean).map(node => ({node,
+    remaining: node.scrollHeight - node.clientHeight - node.scrollTop,
+    height: node.clientHeight})).filter(item => item.remaining > 4)
+    .sort((a, b) => b.remaining - a.remaining || b.height - a.height);
+  for (const candidate of candidates.slice(0, 10)) {
+    const before = candidate.node.scrollTop;
+    candidate.node.scrollTop = Math.min(candidate.node.scrollHeight - candidate.node.clientHeight,
+      before + Math.max(300, Math.floor(candidate.height * 0.85)));
+    if (candidate.node.scrollTop > before + 1) {
+      return {moved: true, container: candidate.node === root ? 'document' :
+        candidate.node.localName + (candidate.node.id ? '#' + candidate.node.id : ''),
+        from: Math.round(before), to: Math.round(candidate.node.scrollTop),
+        total: candidate.node.scrollHeight};
+    }
+  }
+  return {moved: false, candidates: candidates.length};
+})()`;
+
+async function evaluate(session, expression)
+{
+  const response = await session.sendPage('Runtime.evaluate',
+    {expression, returnByValue: true, awaitPromise: true});
+  if (response.exceptionDetails)
+    throw new Error('browser evaluation failed: ' + response.exceptionDetails.text);
+  if (!response.result || !Object.hasOwn(response.result, 'value'))
+    throw new Error('browser evaluation returned no value');
+  return response.result.value;
+}
+
+async function screenshot(session, directory, index, warnings)
+{
+  try
+  {
+    const image = await session.sendPage('Page.captureScreenshot', {format: 'png', captureBeyondViewport: false});
+    if (!image.data) throw new Error('missing screenshot data');
+    const file = `screen-${String(index).padStart(3, '0')}.png`;
+    save(path.join(directory, file), Buffer.from(image.data, 'base64'));
+    return file;
+  }
+  catch (error)
+  {
+    warnings.push(`screenshot ${index}: ${error.message}`);
+    return null;
+  }
+}
+
+async function explore(session, directory, warnings, interrupted)
+{
+  const states = [];
+  const statesDir = path.join(directory, 'states');
+  fs.mkdirSync(statesDir, {mode: 0o700});
+  for (let attempt = 0; attempt < 40 && !interrupted(); attempt++)
+  {
+    try
+    {
+      const ready = await evaluate(session, 'document.readyState !== "loading" && location.href !== "about:blank" && !!document.body');
+      if (ready) break;
+    }
+    catch (error) {if (attempt === 39) warnings.push(`navigation: ${error.message}`);}
+    await wait(500);
+  }
+  await wait(900);
+  let lastScroll = null;
+  let idle = 0;
+  for (let step = 0; step <= LIMIT.steps && !interrupted(); step++)
+  {
+    let state;
+    try {state = await evaluate(session, observeExpression);}
+    catch (error) {warnings.push(`DOM snapshot ${step}: ${error.message}`); break;}
+    state.step = step;
+    state.trigger = lastScroll || {kind: 'initial-navigation'};
+    if (step === 0 || step % 5 === 0)
+      state.screenshot = await screenshot(session, statesDir, step, warnings);
+    save(path.join(statesDir, `state-${String(step).padStart(3, '0')}.json`), state);
+    states.push(state);
+    if (step === LIMIT.steps) break;
+    let scroll;
+    try {scroll = await evaluate(session, scrollExpression);}
+    catch (error) {warnings.push(`scroll ${step}: ${error.message}`); break;}
+    if (!scroll.moved)
+    {
+      idle++;
+      if (idle >= 3) break;
+      await wait(900);
+      continue;
+    }
+    idle = 0;
+    lastScroll = {kind: 'scroll', ...scroll};
+    await wait(700);
+  }
+  return states;
+}
+
+function readJsonl(file)
+{
+  if (!fs.existsSync(file)) return [];
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
+}
+
+function markdown(value)
+{
+  return String(value ?? '').replace(/\s+/g, ' ').replace(/[|`]/g, '\\$&').slice(0, 250);
+}
+
+function table(rows, headers)
+{
+  return '| ' + headers.join(' | ') + ' |\n| ' + headers.map(() => '---').join(' | ') +
+    ' |\n' + rows.map(row => '| ' + row.map(markdown).join(' | ') + ' |').join('\n') + '\n';
+}
+
+function documentReports(directory, url, states, summary, warnings, interrupted)
+{
+  const resources = readJsonl(path.join(directory, 'resources.jsonl'));
+  const scripts = readJsonl(path.join(directory, 'scripts.jsonl'));
+  const requests = resources.filter(row => row.url);
+  const saved = resources.filter(row => row.status === 'saved');
+  const controls = new Map();
+  const components = new Set();
+  const pages = new Set();
+  for (const state of states)
+  {
+    pages.add(state.url);
+    for (const name of state.frameworks.reactComponentNames) components.add(name);
+    for (const control of state.controls)
+    {
+      const key = [control.selector, control.tag, control.label, control.href].join('\0');
+      const existing = controls.get(key);
+      if (existing) existing.last = state.step;
+      else controls.set(key, {...control, first: state.step, last: state.step});
+    }
+  }
+  const knownControls = [...controls.values()];
+  const first = states[0];
+  const overview = [
+    '# Web analysis — observed evidence', '',
+    `- Requested URL: ${url}`,
+    `- Initial document: ${first ? first.url : '(not observed)'}`,
+    `- Title: ${first ? markdown(first.title) : '(not observed)'}`,
+    `- Observed DOM states: ${states.length}; distinct controls: ${knownControls.length}`,
+    `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
+    `- Compiled scripts archived: ${summary.resourceCapture?.scriptsSaved ?? 0}`,
+    `- Interrupted: ${interrupted}; logged-event drops: ${JSON.stringify(summary.dropped)}`,
+    '', '## Documents', '',
+    '- [DOM and interfaces](DOM.md)', '- [Network and archived resources](NETWORK.md)',
+    '- [JavaScript and React evidence](SCRIPTS.md)', '- [Observed flows](FLOWS.md)',
+    '- [Coverage and limitations](LIMITATIONS.md)',
+    '', '## Raw evidence', '',
+    '`resources.jsonl` and `resources/` preserve decoded HTTP response bodies; `scripts.jsonl` and',
+    '`scripts/` preserve compiled JavaScript sources; `states/` contains rendered DOM snapshots and screenshots.',
+    'Other JSONL files record browser lifecycle, network, interaction, DOM mutation, console, performance and errors.',
+    '', '**Sensitive:** Treat the entire directory, including the Chromium `profile/`, as private.',
+    'Raw bodies, HTML, query strings and browser state may contain authentication data. Do not publish or commit it.', ''
+  ];
+  save(path.join(directory, 'README.md'), overview.join('\n') + '\n');
+
+  const dom = ['# Observed DOM and interface', '',
+    'This is an inventory of rendered states, not proof that every possible route or interaction was exercised.',
+    '', '## Pages', '',
+    table([...pages].map(page => [page]), ['Observed URL']),
+    '## Headings (first observed state)', '',
+    table((first?.headings || []).map(h => [h.level, h.text]), ['Level', 'Text']),
+    '## Interactive elements (up to first 500 distinct)', '',
+    table(knownControls.slice(0, 500).map(c => [c.tag, c.role || c.type, c.label,
+      c.href || c.action || '', c.first, c.last]),
+    ['Element', 'Role/type', 'Label', 'Target/action', 'First state', 'Last state']),
+    `Total distinct inventoried elements: ${knownControls.length}.`, '',
+    '## Forms (first observed state)', '',
+    table((first?.forms || []).map(f => [f.selector, f.method, f.action,
+      f.inputs.map(i => `${i.name || i.tag}:${i.type || i.tag}`).join(', ')]),
+    ['Selector', 'Method', 'Action', 'Input types']), ''
+  ];
+  save(path.join(directory, 'DOM.md'), dom.join('\n') + '\n');
+
+  const kinds = new Map();
+  for (const item of resources)
+    kinds.set(item.resourceType || 'Unknown', (kinds.get(item.resourceType || 'Unknown') || 0) + 1);
+  const network = ['# Network and resource archive', '',
+    'The browser/CDP observer saves responses it can retrieve; failures, redirects and active streams are explicit.',
+    'These URLs can include signed query parameters. Handle this document as confidential.', '',
+    '## Resource types', '', table([...kinds], ['Type', 'Observed outcomes']),
+    '## Request outcomes (up to 350; full catalog: resources.jsonl)', '',
+    table(requests.slice(0, 350).map(r => [r.resourceType, r.method, r.httpStatus,
+      r.status, r.url, r.file || '']), ['Type', 'Method', 'HTTP', 'Capture', 'URL', 'Saved artifact']),
+    `Indexed resource outcomes: ${resources.length}; saved bodies: ${saved.length}; unresolved: ${resources.length - saved.length}.`, ''
+  ];
+  save(path.join(directory, 'NETWORK.md'), network.join('\n') + '\n');
+
+  const scriptFiles = scripts.filter(s => s.status === 'saved');
+  const js = ['# JavaScript and React evidence', '',
+    'Debugger.scriptParsed and Debugger.getScriptSource preserve executed/compiled sources,',
+    'including inline/evaluated code when Chromium exposes it. Minified code may obscure component names.', '',
+    `Observed React DOM markers: ${Math.max(0, ...states.map(s => s.frameworks.reactDomMarkers))}.`,
+    `Next.js __NEXT_DATA__ marker: ${states.some(s => s.frameworks.nextData) ? 'observed' : 'not observed'}.`,
+    '', '## Best-effort runtime React component names', '',
+    components.size ? [...components].sort().map(name => '- `' + name.replace(/`/g, '') + '`').join('\n') :
+      'No component names recovered through DOM-attached React Fiber markers.',
+    '', '## Compiled scripts (first 250; full catalog: scripts.jsonl)', '',
+    table(scriptFiles.slice(0, 250).map(s => [s.url, s.bytes, s.file, s.sourceMapURL]),
+      ['Source URL', 'Bytes', 'Saved artifact', 'Source map URL']),
+    `Parsed script events: ${scripts.length}; saved sources: ${scriptFiles.length}.`, ''
+  ];
+  save(path.join(directory, 'SCRIPTS.md'), js.join('\n') + '\n');
+
+  const transitions = states.slice(1).map(state => ({
+    from: state.step - 1, to: state.step, cause: state.trigger,
+    newControls: state.controls.filter(control => !states[state.step - 1].controls.some(
+      previous => previous.selector === control.selector && previous.label === control.label)).length,
+    urlChanged: state.url !== states[state.step - 1].url
+  }));
+  const mermaid = ['flowchart TD', ...states.map(state =>
+    `    s${state.step}["DOM state ${state.step} · ${state.controls.length} controls"]`),
+  ...transitions.map(item => `    s${item.from} -->|"${item.cause?.kind || 'observation'}${item.urlChanged ? ': URL changed' : ''}"| s${item.to}`)];
+  const flows = ['# Observed transitions', '',
+    'Edges represent actual passive scroll/observation steps; they are not inferred click navigation or verified business workflows.',
+    '', '```mermaid', ...mermaid, '```', '',
+    table(transitions.map(t => [t.from, t.to, t.cause?.container, t.cause?.from, t.cause?.to,
+      t.newControls, t.urlChanged]),
+    ['From', 'To', 'Scroll container', 'Scroll from', 'Scroll to', 'New controls', 'URL changed']),
+    '## Candidate interaction surfaces', '',
+    'Links, buttons, tabs and forms discovered without activating them are inventoried in [DOM.md](DOM.md).',
+    'Executing them safely requires an explicit scenario, permissions and often authenticated state.', ''
+  ];
+  save(path.join(directory, 'FLOWS.md'), flows.join('\n') + '\n');
+
+  const dropped = Object.entries(summary.dropped || {}).filter(([,count]) => count > 0);
+  const limited = states.filter(s => Object.values(s.truncated || {}).some(Boolean)).map(s => s.step);
+  const limits = ['# Coverage, confidence and limitations', '',
+    'Evidence is limited to this browser profile, permissions, viewport, execution interval and observed route.',
+    'A single visit cannot exhaust the states of a dynamic React application.', '',
+    `- Observed DOM states: ${states.length} (bounded to ${LIMIT.steps + 1}).`,
+    `- DOM snapshots with truncated HTML/text/control inventories: ${limited.length ? limited.join(', ') : 'none observed'}.`,
+    `- Event streams with dropped records: ${dropped.length ? JSON.stringify(dropped) : 'none reported'}.`,
+    `- Response bodies unavailable/redirected/unfinished: ${resources.length - saved.length}.`,
+    `- Script source failures: ${summary.resourceCapture?.scriptsFailed ?? 'unknown'}.`,
+    `- Observation interrupted: ${interrupted}.`,
+    '', '## Not established by this run', '',
+    '- No exhaustive behavior or component completeness guarantee; server-side logic and unvisited routes remain unknown.',
+    '- No automatic link clicks, form submissions, logins, payments, consent changes or challenge bypass.',
+    '- No mutation-based workflow replay; scroll-only transitions are observed, not causally attributed to source functions.',
+    '- CDP may miss resources on redirects, websocket streams, caches, service workers or debugger attachment races.',
+    '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
+    '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
+    '', '## Warnings', '', ...(warnings.length ? warnings.map(item => '- ' + item) : ['- None reported.']), ''
+  ];
+  save(path.join(directory, 'LIMITATIONS.md'), limits.join('\n') + '\n');
+}
+
+async function main(args)
+{
+  if (!process.env.m_ROOT)
+    throw failure(1, 'm-environment-missing', 'invoke through m or initialize m_ROOT first');
+  if (args.length !== 2 || args.some(arg => !arg))
+    throw failure(2, 'invalid-arguments', 'usage: web-analyze <http(s)-url> <analysis-path>');
+  let url;
+  try {url = new URL(args[0]);}
+  catch (_) {throw failure(3, 'invalid-url', 'first operand must be an absolute HTTP(S) URL');}
+  if (!['http:', 'https:'].includes(url.protocol))
+    throw failure(4, 'invalid-url-scheme', 'only HTTP and HTTPS are supported');
+  if (!process.env.m_LIB_DIR)
+    throw failure(6, 'm-library-root-missing', 'm_LIB_DIR is unavailable');
+  let startWebAnalyze;
+  try {({startWebAnalyze} = require(path.join(process.env.m_LIB_DIR, 'sys/js/web-analyze.lib.js')));}
+  catch (error) {throw failure(7, 'capture-library-unavailable', error.message);}
+  const directory = runDirectory(path.resolve(args[1]));
+  process.stderr.write(`web-analyze: capture started in ${directory}\n`);
+  let session;
+  let interrupted = false;
+  const onSignal = () => {interrupted = true;};
+  process.once('SIGINT', onSignal);
+  process.once('SIGTERM', onSignal);
+  const warnings = [];
+  let states = [];
+  let summary;
+  try
+  {
+    try {session = await startWebAnalyze({url: url.href, outputDir: directory, headless: true});}
+    catch (error) {throw failure(8, 'chromium-capture-start-failed', error.message);}
+    states = await explore(session, directory, warnings, () => interrupted);
+  }
+  finally
+  {
+    if (session)
+    {
+      try {summary = await session.stop(interrupted ? 'signal' : 'automated-analysis');}
+      catch (error) {warnings.push(`capture shutdown: ${error.message}`);}
+    }
+    process.off('SIGINT', onSignal);
+    process.off('SIGTERM', onSignal);
+  }
+  if (!summary)
+    throw failure(9, 'capture-finalization-failed', `recording did not finalize in ${directory}`);
+  try {documentReports(directory, url.href, states, summary, warnings, interrupted);}
+  catch (error) {throw failure(10, 'report-generation-failed', `${directory}: ${error.message}`);}
+  if (!states.length)
+    throw failure(11, 'document-not-observed', `no rendered DOM was captured; inspect ${directory}/LIMITATIONS.md`);
+  process.stdout.write(`${directory}/README.md\n`);
+  return 0;
+}
+
+main(process.argv.slice(2)).then(status => {process.exitCode = status;}, error => {
+  process.stderr.write(`web-analyze.${error.identity || 'unexpected-failure'}: ${error.message}\n`);
+  process.exitCode = error.status || 12;
+});
