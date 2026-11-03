@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: af36e8f42bb4fea9cdd57ef5492a9198673b7f89
+          ref: 0debc9f97f25c5e7d825412c9118c9ac2b375303
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -31,6 +31,7 @@ jobs:
         run: |
           set -eu
           node --check lib/sys/js/web-analyze.lib.js
+          node --check lib/sys/js/web-analyze-rest.lib.js
           node --check bin/sys/web-analyze
           browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$browser"
