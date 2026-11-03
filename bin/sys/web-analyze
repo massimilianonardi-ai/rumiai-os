@@ -135,20 +135,44 @@ const scrollExpression = String.raw`(() => {
 const restExpression = String.raw`(() => {
   let tracker = globalThis.__mWebAnalyzeDomQuiet;
   if (!tracker || tracker.document !== document) {
-    tracker = {document, lastMutationAt: performance.now(), mutations: 0};
-    const observer = new MutationObserver(records => {
+    tracker = {document, lastMutationAt:performance.now(), mutations:0,
+      observed:new WeakSet(), rootsObserved:0};
+    tracker.observer = new MutationObserver(records => {
       tracker.lastMutationAt = performance.now();
       tracker.mutations += records.length;
     });
-    observer.observe(document.documentElement,
-      {subtree: true, childList: true, attributes: true, characterData: true});
     Object.defineProperty(globalThis, '__mWebAnalyzeDomQuiet',
-      {value: tracker, writable: true, configurable: true});
+      {value:tracker, writable:true, configurable:true});
   }
-  return {url: location.href, readyState: document.readyState,
-    domQuietMs: Math.max(0, Math.round(performance.now() - tracker.lastMutationAt)),
-    mutationCount: tracker.mutations,
-    fontsLoaded: !document.fonts || document.fonts.status === 'loaded'};
+  let scanned = 0;
+  let truncated = false;
+  let opaqueFrames = 0;
+  const scan = root => {
+    if (!root || scanned >= 50000) {truncated = true; return;}
+    if (!tracker.observed.has(root)) {
+      tracker.observer.observe(root,
+        {subtree:true, childList:true, attributes:true, characterData:true});
+      tracker.observed.add(root);
+      tracker.rootsObserved++;
+    }
+    for (const node of root.querySelectorAll('*')) {
+      if (++scanned >= 50000) {truncated = true; break;}
+      if (node.shadowRoot) scan(node.shadowRoot);
+      if (node.localName === 'iframe' || node.localName === 'frame') {
+        try {
+          if (node.contentDocument?.documentElement)
+            scan(node.contentDocument.documentElement);
+          else opaqueFrames++;
+        } catch (_) {opaqueFrames++;}
+      }
+    }
+  };
+  scan(document.documentElement);
+  return {url:location.href, readyState:document.readyState,
+    domQuietMs:Math.max(0,Math.round(performance.now()-tracker.lastMutationAt)),
+    mutationCount:tracker.mutations, rootsObserved:tracker.rootsObserved,
+    rootScanTruncated:truncated, opaqueFrames,
+    fontsLoaded:!document.fonts || document.fonts.status === 'loaded'};
 })()`;
 
 async function waitForRest(session, durationMs, warnings, interrupted)
