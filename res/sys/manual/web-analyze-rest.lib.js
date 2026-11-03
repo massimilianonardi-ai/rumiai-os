@@ -38,6 +38,14 @@ OUTPUT
                                 readable markup, resource timing, globals,
                                 storage, caches, service workers, IDB names
          storage.json           localStorage/sessionStorage keys and values
+         storage-usage.json     Origin usage and quota breakdown
+         indexeddb/index.json  Database/store schemas and capture outcomes
+         indexeddb/database-*-store-*-page-*.json
+                                IndexedDB records and CDP-serialized values
+         cache-storage/index.json
+                                Cache names and response metadata/hashes
+         cache-storage/bodies/<sha256>.bin
+                                Exact cached HTTP response body bytes
          dom-tree.json          CDP DOM.getDocument(depth=-1,pierce=true)
          dom-snapshot.json      CDP DOM/layout/selected computed style table
          frame-tree.json        CDP frame tree
@@ -69,6 +77,12 @@ SECURITY
     browser profiles without reviewing their contents.
 
 LIMITATIONS
+    IndexedDB values use CDP deep serialization where supported; some complex
+    browser objects may not be represented byte-for-byte. Unavailable
+    values or failed requests are marked partial. Cache Storage bodies are
+    read locally without requesting their URLs from the network. Large
+    stores may consume substantial time and disk space.
+
     The capture runs after the initial DOM-settlement heuristic, not from
     one globally frozen instant. Renderer DOM may still change while
     separate CDP commands execute. Attached out-of-process iframes are
