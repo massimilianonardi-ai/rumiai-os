@@ -3,6 +3,8 @@ name: Native Chromium web-analyze resource capture
 on:
   push:
     paths:
+      - 'bin/sys/web-analyze'
+      - 'res/sys/manual/web-analyze'
       - 'lib/sys/js/web-analyze.lib.js'
       - 'res/sys/manual/web-analyze.lib.js'
       - '.github/workflows/web-analyze.yml'
@@ -19,7 +21,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: c243a6bc1a5a153e0b17bfadba53250dc53032c8
+          ref: e9c335408ccef021590d468949775e277bfec49d
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -29,6 +31,7 @@ jobs:
         run: |
           set -eu
           node --check lib/sys/js/web-analyze.lib.js
+          node --check bin/sys/web-analyze
           browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$browser"
           mkdir -p "$RUNNER_TEMP/web-analyze-bin"
@@ -41,3 +44,4 @@ jobs:
           export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/web-analyze.test
+          sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/command.test
