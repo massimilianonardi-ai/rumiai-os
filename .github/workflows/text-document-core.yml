@@ -22,7 +22,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 5ba49d3d1ad1c16a5973fed9573f6c1cb7862589
+          ref: a9a44738a156cfda13a775f54b37c9ca8f2b3bd0
           path: .text-document-tests
       - uses: actions/setup-node@v4
         with:
