@@ -46,7 +46,8 @@ OUTPUT
       FLOWS.md         Mermaid diagram and table of observed scroll transitions
       LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
       rest/            Rest-phase indexed evidence, cookies, per-target
-                       storage, DOM/layout/CSS/listeners, environment, MHTML
+                       local/session/IndexedDB/Cache Storage, DOM/layout/CSS,
+                       listeners, runtime environment and native MHTML
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
