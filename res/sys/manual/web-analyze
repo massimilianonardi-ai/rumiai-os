@@ -2,7 +2,7 @@ NAME
     web-analyze - passive Chromium/CDP website evidence and Markdown analysis
 
 SYNOPSIS
-    web-analyze <http(s)-url> <analysis-path>
+    web-analyze <http(s)-url> <analysis-path> [--scroll]
 
 DESCRIPTION
     Launches a fresh headless Chromium session through the existing native-CDP
@@ -12,9 +12,10 @@ DESCRIPTION
     (CDP DOM tree including Shadow DOM, layout/style snapshots, native MHTML,
     CSSOM/style source, runtime element/storage details, listener locations,
     frame targets, redacted network event metadata and archived responses).
-    It inventories controls/forms/headings and
-    best-effort React runtime markers, scrolls the document and nested
-    scroll containers, and records bounded states after settlement checks.
+    It inventories controls/forms/headings and best-effort React runtime
+    markers without issuing user input. With the optional --scroll operand,
+    it then scrolls the document and nested scroll containers, recording
+    additional bounded states after settlement checks.
     It then stops Chromium,
     allowing the recorder's normal network/resource drain, and generates
     analytical Markdown documents from the acquired evidence.
@@ -22,13 +23,16 @@ DESCRIPTION
     This is observation, not autonomous proof of every application behavior.
     The command does not click buttons, submit forms, authenticate, follow
     links, modify account state, bypass challenges or claim unseen states.
-    An initial visit and scroll sweep cannot exhaust a dynamic React app.
+    Even an optional scroll sweep cannot exhaust a dynamic React app.
 
 OPERANDS
     http(s)-url       Required absolute HTTP or HTTPS URL to navigate.
     analysis-path     Parent folder for analysis runs. Created if missing.
                       Each invocation creates a unique private run-* folder;
                       pre-existing analyses are preserved unchanged.
+    --scroll          Optional: perform passive automated scrolling after
+                      completing the initial deep resting-page capture.
+                      Default: no programmatic scroll or user input.
 
 OUTPUT
     Prints the absolute path to the generated README.md on stdout.
@@ -75,7 +79,9 @@ OUTPUT
     and readable localStorage/sessionStorage values. It freezes a copy of the
     private CDP network detail stream at this point. Values may include active
     credentials; do not transmit the output or publish it to GitHub.
-    The phase-zero rest snapshot is taken BEFORE any programmatic scroll.
+    Deep resting-page evidence is captured before any programmatic scroll.
+    The default command stops at this boundary; --scroll enables an additional
+    exploration phase with a separate time budget.
     The existing bounded scroll sweep still follows as a separate operation.
     Rest artifacts include per-artifact saved/unavailable outcomes and SHA-256.
     A REST status of partial must be inspected rather than interpreted as
