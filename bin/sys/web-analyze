@@ -257,7 +257,7 @@ async function screenshot(session, directory, index, warnings)
   }
 }
 
-async function explore(session, directory, warnings, interrupted, captureRestEvidence)
+async function explore(session, directory, warnings, interrupted, captureRestEvidence, scrollEnabled)
 {
   const states = [];
   const statesDir = path.join(directory, 'states');
@@ -316,7 +316,7 @@ async function explore(session, directory, warnings, interrupted, captureRestEvi
         warnings.push('resting-page evidence unavailable: ' + error.message);
       }
     }
-    if (step === LIMIT.steps) break;
+    if (step === LIMIT.steps || (step === 0 && !scrollEnabled)) break;
     let scroll;
     try {scroll = await evaluate(session, scrollExpression);}
     catch (error) {warnings.push(`scroll ${step}: ${error.message}`); break;}
@@ -352,7 +352,7 @@ function table(rows, headers)
     ' |\n' + rows.map(row => '| ' + row.map(markdown).join(' | ') + ' |').join('\n') + '\n';
 }
 
-function documentReports(directory, url, states, summary, warnings, interrupted)
+function documentReports(directory, url, states, summary, warnings, interrupted, scrollEnabled)
 {
   const resources = readJsonl(path.join(directory, 'resources.jsonl'));
   const scripts = readJsonl(path.join(directory, 'scripts.jsonl'));
@@ -387,6 +387,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted)
     `- Initial document: ${first ? first.url : '(not observed)'}`,
     `- Title: ${first ? markdown(first.title) : '(not observed)'}`,
     `- Observed DOM states: ${states.length}; distinct controls: ${knownControls.length}`,
+    `- Automated scroll: ${scrollEnabled ? 'explicitly enabled' : 'not performed'}`,
     `- Initial DOM settlement: ${first?.settlement?.status || 'not observed'}`,
     '- [Deep resting-page evidence](rest/README.md) and [manifest](rest/manifest.json)',
     `- Rest evidence: ${rest?.status || 'unavailable'}; artifacts: ${rest?.artifacts?.length ?? 0}`,
@@ -530,8 +531,10 @@ async function main(args)
 {
   if (!process.env.m_ROOT)
     throw failure(1, 'm-environment-missing', 'invoke through m or initialize m_ROOT first');
-  if (args.length !== 2 || args.some(arg => !arg))
-    throw failure(2, 'invalid-arguments', 'usage: web-analyze <http(s)-url> <analysis-path>');
+  if (![2,3].includes(args.length) || args.some(arg => !arg) ||
+      (args.length === 3 && args[2] !== '--scroll'))
+    throw failure(2, 'invalid-arguments',
+      'usage: web-analyze <http(s)-url> <analysis-path> [--scroll]');
   let url;
   try {url = new URL(args[0]);}
   catch (_) {throw failure(3, 'invalid-url', 'first operand must be an absolute HTTP(S) URL');}
@@ -562,7 +565,8 @@ async function main(args)
   {
     try {session = await startWebAnalyze({url: url.href, outputDir: directory, headless: true});}
     catch (error) {throw failure(8, 'chromium-capture-start-failed', error.message);}
-    states = await explore(session, directory, warnings, () => interrupted, captureRestEvidence);
+    states = await explore(session, directory, warnings, () => interrupted,
+      captureRestEvidence, args[2] === '--scroll');
   }
   finally
   {
@@ -576,7 +580,8 @@ async function main(args)
   }
   if (!summary)
     throw failure(9, 'capture-finalization-failed', `recording did not finalize in ${directory}`);
-  try {documentReports(directory, url.href, states, summary, warnings, interrupted);}
+  try {documentReports(directory, url.href, states, summary, warnings, interrupted,
+    args[2] === '--scroll');}
   catch (error) {throw failure(10, 'report-generation-failed', `${directory}: ${error.message}`);}
   if (!states.length)
     throw failure(11, 'document-not-observed', `no rendered DOM was captured; inspect ${directory}/LIMITATIONS.md`);
