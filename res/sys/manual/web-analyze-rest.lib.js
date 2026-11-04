@@ -39,7 +39,8 @@ PUBLIC FUNCTIONS
         unsupported, with private file paths but no copied response contents.
         IndexedDB pages, Cache Storage response bodies, CSS sources and
         frame-scoped Accessibility tree responses and the per-node CSS result
-        pages and CSS rule-usage target dumps are verified recursively
+        pages, CSS rule-usage target dumps, WebAssembly auxiliary text
+        artifacts and source-map payloads are verified recursively
         against their indexed SHA-256/size.
         Re-audit read-only after evidence tampering detects missing, altered
         or permission-exposed files rather than trusting a previous manifest.
@@ -114,6 +115,11 @@ OUTPUT
          event-listeners.json   CDP listeners for window/document/root subtree
     rest/resources-at-rest.jsonl  Indexed response outcomes before input
     rest/scripts-at-rest.jsonl    Indexed compiled scripts before input
+    rest/source-maps/index.json  Offline source-map reference, resolution
+                                outcomes, embedded original-source counts,
+                                bounded/unknown references and limitations
+    rest/source-maps/<sha>.bin   Private full map bytes from inline data or
+                                an already archived response, SHA-256 indexed
     rest/stylesheets/index.json CDP CSS stylesheet headers/provenance/outcomes
     rest/stylesheets/<sha>.css  Exact stylesheet source as exposed by CDP
 
@@ -126,7 +132,16 @@ OUTPUT
     additions/removals, attributes, text and observed ShadowRoot attachment.
     All source contexts remain distinct via execution-context/frame IDs.
     Not all response bodies or code are exposed; inspect archive
-    statuses, time bounds and the manifest.
+    statuses, time bounds and the manifest. Source-map recovery is strictly
+    offline: no new HTTP requests, DOM mutations, breakpoints or debugger
+    state changes are introduced. External source-map references that the
+    page/browser never fetched remain explicitly unobserved. Resolved maps
+    are parsed only as source-map version 3 and preserve raw bytes (including
+    sourcesContent if present). This does not imply all original source
+    files, all module chunks or future compiled code have been recovered.
+    Reference enumeration is capped at 128, each raw map at 16 MiB, and
+    cumulative accepted map bytes at 32 MiB; unfinished/invalid inputs
+    are recorded as partial rather than silently dropped.
 
 SECURITY
     This is private debugger evidence. Page markup, bodies, browser
