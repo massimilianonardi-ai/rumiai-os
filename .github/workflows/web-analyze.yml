@@ -57,5 +57,6 @@ jobs:
             sudo apt-get install -y -qq libnss3-tools
           fi
           command -v openssl
+          export PATH="$RUNNER_TEMP/web-analyze-bin:$PATH"
           export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/https.test
