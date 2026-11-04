@@ -49,7 +49,7 @@ SEE ALSO
     rsudo-mod-keycloaklegacy.lib.sh
 
 
-K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
+K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
 
     rsudo [rsudo-options] keycloak auth acquire
         --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode client-credentials
@@ -132,10 +132,11 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     access token. Use an appropriately protected
     caller-side process to retire any locally held token references.
 
-    These new public operations invoke the existing rsudo SSH/sudo execution
-    and curl/jq installed on the selected remote target. They require an
-    explicitly selected HTTPS Keycloak base and an issuer realm; no endpoint
-    is guessed from the SSH host or legacy state. Discovery must advertise
+    These new public operations invoke existing rsudo SSH/sudo execution
+    and curl/jq on the selected remote target. Networked operations require
+    an explicitly selected HTTPS Keycloak base and issuer realm; the offline
+    structural status requires only its protected remote token file. No
+    endpoint is guessed from the SSH host or legacy state. Discovery must advertise
     the exact issuer and token endpoint derived from that verified base.
     Curl validates server TLS and optional approved CA, disables .curlrc,
     external proxy and redirects, and uses bounded timeouts.
@@ -167,9 +168,11 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     jq, mktemp, base64 (for Basic), and standard utilities. A local
     Keycloak installation and remote m runtime are NOT required.
 
-    Client credentials and explicitly enabled Direct Access Grant/password
-    are implemented with client-secret-basic/client-secret-post, plus protected
-    token-store inspection. Other grants (browser code, device, CIBA, JWT,
+    Client credentials and explicitly enabled Direct Access Grant/password,
+    refresh, explicit token revocation, protected structural status and
+    authenticated access-token introspection currently support Basic/Post
+    confidential-client authentication. Other grants (browser code, device,
+    CIBA, JWT,
     token exchange), and other client authenticators
     (JWT signing, X509) and Admin REST bearer transport and permission
     checks remain pending K04. They fail closed with status 73.
