@@ -10,7 +10,8 @@ DESCRIPTION
     waits for a heuristic document-settled condition before the initial
     full rendered-DOM snapshot, then acquires a read-only deep-rest phase
     (CDP DOM tree including Shadow DOM, layout/style snapshots, native MHTML,
-    CSSOM/style source, Accessibility trees with DOM backend identities,
+    CSSOM/style source, per-node resolved/matched CSS and platform fonts,
+    Accessibility trees with DOM backend identities,
     runtime element/storage details, listener locations,
     frame targets, redacted network event metadata and archived responses).
     It inventories controls/forms/headings and best-effort React runtime
@@ -59,7 +60,8 @@ OUTPUT
                        Private chronological mutation data before scrolling
       rest/            Rest-phase indexed evidence, cookies, per-target
                        local/session/IndexedDB/Cache Storage, DOM/layout/CSS,
-                       per-frame Accessibility trees with explicit support/
+                       bounded per-node matched/computed styles, CSS variables,
+                       platform fonts and per-frame Accessibility trees with support/
                        failure outcomes, listeners, runtime environment and
                        native MHTML
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
@@ -133,6 +135,15 @@ OUTPUT
     A REST status of partial must be inspected rather than interpreted as
     proof of complete source acquisition. Full initial/final rendered HTML
     is stored separately from bounded exploratory JSON snapshots.
+
+    Deep CSS inspection stores per-target css-nodes/index.json and
+    css-nodes/page-NNN.json with real matched CSS rules/pseudo elements,
+    computed properties including custom properties, and available platform
+    fonts. The browser schema gates each method; no unsupported feature is
+    claimed. The pass is bounded to 384 observed DOM elements and 20 seconds
+    per target, with explicit skipped/failed/unsupported method counts and
+    independently audited raw file digests. It does not simulate :hover,
+    :focus or other user-controlled CSS states.
 
     The bounded exploration captures at most 29 states, with up to 1,200
     controls and 2 MB rendered HTML per-state JSON. Its final Markdown tables
