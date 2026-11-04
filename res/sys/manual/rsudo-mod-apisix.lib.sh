@@ -18,8 +18,35 @@ DISPATCH
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime absolute-remote-apisix-home
+    rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_admin_read resource absolute-remote-header-file [remote-port]
+        Advanced, read-only Admin API request to remote 127.0.0.1 on the
+        selected port (default 9180). Supported resource collections:
+        configs, routes, services, upstreams. Outputs the server's raw JSON
+        on stdout for HTTP 2xx; curl HTTP failures propagate status 22,
+        with error diagnostics on stderr. No writes or redirects.
+        A protected regular, non-symlink credential file must already exist
+        on the remote machine, be readable by rsudo's target user, have no
+        group/other permissions, and contain one newline-terminated line:
+        X-API-KEY: <non-whitespace-key>
+        This is a deliberately explicit intermediate interface, not
+        automatic authentication discovery. The key is never passed as
+        curl/rsudo command-line text: curl loads the existing header file
+        via -H @file. Curl >= 7.55 with -H @file and shell sh are remote
+        prerequisites; the normal selected target must provide curl.
+        Only the loopback Admin listener may be addressed. Port and resource
+        are strictly checked and no HTTP proxy or redirect is used.
+        The resource name selects an endpoint; the operation does NOT
+        establish the active APISIX backend or assert that a response from
+        another service belongs to the selected APISIX instance.
+        Explicit backend verification and normal low-operand list/get
+        convenience remain under development. Do not expose this interface
+        to untrusted values or treat a successful GET as write readiness.
+        Invalid arguments, credential paths/permissions/format, unsupported
+        resource, port and curl availability have distinct status 44-51.
+
     rsudo_mod_apisix_runtime absolute-remote-apisix-home
         Read-only evidence for an explicitly selected APISIX installation.
         Checks generated conf/nginx.conf and logs/nginx.pid, then observes
