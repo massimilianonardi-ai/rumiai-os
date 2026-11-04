@@ -53,7 +53,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
 
     rsudo [rsudo-options] keycloak auth acquire
         --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode client-credentials
-        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
@@ -61,7 +61,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     rsudo [rsudo-options] keycloak auth acquire
         --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode password
         --username USERNAME --password-file ABSOLUTE-REMOTE-PATH
-        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
@@ -79,7 +79,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     rsudo [rsudo-options] keycloak auth status
         --token-file ABSOLUTE-REMOTE-PATH
         --server HTTPS-BASE-URL --issuer-realm REALM
-        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
@@ -99,7 +99,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
 
     rsudo [rsudo-options] keycloak auth revoke
         --server HTTPS-BASE-URL --issuer-realm REALM
-        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
         --token-file ABSOLUTE-REMOTE-EXISTING-STORE
         --token-type-hint access_token|refresh_token
@@ -107,7 +107,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
 
     rsudo [rsudo-options] keycloak auth refresh
         --server HTTPS-BASE-URL --issuer-realm REALM
-        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
         --token-file ABSOLUTE-REMOTE-EXISTING-STORE
         --token-store SAME-ABSOLUTE-REMOTE-STORE
@@ -165,17 +165,35 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     is not evidence of validity, expiry or administrator permission.
 
     The remote host must provide POSIX sh, curl supporting @file headers,
-    jq, mktemp, base64 (for Basic), and standard utilities. A local
+    jq, mktemp, base64 (for Basic), and standard utilities. The HS256
+    client-secret-jwt method additionally requires Python 3 with standard
+    hashlib/hmac/secrets support on the selected remote sudo target. A local
     Keycloak installation and remote m runtime are NOT required.
+
+    client-secret-jwt is available ONLY when the selected Keycloak client
+    has the Signed JWT with Client Secret authenticator configured with
+    HS256. For each request, it creates a fresh JWT with iss/sub equal
+    to the selected client ID, aud equal to the verified issuing realm URL,
+    a random jti and a 30-second expiry. It signs using the protected
+    remote single-line client secret file and transfers the assertion to
+    curl through a private 0600 temporary file, not through arguments or
+    stdout. There is no Basic/Post fallback. Server policy may reject
+    a JWT authenticator or expired assertion; that does not justify
+    retrying with weaker authentication. HS384/HS512, private-key JWT,
+    federated JWT and sender-constrained authentication remain pending.
+    Python or cryptographic prerequisites missing for an explicitly chosen
+    JWT method result in a nonzero error; no implicit fallback occurs.
 
     Client credentials and explicitly enabled Direct Access Grant/password,
     refresh, explicit token revocation, protected structural status and
     authenticated access-token introspection currently support Basic/Post
-    confidential-client authentication. Other grants (browser code, device,
+    and explicit HS256 client-secret-jwt confidential-client authentication. Other grants (browser code, device,
     CIBA, JWT,
-    token exchange), and other client authenticators
-    (JWT signing, X509) and Admin REST bearer transport and permission
-    checks remain pending K04. They fail closed with status 73.
+    token exchange), and other client authenticator variants
+    (private-key JWT, federated JWT, HS384/512 and X509) remain pending
+    K04. The existing private Admin REST Bearer transport probe is a
+    fixed-route read-only proof, not the public K05 request interface.
+    Unimplemented modes fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
     New general request and convenience APIs are pending K05/K06.
 
