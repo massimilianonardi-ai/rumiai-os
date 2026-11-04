@@ -78,6 +78,13 @@ OUTPUT
                        results are retained separately under rest/security/.
                        HTTP does not imply a TLS chain; unsupported commands,
                        missing observations and bounds remain explicit.
+      rest/optional-domains/index.json
+                       Version-specific optional CDP domain capability report:
+                       installed protocol methods, observed wire events and
+                       already enabled targets for animation, media, audio,
+                       WebRTC, tracing, background and reporting domains.
+                       Does not activate, trace or profile anything; schema
+                       availability alone is never recorded as captured data.
       rest/worker-provenance/index.json
                        Private offline correlation of native CDP target/frame
                        lifetime events, worker script versions, service-worker
