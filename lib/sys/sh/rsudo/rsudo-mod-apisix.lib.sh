@@ -213,6 +213,8 @@ _rsudo_mod_apisix_backend()
     ;;
   esac
 
+  log debug apisix mode-discovery-start home "${1:-automatic}" config "${2:-automatic}"
+
   # rsudo's interactive mode is reusable state. This is deliberately a
   # non-interactive, read-only shell program sent over the target's stdin.
   RSUDO_INTERACTIVE=
@@ -398,6 +400,10 @@ end
 local enable_admin = apisix.enable_admin
 if enable_admin == nil then
   enable_admin = defaults.apisix.enable_admin
+end
+if type(enable_admin) ~= "boolean" then
+  io.stderr:write("apisix.mode.admin-enable-invalid\n")
+  os.exit(21)
 end
 
 if role == "traditional" and provider == "etcd" and enable_admin ~= false then
