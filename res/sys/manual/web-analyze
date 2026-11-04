@@ -78,6 +78,12 @@ OUTPUT
                        results are retained separately under rest/security/.
                        HTTP does not imply a TLS chain; unsupported commands,
                        missing observations and bounds remain explicit.
+      rest/pwa-resources/index.json
+                       Private, read-only manifest/resource provenance: exact
+                       observed manifest, start URL and icon references matched
+                       to already archived browser Network responses, bodies
+                       and frame resource tree. No fetches or install attempts;
+                       not-observed references and worker scope remain explicit.
       rest/targets/target-NNN/frame-context.json
                        Private per-frame storage keys, permission policy,
                        origin trials, isolation, resource tree, PWA manifest
