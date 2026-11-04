@@ -87,6 +87,15 @@ OUTPUT
                                 in separate private security/certificate-*.json.
                                 HTTP-only frames have no applicable TLS chain,
                                 and missing HTTPS details are explicit.
+    rest/worker-provenance/index.json
+                                Private index of ServiceWorker registration and
+                                version updates, worker/script target links,
+                                frame navigation and target graph provenance
+                                from observed CDP events. ServiceWorker.enable
+                                only subscribes when schema-supported, and
+                                unsupported, detached, ambiguous or truncated
+                                observations remain explicitly partial.
+                                No worker lifecycle or page mutation commands.
     rest/pwa-resources/index.json
                                 Private offline correlation of the already read
                                 Page.getAppManifest and Page.getResourceTree
