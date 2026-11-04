@@ -59,6 +59,12 @@ PUBLIC FUNCTION
           chromium      Optional executable identity/path. Default: chromium.
           headless      Optional boolean; default false (visible browser).
           timeoutMs     Optional startup time limit; default 20000.
+          cssRuleUsage  Optional boolean; default false. When true, the
+                        recorder enables CSS selector coverage on attached
+                        page/iframe targets before navigation where the
+                        installed browser schema supports the methods.
+                        This introduces CSS profiling overhead; it does not
+                        synthesize user input or change page style rules.
 
         The function launches Chromium and instruments targets, then starts
         initial navigation without requiring the remote page to finish loading.
@@ -103,6 +109,12 @@ PUBLIC FUNCTION
           styleSheets()
                        Returns CSS stylesheet headers exposed by CDP,
                        including target identity, after CSS.enable.
+                       When cssRuleUsage was requested, targets() also
+                       reports cssRuleUsage instrumentation status, start
+                       timestamp and failure identity per attached target.
+                       The caller can end tracking with the native
+                       CSS.stopRuleUsageTracking CDP command per target;
+                       m web-analyze does this at the rest boundary.
           networkActivity()
                        Returns a read-only observation containing
                        inFlightRequests, pendingReads and quietForMs.
