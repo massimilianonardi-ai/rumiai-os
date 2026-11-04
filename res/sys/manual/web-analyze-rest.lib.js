@@ -63,7 +63,7 @@ OUTPUT
                                 Initial-navigation CSS rule-usage interval,
                                 per-target start/stop status, rule totals
     rest/css-rule-usage/target-NNN.json
-                                Full used/unused CDP CSS rule ranges for
+                                Full CDP CSS rule-use entries with used flags for
                                 targets that supported selector tracking
     rest/css-rule-usage-error.json
                                 Private name/code/message/stack if initial
@@ -153,10 +153,13 @@ LIMITATIONS
     before initial navigation for attached page/iframe targets. The rest
     collector calls CSS.stopRuleUsageTracking at the beginning of rest
     analysis, before CSS detail probes or optional automatic scroll.
-    Each target records timestamps, used/unused rule ranges, availability
+    Each target records timestamps, returned used flags, availability
     and explicit stop errors. The coverage describes only the interval
     actually observed after target attachment, not all rules that could
-    ever be used. Coverage collection can increase CPU/memory work;
+    ever be used. Chromium may return only ranges it has observed;
+    a rule absent from the results cannot be classified as unused.
+    reportedUnused counts only explicit used=false entries returned by CDP.
+    Coverage collection can increase CPU/memory work;
     the stop method changes instrumentation state but not application
     input. The manual-session recorder does not enable it by default.
     Missing target attachment, unsupported protocol methods and the
