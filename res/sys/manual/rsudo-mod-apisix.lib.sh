@@ -66,15 +66,18 @@ PUBLIC FUNCTIONS
         apply to no-operand discovery; explicit runtime still preserves its
         documented pidfile-missing observation. If Docker is absent, an
         observed conventional host candidate may still be checked.
-        The Docker probe also recognizes a foreground nginx/OpenResty
-        master at namespace PID 1 whose process title exposes a safe
-        absolute -p installation prefix. This permits automatic observation
+        On Linux the Docker probe scans readable procfs command lines for
+        nginx/OpenResty masters, including daemonized masters with PID != 1.
+        One observed master can advertise a safe absolute -p prefix.
+        This permits automatic observation
         of one nonconventional Docker root when its generated nginx.conf and
         actual master/pidfile can be checked there. The process title is
         never printed. A malformed/unsafe discovered prefix fails status 56;
         an invalid rechecked selection fails status 57. If the visible
         master advertises -p but its generated nginx.conf is missing,
         discovery fails status 58, not as an absent container candidate.
+        Multiple observed masters inside one container fail status 59
+        rather than selecting an arbitrary process.
         For a nonconventional Docker root the success prefix is:
         discovery_evidence=unique-process-prefix-candidate
         discovered_scope=docker
@@ -83,9 +86,10 @@ PUBLIC FUNCTIONS
         Otherwise the prefix remains discovery_evidence=unique-conventional-candidate
         with discovered_scope=host|docker and a Docker container_id as before.
         This is best-effort discovery, not a proof that arbitrary hosts,
-        service managers, background container masters or external
-        namespaces do not exist. Docker candidates require docker exec/sh;
-        process-selected roots require procfs PID-1 command-line evidence.
+        service managers, unobservable processes or external namespaces
+        do not exist. Docker candidates require docker exec/sh;
+        process-selected roots require readable Linux procfs master
+        command-line evidence. Scanning is not a complete process census.
         No files or HTTP resources are changed.
         Checks generated conf/nginx.conf and logs/nginx.pid, then observes
         the PID through POSIX ps or guarded Linux /proc/<pid>/cmdline where
