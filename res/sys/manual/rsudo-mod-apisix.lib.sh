@@ -17,7 +17,7 @@ DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
-    rsudo apisix runtime absolute-remote-apisix-home
+    rsudo apisix runtime absolute-remote-apisix-home [full-docker-container-id]
     rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
@@ -47,7 +47,7 @@ PUBLIC FUNCTIONS
         Invalid arguments, credential paths/permissions/format, unsupported
         resource, port and curl availability have distinct status 44-51.
 
-    rsudo_mod_apisix_runtime absolute-remote-apisix-home
+    rsudo_mod_apisix_runtime absolute-remote-apisix-home [full-docker-container-id]
         Read-only evidence for an explicitly selected APISIX installation.
         Checks generated conf/nginx.conf and logs/nginx.pid, then observes
         the PID through POSIX ps or guarded Linux /proc/<pid>/cmdline where
@@ -55,7 +55,14 @@ PUBLIC FUNCTIONS
         Both paths require an nginx/OpenResty master process title.
         Supports both the APISIX CLI -p/-c invocation and the official
         Docker foreground -p/-g invocation for the generated default config.
-        The installation prefix must match the explicitly selected home.
+        An optional explicit full lowercase 64-hex Docker container ID
+        selects the remote container's process/filesystem namespace through
+        the remote Docker manager (docker exec -i sh). This requires an
+        authorized, running container, accessible remote Docker CLI and sh
+        inside that container; abbreviated IDs, names and Docker options
+        are rejected locally with status 44. Omitting the container ID
+        preserves host-scoped process observation. The selected installation
+        prefix must match the master in the observed namespace.
         Raw process arguments are never printed or logged. Missing PID file reports
         runtime_evidence=pidfile-missing, runtime_identity=unverified and
         mutation_readiness=not-established, without claiming stopped state.
@@ -64,7 +71,11 @@ PUBLIC FUNCTIONS
         mutation_readiness=not-established. Invalid/unsafe/mismatching
         evidence fails non-zero with branch-specific diagnostics (status 30-43).
         A PID file and process title are insufficient to prove the running
-        config.yaml, custom -c, APISIX_PROFILE or container ownership.
+        config.yaml, custom -c, APISIX_PROFILE or effective Admin listener.
+        The optional Docker selector scopes observation through the remote
+        manager but is not proof of configuration provenance or permission
+        to change the gateway. It does not discover containers automatically,
+        and the observable runtime identity remains config-unverified.
         This operation never authorizes writes.
 
     rsudo_mod_apisix_inspect [remote-apisix-home [remote-config.yaml]]
