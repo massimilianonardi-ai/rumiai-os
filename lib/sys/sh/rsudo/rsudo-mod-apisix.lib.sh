@@ -509,20 +509,43 @@ pid=$(cat "$pidfile") || {
 case "$pid" in
   ''|*[!0-9]*) runtime_error pidfile-invalid; exit 35 ;;
 esac
-[ "$pid" -gt 1 ] 2>/dev/null || {
+# A container master can legitimately be namespace PID 1.
+[ "$pid" -ge 1 ] 2>/dev/null || {
   runtime_error pidfile-invalid
   exit 35
 }
 
-command -v ps >/dev/null 2>&1 || {
+# POSIX ps is preferred. Minimal Linux APISIX images can omit ps;
+# /proc/<pid>/cmdline is a guarded host-specific fallback.
+# Raw process arguments remain private to this shell, never logged.
+if command -v ps >/dev/null 2>&1
+then
+  process_title=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || {
+    runtime_error process-unobservable
+    exit 37
+  }
+elif [ -r "/proc/$pid/cmdline" ]
+then
+  command -v tr >/dev/null 2>&1 || {
+    runtime_error process-cmdline-tool-unavailable
+    exit 40
+  }
+  process_title=$(LC_ALL=C tr '\000' ' ' < "/proc/$pid/cmdline") || {
+    runtime_error process-cmdline-read-failed
+    exit 41
+  }
+  while [ "$process_title" != "${process_title% }" ]
+  do
+    process_title=${process_title% }
+  done
+  [ -n "$process_title" ] || {
+    runtime_error process-cmdline-empty
+    exit 42
+  }
+else
   runtime_error process-inspector-unavailable
   exit 36
-}
-# Keep process arguments private: they could contain unrelated credentials.
-process_title=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || {
-  runtime_error process-unobservable
-  exit 37
-}
+fi
 case "$process_title" in
   'nginx: master process '*|'openresty: master process '*) : ;;
   *) runtime_error pid-not-nginx-master; exit 38 ;;
