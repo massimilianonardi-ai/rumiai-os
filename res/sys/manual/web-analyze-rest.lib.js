@@ -101,6 +101,14 @@ OUTPUT
          dom-tree.json          CDP DOM.getDocument(depth=-1,pierce=true)
          dom-snapshot.json      CDP DOM/layout/selected computed style table
          frame-tree.json        CDP frame tree
+         frame-context.json     Private schema-gated per-frame storage keys,
+                                permissions policy, origin trials and security
+                                isolation, page resource tree, PWA manifest and
+                                best-effort bucket-name inventory. OPFS support
+                                is probed without retrieving the root.
+                                Missing methods, frame limits and failures
+                                remain explicit; no partition/bucket contents
+                                or OPFS files are certified complete.
          accessibility/index.json
                                 Per-frame full AX tree outcomes and frame IDs
          accessibility/frame-NNN.json
