@@ -87,6 +87,16 @@ OUTPUT
                                 in separate private security/certificate-*.json.
                                 HTTP-only frames have no applicable TLS chain,
                                 and missing HTTPS details are explicit.
+    rest/pwa-resources/index.json
+                                Private offline correlation of the already read
+                                Page.getAppManifest and Page.getResourceTree
+                                with frozen Network response and resource body
+                                indexes. Includes declared manifest/start URL/
+                                icon references, actual fetch/body provenance,
+                                same-origin observation and missing/unobserved
+                                references. A missing app manifest is normal;
+                                unsupported/partial observations remain explicit.
+                                No new URL request or source-content rewrite.
     rest/page.mhtml             Native Chromium MHTML, where supported
     rest/viewport.png           Current viewport screenshot
     rest/targets/target-NNN/
