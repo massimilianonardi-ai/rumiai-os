@@ -435,3 +435,23 @@ rsudo_mod_apisix_mode()
 {
   _rsudo_mod_apisix_backend "$@"
 }
+
+# Reports exactly what has been established by the configured-mode resolver.
+# In particular, a successful on-disk classification must never be presented
+# as proof of the selected running process or write authorization.
+rsudo_mod_apisix_inspect()
+(
+  _rsudo_mod_apisix_selected=$(_rsudo_mod_apisix_backend "$@")
+  _rsudo_mod_apisix_status=$?
+  [ "$_rsudo_mod_apisix_status" -eq 0 ] || exit "$_rsudo_mod_apisix_status"
+
+  case "$_rsudo_mod_apisix_selected" in
+    traditional-admin|standalone-api|standalone-file-yaml|standalone-file-json|no-admin-data-plane) :;;
+    *)
+      log error apisix inspect-unrecognized-backend backend "$_rsudo_mod_apisix_selected"
+      exit 22
+    ;;
+  esac
+
+  printf 'configured_mode=%s\nconfiguration_evidence=on-disk\nruntime_identity=unverified\nmutation_readiness=not-established\n' "$_rsudo_mod_apisix_selected"
+)

@@ -16,8 +16,18 @@ LOADING
 DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
+    rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_inspect [remote-apisix-home [remote-config.yaml]]
+        Calls the configured-mode resolver without attempting a mutation.
+        Prints four stable key=value fields: configured_mode,
+        configuration_evidence=on-disk, runtime_identity=unverified,
+        mutation_readiness=not-established. A successful result must not be
+        interpreted as confirmation of a running APISIX instance, an active
+        configuration, or safe authorization to modify resources. The same
+        path selection, non-zero failures and prerequisites as mode apply.
+
     rsudo_mod_apisix_mode [remote-apisix-home [remote-config.yaml]]
         Resolve the selected on-disk APISIX deployment configuration through
         the remote APISIX LuaJIT/YAML parser and installed defaults. This is a
@@ -73,6 +83,8 @@ PUBLIC FUNCTIONS
 
 OUTPUT AND STATUS
     Mode discovery returns status 0 with one configured-backend identifier.
+    Inspect returns status 0 with the configured-mode and explicit evidence
+    limitations; an unexpected backend identity returns status 22.
     Invalid argument count, non-absolute operands, remote lookup/parse failures
     and unsupported configurations fail non-zero with branch-specific stderr
     markers. The caller may not treat successful discovery as evidence of live
