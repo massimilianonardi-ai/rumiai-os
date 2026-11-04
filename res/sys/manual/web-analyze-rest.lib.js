@@ -96,6 +96,9 @@ OUTPUT
                                 same-origin observation and missing/unobserved
                                 references. A missing app manifest is normal;
                                 unsupported/partial observations remain explicit.
+                                URL-only correlation does not establish that
+                                independently archived events and bodies belong
+                                to the same individual browser request.
                                 No new URL request or source-content rewrite.
     rest/page.mhtml             Native Chromium MHTML, where supported
     rest/viewport.png           Current viewport screenshot
