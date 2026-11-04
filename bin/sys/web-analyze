@@ -355,7 +355,8 @@ function table(rows, headers)
     ' |\n' + rows.map(row => '| ' + row.map(markdown).join(' | ') + ' |').join('\n') + '\n';
 }
 
-function documentReports(directory, url, states, summary, warnings, interrupted, scrollEnabled)
+function documentReports(directory, url, states, summary, warnings, interrupted, scrollEnabled,
+  integrity)
 {
   const resources = readJsonl(path.join(directory, 'resources.jsonl'));
   const scripts = readJsonl(path.join(directory, 'scripts.jsonl'));
@@ -403,6 +404,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- [Discovered targets and contexts](rest/target-graph-final.json), with [initial target graph](rest/target-graph-initial.json)',
     '- [Document observer status](rest/dom-history-contexts.json) and [pre-scroll mutation history](rest/dom-mutations-at-rest.jsonl)',
     `- Rest evidence: ${rest?.status || 'unavailable'}; artifacts: ${rest?.artifacts?.length ?? 0}`,
+    `- Post-capture integrity: ${integrity?.status || 'unavailable'}; verified files: ${integrity?.counts?.verifiedFiles ?? 0}; discrepancies: ${integrity?.counts?.discrepancies ?? 0}`,
+    '- [Evidence integrity and per-domain outcomes](evidence-integrity.json)',
     '- [Initial resting DOM](states/dom-rest-initial.html) and [final resting DOM](states/dom-rest-final.html)',
     '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
     `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
@@ -548,6 +551,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '  check adjacent JSON metadata and warnings, especially when settlement timed out.',
     `- DOM snapshots with truncated HTML/text/control inventories: ${limited.length ? limited.join(', ') : 'none observed'}.`,
     `- Event streams with dropped records: ${dropped.length ? JSON.stringify(dropped) : 'none reported'}.`,
+    `- Post-capture file integrity: ${integrity?.status || 'unavailable'}; missing/corrupt: ${integrity?.counts?.missingOrCorrupt ?? 0}; discrepancies: ${integrity?.counts?.discrepancies ?? 0}.`,
+    '- Per-target and per-domain outcomes are in evidence-integrity.json; a saved file is not proof that the page domain was fully observed.',
     `- Raw DOM mutation writer: ${summary.resourceCapture?.domHistory?.status || 'unavailable'}; write errors: ${summary.resourceCapture?.domHistory?.errors?.length ?? 0}; truncated serialized values: ${summary.resourceCapture?.domHistory?.truncatedValues ?? 0}.`,
     '- Per-document observer and ShadowRoot hook health: rest/dom-history-contexts.json.',
     '- Callback-time DOM snapshots are not atomic history of every synchronous intermediate value;',
@@ -601,11 +606,12 @@ async function main(args)
     throw failure(6, 'm-library-root-missing', 'm_LIB_DIR is unavailable');
   let startWebAnalyze;
   let captureRestEvidence;
+  let auditWebAnalyzeEvidence;
   try
   {
     ({startWebAnalyze} = require(path.join(process.env.m_LIB_DIR, 'sys/js/web-analyze.lib.js')));
-    ({captureRestEvidence} = require(path.join(process.env.m_LIB_DIR,
-      'sys/js/web-analyze-rest.lib.js')));
+    ({captureRestEvidence, auditWebAnalyzeEvidence} = require(
+      path.join(process.env.m_LIB_DIR, 'sys/js/web-analyze-rest.lib.js')));
   }
   catch (error) {throw failure(7, 'capture-library-unavailable', error.message);}
   const directory = runDirectory(path.resolve(args[1]));
@@ -637,8 +643,21 @@ async function main(args)
   }
   if (!summary)
     throw failure(9, 'capture-finalization-failed', `recording did not finalize in ${directory}`);
+  let integrity;
+  try
+  {
+    integrity = auditWebAnalyzeEvidence(directory, {write:true, interrupted});
+    if (integrity.status !== 'saved')
+      warnings.push('Evidence integrity/coverage status: ' + integrity.status +
+        '; inspect evidence-integrity.json');
+  }
+  catch (error)
+  {
+    throw failure(13, 'evidence-integrity-unavailable',
+      'Cannot write integrity result in ' + directory + ': ' + error.message);
+  }
   try {documentReports(directory, url.href, states, summary, warnings, interrupted,
-    args[2] === '--scroll');}
+    args[2] === '--scroll', integrity);}
   catch (error) {throw failure(10, 'report-generation-failed', `${directory}: ${error.message}`);}
   if (!states.length)
     throw failure(11, 'document-not-observed', `no rendered DOM was captured; inspect ${directory}/LIMITATIONS.md`);
