@@ -628,7 +628,7 @@ then
         for cmdline in /proc/[0-9]*/cmdline
         do
           [ -r "$cmdline" ] || continue
-          title=$(LC_ALL=C tr "\000" " " < "$cmdline") || exit 62
+          title=$(LC_ALL=C tr "\000" " " < "$cmdline") || exit 65
           case "$title" in
             "nginx: master process "*|"openresty: master process "*)
               master_count=$((master_count + 1))
@@ -706,6 +706,10 @@ then
       64)
         discovery_error docker-multiple-masters
         exit 59
+      ;;
+      65)
+        discovery_error docker-process-scan-failed
+        exit 60
       ;;
       *)
         discovery_error docker-probe-failed
