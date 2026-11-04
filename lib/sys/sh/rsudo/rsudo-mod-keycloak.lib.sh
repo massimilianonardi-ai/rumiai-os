@@ -326,9 +326,11 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/keycloak-auth.XXXXXXXX") || {
   auth_error temporary-directory-unavailable
   exit 87
 }
+staged=
 cleanup()
 {
-  rm -rf -- "$tmp"
+  [ -z "$staged" ] || rm -f "$staged"
+  rm -rf "$tmp"
 }
 trap cleanup 0
 trap 'exit 88' 1 2 3 15
@@ -438,8 +440,9 @@ jq -e '(.access_token | type == "string" and length > 0) and
   exit 86
 }
 
-# Exclusive-new-store baseline. Existing stores require explicit lifecycle
-# handling; do not silently replace a concurrent writer or follow symlinks.
+# Exclusive-new-store baseline. An exclusive hard link from a staged inode
+# is atomic on the same filesystem; existence-check-then-mv is not.
+# Existing stores require explicit lifecycle handling and cannot be replaced.
 [ ! -e "$token_store" ] && [ ! -L "$token_store" ] || {
   auth_error token-store-race
   exit 87
@@ -456,13 +459,18 @@ then
   auth_error token-store-race
   exit 87
 fi
-# This parent-directory check prevents untrusted local rename races for the
-# ordinary case; K04 still needs an authentic same-host concurrency audit.
-mv -- "$staged" "$token_store" || {
-  rm -f -- "$staged"
-  auth_error token-store-publish-failed
+# A hard-link creation without -f fails when another writer already
+# published the target. Both paths are inside the same protected directory.
+# Do not use mv here: POSIX rename can overwrite a concurrent result.
+ln "$staged" "$token_store" 2>/dev/null || {
+  auth_error token-store-exclusive-publish-failed
   exit 87
 }
+rm -f "$staged" || {
+  auth_error token-stage-cleanup-incomplete
+  exit 88
+}
+staged=
 printf '{"stored":true,"grant":"client_credentials","server_validated":false}\n'
 KEYCLOAK_AUTH_REMOTE
 )

@@ -77,8 +77,10 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     diagnostic messages. HTTP Basic is sent through a private curl header
     file; POST client secrets are read by curl from a private file. Stores
     contain the provider's response JSON and have private 0600 permissions.
-    The store is not a mechanism for concurrent writers or refresh yet:
-    an existing output path fails closed. Status checks only structural
+    Store publication uses a same-directory exclusive hard link: if another
+    acquisition has already created the destination, the loser fails without
+    overwriting the winning token. This is an append-only new-store path, not
+    a concurrent refresh mechanism; no existing store is replaced. Status checks only structural
     readability; server_validated=false does not mean a token is currently
     valid, unexpired, or authorized for a target realm.
 
