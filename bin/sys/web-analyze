@@ -405,6 +405,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- [Initial resting DOM](states/dom-rest-initial.html) and [final resting DOM](states/dom-rest-final.html)',
     '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
     `- CDP requests: ${summary.resourceCapture?.requests ?? 0}; bodies saved: ${summary.resourceCapture?.saved ?? 0}`,
+    `- Response bytes archived: ${summary.resourceCapture?.bytes ?? 0}; partial streams: ${summary.resourceCapture?.partialStreams ?? 0}`,
     `- Compiled scripts archived: ${summary.resourceCapture?.scriptsSaved ?? 0}`,
     `- Browser CDP schema: ${capabilities?.protocol?.status || 'unavailable'}; domains: ${capabilities?.protocol?.domains?.length ?? 0}`,
     `- CDP packet ledger: ${summary.resourceCapture?.wireCapture?.status || 'unavailable'}; packets: ${summary.resourceCapture?.wireCapture?.packets ?? 0}`,
@@ -458,9 +459,28 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   const kinds = new Map();
   for (const item of resources)
     kinds.set(item.resourceType || 'Unknown', (kinds.get(item.resourceType || 'Unknown') || 0) + 1);
+  const sources = new Map();
+  for (const resource of resources)
+  {
+    const source = resource.source || resource.status || 'unknown';
+    sources.set(source, (sources.get(source) || 0) + 1);
+  }
+  const networkConfig = summary.resourceCapture?.networkConfiguration || [];
   const network = ['# Network and resource archive', '',
     'The browser/CDP observer saves responses it can retrieve; failures, redirects and active streams are explicit.',
     'These URLs can include signed query parameters. Handle this document as confidential.', '',
+    '## CDP response retention configuration', '',
+    'Durable messages and stream capture depend on the running browser version;',
+    'an unsupported or failed capability never implies that all bodies are preserved.',
+    table(networkConfig.map(row =>
+      [row.targetId, row.enabled, row.durable, row.bufferErrorCode || '',
+        row.durableErrorCode || '']),
+    ['Target', 'Network.enable', 'Durable messages', 'Buffer error', 'Durable error']),
+    '## Body sources and unresolved outcomes', '',
+    table([...sources], ['Source or outcome', 'Count']),
+    `Streaming partial-body artifacts: ${summary.resourceCapture?.partialStreams ?? 0}.`,
+    'Requests that redirect, abort or remain open can have no complete body.',
+    'A .partial artifact is not a complete HTTP response.', '',
     '## Resource types', '', table([...kinds], ['Type', 'Observed outcomes']),
     '## Request outcomes (up to 350; full catalog: resources.jsonl)', '',
     table(requests.slice(0, 350).map(r => [r.resourceType, r.method, r.httpStatus,
@@ -525,6 +545,10 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     `- DOM snapshots with truncated HTML/text/control inventories: ${limited.length ? limited.join(', ') : 'none observed'}.`,
     `- Event streams with dropped records: ${dropped.length ? JSON.stringify(dropped) : 'none reported'}.`,
     `- Response bodies unavailable/redirected/unfinished: ${resources.length - saved.length}.`,
+    `- Partial stream artifacts: ${summary.resourceCapture?.partialStreams ?? 0}.`,
+    `- CDP response buffer configuration outcomes: ${JSON.stringify((summary.resourceCapture?.networkConfiguration || []).map(x => ({enabled:x.enabled, durable:x.durable})))}.`,
+    '- Streaming is bounded to 16 MiB per active request and 64 MiB across streams;',
+    '  additional bytes are not reconstructed from the bounded stream buffer.',
     `- Script source failures: ${summary.resourceCapture?.scriptsFailed ?? 'unknown'}.`,
     `- Observation interrupted: ${interrupted}.`,
     '', '## Not established by this run', '',
@@ -532,6 +556,9 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- No automatic link clicks, form submissions, logins, payments, consent changes or challenge bypass.',
     '- No mutation-based workflow replay; scroll-only transitions are observed, not causally attributed to source functions.',
     '- CDP may miss resources on redirects, websocket streams, caches, service workers or debugger attachment races.',
+    '- HTTP redirect bodies are generally unavailable; response and redirect metadata remain separately indexed.',
+    '- Network.getResponseBody is preferred for completed responses; supported streamed content and',
+    '  Page.getResourceContent are read-only fallbacks when the primary body is unavailable.',
     '- Initial rest evidence includes CDP tree, layout/styling, event listeners, runtime state and native MHTML when supported.',
     '- Target discovery and attached worker/iframe context inventory are saved in rest/target-graph-final.json;',
     '  unattached and unready relevant targets are explicitly distinguished from attached contexts.',
