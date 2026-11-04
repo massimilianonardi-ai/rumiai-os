@@ -79,6 +79,14 @@ OUTPUT
     rest/cookies.json           Browser-context cookies, including HttpOnly
     rest/network-details-at-rest.jsonl
                                 Raw network events frozen before interaction
+    rest/security/index.json    Frame security origins and isolation context,
+                                network response TLS/security provenance and
+                                browser-schema-gated HTTPS certificate outcomes.
+                                Bounded response and origin enumeration; full
+                                DER certificate chain, when available, remains
+                                in separate private security/certificate-*.json.
+                                HTTP-only frames have no applicable TLS chain,
+                                and missing HTTPS details are explicit.
     rest/page.mhtml             Native Chromium MHTML, where supported
     rest/viewport.png           Current viewport screenshot
     rest/targets/target-NNN/
@@ -145,6 +153,13 @@ OUTPUT
                                 an already archived response, SHA-256 indexed
     rest/stylesheets/index.json CDP CSS stylesheet headers/provenance/outcomes
     rest/stylesheets/<sha>.css  Exact stylesheet source as exposed by CDP
+
+    The security pass consumes only events already recorded from the page
+    before rest. It never uses Security.enable or certificate-error overrides,
+    does not make additional HTTP requests, and does not independently verify
+    certificate trust. Browser-reported TLS state is only observed evidence.
+    The HTTPS certificate retrieval path requires a positive installed-browser
+    CDP schema check; an HTTP-only fixture cannot validate this branch.
 
     The companion native CDP recorder separately saves all observed and
     recoverable response bodies and compiled script sources under the run
