@@ -53,9 +53,9 @@ OUTPUT
                        outcomes and post-capture discrepancy identities
       rest/css-rule-usage/index.json
                        Start/stop timestamps, target coverage, used/unused
-                       rule totals, incomplete/unsupported tracking
+                       recorded rule-use totals, incomplete/unsupported tracking
       rest/css-rule-usage/target-NNN.json
-                       Private CDP CSS rule-usage ranges per target
+                       Private CDP rule-usage entries (used flags) per target
       rest/target-graph-initial.json
                        Discovered/attached target and execution contexts
       rest/target-graph-final.json
@@ -146,10 +146,12 @@ OUTPUT
     navigation for available attached page/iframe targets. Tracking stops
     when rest capture begins, before later deep CSS inspection and before
     any optional --scroll. The rest/css-rule-usage/ archive retains exact
-    CDP rule-use ranges, per-target timestamps, used/unused counts and
+    CDP rule-use ranges, per-target timestamps, observed-use counts and
     unsupported/incomplete target outcomes. It is bounded to 64 targets
     or 20 seconds. The result is coverage over an observed interval, not
-    a denominator of all possible CSS rules across future states. CSS
+    a denominator of all possible CSS rules across future states. An
+    absent rule is not proven unused; only explicit CDP used=false entries
+    count as reported-unused. CSS
     tracking has profiling overhead; it never synthesizes page input.
 
     Deep CSS inspection stores per-target css-nodes/index.json and
