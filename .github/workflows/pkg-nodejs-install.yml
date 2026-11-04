@@ -23,7 +23,7 @@ jobs:
         uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: ec55ced36b18d174b36b6fe88488e410ed8ae77a
+          ref: 2450579ccb1d3366384a8ded8fefcb6e4e9424bf
           path: .nodejs-tests
           persist-credentials: false
       - name: Verify release-index parsing and real managed Node install
