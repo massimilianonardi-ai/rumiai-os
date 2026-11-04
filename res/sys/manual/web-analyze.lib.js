@@ -70,11 +70,12 @@ PUBLIC FUNCTION
         ServiceWorker.enable (passive event subscription only), archiving
         registration/version events as raw private CDP packets. It never
         requests worker start/stop/update or unregisters a registration.
-        For attached page/iframe targets, browser-schema-gated Animation.enable
-        and Media.enable subscribe to naturally occurring CSS/Web Animations
-        and media-player events. Failed/unsupported observers are visible in
-        targetGraph domains and are not treated as captured evidence. No
-        animation seeking/pausing or media playback control is invoked.
+        For attached page/iframe targets, browser-schema-gated Animation.enable,
+        Media.enable and WebAudio.enable subscribe to naturally occurring
+        animation, media-player and audio-context/node events. Failed or
+        unsupported observers are visible in targetGraph domains and are not
+        treated as captured evidence. No animation seeking/pausing, playback
+        control or WebAudio realtime-data acquisition is invoked.
 
         The function launches Chromium and instruments targets, then starts
         initial navigation without requiring the remote page to finish loading.
