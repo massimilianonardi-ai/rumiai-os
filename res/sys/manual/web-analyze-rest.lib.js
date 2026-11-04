@@ -39,7 +39,8 @@ PUBLIC FUNCTIONS
         unsupported, with private file paths but no copied response contents.
         IndexedDB pages, Cache Storage response bodies, CSS sources and
         frame-scoped Accessibility tree responses and the per-node CSS result
-        pages are verified recursively against their indexed SHA-256/size.
+        pages and CSS rule-usage target dumps are verified recursively
+        against their indexed SHA-256/size.
         Re-audit read-only after evidence tampering detects missing, altered
         or permission-exposed files rather than trusting a previous manifest.
 
@@ -58,6 +59,12 @@ OUTPUT
                                 Discovered/attached targets at rest entry
     rest/target-graph-final.json
                                 Refreshed target/worker/context graph and gaps
+    rest/css-rule-usage/index.json
+                                Initial-navigation CSS rule-usage interval,
+                                per-target start/stop status, rule totals
+    rest/css-rule-usage/target-NNN.json
+                                Full used/unused CDP CSS rule ranges for
+                                targets that supported selector tracking
     rest/dom-history-contexts.json
                                 Per-document Runtime observer counters, timing,
                                 install/hook status, truncations and failures
@@ -137,6 +144,19 @@ LIMITATIONS
     than being presented as complete. The method does not require enabling
     Accessibility, which could change ongoing browser performance behavior.
     AX responses may contain private accessible names and values.
+
+    When m web-analyze opts in, CSS.enable/startRuleUsageTracking run
+    before initial navigation for attached page/iframe targets. The rest
+    collector calls CSS.stopRuleUsageTracking at the beginning of rest
+    analysis, before CSS detail probes or optional automatic scroll.
+    Each target records timestamps, used/unused rule ranges, availability
+    and explicit stop errors. The coverage describes only the interval
+    actually observed after target attachment, not all rules that could
+    ever be used. Coverage collection can increase CPU/memory work;
+    the stop method changes instrumentation state but not application
+    input. The manual-session recorder does not enable it by default.
+    Missing target attachment, unsupported protocol methods and the
+    64-target / 20-second collection limit are not silently completed.
 
     The CSS pass uses the browser-specific protocol schema to check availability
     of CSS.getComputedStyleForNode, CSS.getMatchedStylesForNode and
