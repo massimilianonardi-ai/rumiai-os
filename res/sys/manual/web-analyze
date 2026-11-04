@@ -82,12 +82,15 @@ OUTPUT
                        Version-specific optional CDP domain capability report:
                        installed protocol methods, observed wire events and
                        already enabled targets for animation, media, audio,
-                       WebRTC, tracing, background and reporting domains.
-                       Enables only passive Animation/Media/WebAudio event
-                       notifications on page/iframe targets when supported.
-                       Does not control playback/timing, read realtime audio,
-                       run tracing or profile the page;
-                       schema availability is not counted as captured data.
+                       WebRTC, tracing and background domains. Reporting API
+                       is a separate feature of CDP Network, never a CDP
+                       ReportingAPI domain. Browser-gated Animation/Media/
+                       WebAudio enables and Network.enableReportingApi(true)
+                       only subscribe to events, including existing reports.
+                       No reports are generated/submitted by this command;
+                       it does not control playback/timing, read realtime
+                       audio, run tracing or profile the page. Silent observers
+                       and mere schema availability are not captured data.
       rest/worker-provenance/index.json
                        Private offline correlation of native CDP target/frame
                        lifetime events, worker script versions, service-worker
