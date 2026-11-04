@@ -103,11 +103,7 @@ rsudo_mod_keycloak_auth()
   action=$1
   shift
   case "$action" in
-    acquire|status|revoke) : ;;
-    refresh)
-      log error keycloak auth-refresh-not-implemented
-      exit 73
-      ;;
+    acquire|refresh|status|revoke) : ;;
     *)
       log error keycloak auth-unknown-action action "$action"
       exit 64
@@ -183,6 +179,23 @@ rsudo_mod_keycloak_auth()
           exit 64
         }
       fi
+      ;;
+    refresh)
+      [ -z "$auth_mode" ] && [ -z "$username" ] &&
+        [ -z "$password_file" ] && [ -z "$token_type_hint" ] || {
+        log error keycloak auth-refresh-incompatible-options
+        exit 64
+      }
+      case "$method" in
+        client-secret-basic|client-secret-post) : ;;
+        *) log error keycloak auth-refresh-client-method-unsupported; exit 73 ;;
+      esac
+      [ -n "$issuer" ] && [ -n "$client" ] &&
+        [ -n "$secret_file" ] && [ -n "$token_file" ] &&
+        [ -n "$token_store" ] && [ "$token_file" = "$token_store" ] || {
+        log error keycloak auth-refresh-requires-same-store
+        exit 70
+      }
       ;;
     revoke)
       [ -z "$auth_mode" ] && [ -z "$username" ] &&
@@ -402,7 +415,7 @@ private_file "$secret_file" || {
   auth_error client-secret-file-unavailable-or-insecure
   exit 70
 }
-if [ "$action" = revoke ]
+if [ "$action" = revoke ] || [ "$action" = refresh ]
 then
   private_file "$token_file" || {
     auth_error revoke-token-store-unavailable-or-insecure
@@ -416,7 +429,7 @@ then
     exit 70
   }
 fi
-if [ "$action" = acquire ]
+if [ "$action" = acquire ] || [ "$action" = refresh ]
 then
   parent=${token_store%/*}
   [ -n "$parent" ] || parent=/
@@ -424,10 +437,13 @@ then
     auth_error token-store-directory-untrusted
     exit 87
   }
-  [ ! -e "$token_store" ] && [ ! -L "$token_store" ] || {
-    auth_error token-store-already-exists
-    exit 87
-  }
+  if [ "$action" = acquire ]
+  then
+    [ ! -e "$token_store" ] && [ ! -L "$token_store" ] || {
+      auth_error token-store-already-exists
+      exit 87
+    }
+  fi
 fi
 command -v mktemp >/dev/null 2>&1 || {
   auth_error mktemp-unavailable
@@ -439,10 +455,12 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/keycloak-auth.XXXXXXXX") || {
   exit 87
 }
 staged=
+refresh_lock=
 cleanup()
 {
   [ -z "$staged" ] || rm -f "$staged"
   rm -rf "$tmp"
+  [ -z "$refresh_lock" ] || rmdir "$refresh_lock" 2>/dev/null || :
 }
 trap cleanup 0
 trap 'exit 88' 1 2 3 15
@@ -506,6 +524,43 @@ esac
   exit 70
 }
 
+if [ "$action" = refresh ]
+then
+  # Cooperative refresh writers serialize the complete read/request/publish
+  # cycle; never remove a lock left by another caller.
+  refresh_lock_path=$token_store.keycloak-refresh-lock
+  private_path "$refresh_lock_path" || {
+    auth_error refresh-lock-path-invalid
+    exit 87
+  }
+  mkdir "$refresh_lock_path" 2>/dev/null || {
+    auth_error refresh-store-busy
+    exit 87
+  }
+  refresh_lock=$refresh_lock_path
+  private_file "$token_file" || {
+    auth_error refresh-store-changed-or-insecure
+    exit 87
+  }
+  jq -e '(.refresh_token | type == "string" and length > 0)' \
+    "$token_file" >/dev/null 2>&1 || {
+    auth_error refresh-token-missing
+    exit 73
+  }
+  jq -jr '.refresh_token' "$token_file" > "$tmp/refresh-token" || {
+    auth_error refresh-token-extraction-failed
+    exit 86
+  }
+  [ -s "$tmp/refresh-token" ] || {
+    auth_error refresh-token-empty
+    exit 86
+  }
+  original_inode=$(ls -id "$token_file" 2>/dev/null | awk '{print $1}') || {
+    auth_error refresh-store-identity-unavailable
+    exit 87
+  }
+fi
+
 if [ "$action" = revoke ]
 then
   # RFC 7009 accepts both kinds. An explicit choice prevents silently
@@ -562,6 +617,13 @@ then
   unset password
 fi
 
+if [ "$action" = refresh ]
+then
+  set -- --output "$tmp/response" --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
+    --data-urlencode 'grant_type=refresh_token' \
+    --data-urlencode "refresh_token@$tmp/refresh-token"
+fi
 if [ "$action" = acquire ]
 then
   set -- --output "$tmp/response" --write-out '%{http_code}' \
@@ -650,6 +712,43 @@ jq -e '(.access_token | type == "string" and length > 0) and
   auth_error token-response-invalid
   exit 86
 }
+
+if [ "$action" = refresh ]
+then
+  jq -e '(.refresh_token | type == "string" and length > 0)' \
+    "$tmp/response" >/dev/null 2>&1 || {
+    auth_error refresh-response-without-successor
+    exit 86
+  }
+  staged=$(mktemp "$parent/.keycloak-token.XXXXXXXX") || {
+    auth_error refresh-stage-failed
+    exit 87
+  }
+  chmod 600 "$staged" && cp "$tmp/response" "$staged" || {
+    auth_error refresh-stage-write-failed
+    exit 87
+  }
+  private_file "$token_file" || {
+    auth_error refresh-store-changed-or-insecure
+    exit 87
+  }
+  current_inode=$(ls -id "$token_file" 2>/dev/null | awk '{print $1}') || {
+    auth_error refresh-store-identity-unavailable
+    exit 87
+  }
+  [ "$current_inode" = "$original_inode" ] || {
+    auth_error refresh-store-concurrently-replaced
+    exit 87
+  }
+  # Atomic same-directory replacement for cooperative writers only.
+  mv -f "$staged" "$token_store" || {
+    auth_error refresh-publish-failed
+    exit 87
+  }
+  staged=
+  printf '{"stored":true,"refreshed":true,"server_validated":false}\n'
+  exit 0
+fi
 
 # Exclusive-new-store baseline. An exclusive hard link from a staged inode
 # is atomic on the same filesystem; existence-check-then-mv is not.
