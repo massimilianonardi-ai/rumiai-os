@@ -76,6 +76,12 @@ PUBLIC FUNCTION
         unsupported observers are visible in targetGraph domains and are not
         treated as captured evidence. No animation seeking/pausing, playback
         control or WebAudio realtime-data acquisition is invoked.
+        For page/iframe targets with browser-schema support,
+        Network.enableReportingApi({enable:true}) subscribes to existing and
+        subsequent browser-generated Reporting API notifications. This is a
+        Network-domain feature, not an independent ReportingAPI domain;
+        absent/failed subscriptions remain explicit. No report is generated,
+        queued, transmitted or modified by the recorder.
 
         The function launches Chromium and instruments targets, then starts
         initial navigation without requiring the remote page to finish loading.
