@@ -71,6 +71,13 @@ OUTPUT
                        platform fonts and per-frame Accessibility trees with support/
                        failure outcomes, listeners, runtime environment and
                        native MHTML
+      rest/security/index.json
+                       Private cross-reference of observed frame security
+                       origins, secure/isolation context and Network response
+                       TLS details; version-gated HTTPS Network.getCertificate
+                       results are retained separately under rest/security/.
+                       HTTP does not imply a TLS chain; unsupported commands,
+                       missing observations and bounds remain explicit.
       rest/targets/target-NNN/frame-context.json
                        Private per-frame storage keys, permission policy,
                        origin trials, isolation, resource tree, PWA manifest
@@ -201,6 +208,13 @@ OUTPUT
     errors. Worker globals have separate snapshots instead of page DOM/CSS.
     Chromium can render cross-origin frames in one process or a separate
     OOPIF, so frame tree and target graph remain distinct evidence.
+
+    The security inventory never overrides certificate verification, installs
+    trust authorities or enables Security tracking. Network.getCertificate is
+    used only for observed HTTPS origins when supported; security fields are
+    browser-reported observations rather than independently established trust.
+    Private certificate bytes, hostnames and response data are not copied into
+    Markdown reports.
 
     The raw packet ledger does not filter by known CDP event names; it
     includes outgoing commands and incoming responses/notifications while
