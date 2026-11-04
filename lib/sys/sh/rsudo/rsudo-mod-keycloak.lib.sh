@@ -430,8 +430,8 @@ case "$http_code" in
   5??) auth_error token-server-error; exit 85 ;;
   *) auth_error token-unexpected-http; exit 86 ;;
 esac
-jq -e '(.access_token | type == "string" and length > 0) and \
-  (.token_type == "Bearer") and \
+jq -e '(.access_token | type == "string" and length > 0) and
+  (.token_type == "Bearer") and
   (.expires_in | type == "number" and . > 0)' \
   "$tmp/response" >/dev/null 2>&1 || {
   auth_error token-response-invalid
