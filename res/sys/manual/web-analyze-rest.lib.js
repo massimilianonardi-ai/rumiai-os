@@ -87,6 +87,15 @@ OUTPUT
                                 in separate private security/certificate-*.json.
                                 HTTP-only frames have no applicable TLS chain,
                                 and missing HTTPS details are explicit.
+    rest/optional-domains/index.json
+                                Private inventory of optional, browser-version-
+                                specific CDP domains (LayerTree, Animation,
+                                Media, WebAudio, WebRTC, PerformanceTimeline,
+                                Tracing, Preload, BackgroundService,
+                                ReportingAPI). Separates schema support,
+                                already enabled target domains, actually
+                                observed CDP events and explicit uncollected
+                                capabilities without enabling instrumentation.
     rest/worker-provenance/index.json
                                 Private index of ServiceWorker registration and
                                 version updates, worker/script target links,
