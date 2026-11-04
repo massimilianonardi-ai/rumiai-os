@@ -514,19 +514,24 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   save(path.join(directory, 'NETWORK.md'), network.join('\n') + '\n');
 
   const scriptFiles = scripts.filter(s => s.status === 'saved');
-  const js = ['# JavaScript and React evidence', '',
-    'Debugger.scriptParsed and Debugger.getScriptSource preserve executed/compiled sources,',
-    'including inline/evaluated code when Chromium exposes it. Minified code may obscure component names.', '',
+  const js = ['# JavaScript, WebAssembly and React evidence', '',
+    'Debugger.scriptParsed and getScriptSource preserve available compiled JavaScript',
+    'and WebAssembly bytecode, with text-only Wasm explicitly distinguished from binary.',
+    'Inline/evaluated code is included when Chromium exposes it.',
+    'Minified code may obscure component names.', '',
     `Observed React DOM markers: ${Math.max(0, ...states.map(s => s.frameworks.reactDomMarkers))}.`,
     `Next.js __NEXT_DATA__ marker: ${states.some(s => s.frameworks.nextData) ? 'observed' : 'not observed'}.`,
     '', '## Best-effort runtime React component names', '',
     components.size ? `Recovered component-name count: ${components.size}; names remain private.` :
       'No component names recovered through DOM-attached React Fiber markers.',
     '', '## Compiled scripts (first 250; full catalog: scripts.jsonl)', '',
-    table(scriptFiles.slice(0, 250).map(s => [displayOrigin(s.url), s.bytes, s.file,
-      displayOrigin(s.sourceMapURL)]),
-      ['Source origin', 'Bytes', 'Saved artifact', 'Source-map origin']),
-    `Parsed script events: ${scripts.length}; saved sources: ${scriptFiles.length}.`, ''
+    table(scriptFiles.slice(0, 250).map(s => [displayOrigin(s.url),
+      s.scriptLanguage || 'JavaScript', s.sourceKind || 'javascript-text',
+      s.bytes, s.file, displayOrigin(s.sourceMapURL)]),
+      ['Source origin', 'Language', 'Archive kind', 'Bytes', 'Saved artifact', 'Source-map origin']),
+    `Parsed script events: ${scripts.length}; saved sources: ${scriptFiles.length}.`,
+    'The private rest/source-maps/index.json identifies maps resolved solely from',
+    'inline data or previously captured responses, including unavailable references.', ''
   ];
   save(path.join(directory, 'SCRIPTS.md'), js.join('\n') + '\n');
 
