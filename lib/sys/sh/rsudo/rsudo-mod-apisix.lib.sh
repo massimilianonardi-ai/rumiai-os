@@ -584,7 +584,7 @@ then
 elif [ -e "$home/conf/nginx.conf" ] || [ -L "$home/conf/nginx.conf" ]
 then
   discovery_error host-generated-config-unsafe
-  exit 53
+  exit 55
 fi
 
 # A present but inaccessible Docker manager prevents claims of uniqueness.
