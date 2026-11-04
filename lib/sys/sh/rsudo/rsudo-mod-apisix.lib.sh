@@ -609,25 +609,78 @@ then
       exit 47
     }
 
-    # A real negative result is different from a failed inspection.
-    # Docker exit failures, an absent shell and disappearing containers
-    # must never be interpreted as proof of an absent APISIX candidate.
-    docker exec "$id" sh -c '
-      file=/usr/local/apisix/conf/nginx.conf
-      if [ ! -e "$file" ] && [ ! -L "$file" ]; then exit 60; fi
-      if [ -f "$file" ] && [ -r "$file" ] && [ ! -L "$file" ]; then exit 0; fi
+    # Inspect a concrete running container. The actual foreground master,
+    # when it is namespace PID 1, can advertise its selected OpenResty -p
+    # prefix; a stale conventional nginx.conf must not override that prefix.
+    # This is process evidence, NOT loaded-source or listener attribution.
+    # Only the static shell program below executes; the process title is
+    # parsed as data and never interpolated into executable shell source.
+    observed_home=$(docker exec "$id" sh -c '
+      home=/usr/local/apisix
+      if [ -r /proc/1/cmdline ] && command -v tr >/dev/null 2>&1
+      then
+        title=$(LC_ALL=C tr "\000" " " < /proc/1/cmdline) || exit 62
+        case "$title" in
+          "nginx: master process "*|"openresty: master process "*)
+            set -f
+            set -- $title
+            while [ "$#" -ge 2 ]
+            do
+              if [ "$1" = -p ]
+              then
+                home=$2
+                break
+              fi
+              shift
+            done
+          ;;
+        esac
+      fi
+      # Only safe absolute no-whitespace roots can be automatically selected.
+      # Operators can still target other roots through the explicit API.
+      case "$home" in
+        /*) : ;;
+        *) exit 62 ;;
+      esac
+      case "$home" in
+        /|*[!a-zA-Z0-9._/-]*|*/../*|*/./*|*/..|*/.)
+          exit 62
+        ;;
+      esac
+      while [ "$home" != / ] && [ "${home%/}" != "$home" ]
+      do
+        home=${home%/}
+      done
+      file=$home/conf/nginx.conf
+      if [ ! -e "$file" ] && [ ! -L "$file" ]
+      then
+        exit 60
+      fi
+      if [ -f "$file" ] && [ -r "$file" ] && [ ! -L "$file" ]
+      then
+        printf "%s\n" "$home"
+        exit 0
+      fi
       exit 61
-    ' >/dev/null 2>&1
+    ' 2>/dev/null)
     probe_status=$?
     case "$probe_status" in
       0)
+        case "$observed_home" in
+          /*) : ;;
+          *) discovery_error docker-probe-result-invalid; exit 57 ;;
+        esac
         candidate_count=$((candidate_count + 1))
-        selected="docker $id"
+        selected="docker $id $observed_home"
       ;;
       60) : ;;
       61)
         discovery_error docker-generated-config-unsafe
         exit 53
+      ;;
+      62)
+        discovery_error docker-process-prefix-invalid
+        exit 56
       ;;
       *)
         discovery_error docker-probe-failed
@@ -684,7 +737,9 @@ rsudo_mod_apisix_runtime()
         scope=host
       ;;
       'docker '*)
-        container=${selected#docker }
+        selected_detail=${selected#docker }
+        container=${selected_detail%% *}
+        selected_home=${selected_detail#* }
         case "$container" in
           *[!0123456789abcdef]*)
             log error apisix runtime-discovery-result-invalid
@@ -695,8 +750,18 @@ rsudo_mod_apisix_runtime()
           log error apisix runtime-discovery-result-invalid
           exit 50
         }
+        case "$selected_home" in
+          /*) : ;;
+          *) log error apisix runtime-discovery-home-invalid; exit 57 ;;
+        esac
+        case "$selected_home" in
+          /|*[!a-zA-Z0-9._/-]*|*/../*|*/./*|*/..|*/.)
+            log error apisix runtime-discovery-home-invalid
+            exit 57
+          ;;
+        esac
         observation=$(_rsudo_mod_apisix_runtime_remote_source |
-          rsudo docker exec -i "$container" sh -s -- /usr/local/apisix)
+          rsudo docker exec -i "$container" sh -s -- "$selected_home")
         status=$?
         [ "$status" -eq 0 ] || exit "$status"
         scope=docker
@@ -721,8 +786,14 @@ rsudo_mod_apisix_runtime()
         exit 54
       ;;
     esac
-    printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=%s\n' "$scope"
-    [ "$scope" != docker ] || printf 'container_id=%s\n' "$container"
+    if [ "$scope" = docker ] && [ "$selected_home" != /usr/local/apisix ]
+    then
+      printf 'discovery_evidence=unique-process-prefix-candidate\ndiscovered_scope=docker\n'
+      printf 'container_id=%s\ninstallation_root=%s\n' "$container" "$selected_home"
+    else
+      printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=%s\n' "$scope"
+      [ "$scope" != docker ] || printf 'container_id=%s\n' "$container"
+    fi
     printf '%s\n' "$observation"
     exit 0
   fi
