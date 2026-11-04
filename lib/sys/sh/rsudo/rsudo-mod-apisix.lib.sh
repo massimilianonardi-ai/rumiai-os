@@ -661,6 +661,14 @@ case "$credential_header" in
   'X-API-KEY: '?*) : ;;
   *) admin_read_error credential-header-invalid; exit 49 ;;
 esac
+# Reject embedded NUL/control bytes skipped by some POSIX read variants:
+# curl must read exactly the one validated header plus its final newline.
+expected_bytes=$(printf '%s\n' "$credential_header" | wc -c) || exit 49
+actual_bytes=$(wc -c < "$credential_file") || exit 49
+[ "$expected_bytes" -eq "$actual_bytes" ] 2>/dev/null || {
+  admin_read_error credential-header-bytes-invalid
+  exit 49
+}
 credential_value=${credential_header#X-API-KEY: }
 case "$credential_value" in
   ''|*[![:graph:]]*) admin_read_error credential-header-invalid; exit 49 ;;
