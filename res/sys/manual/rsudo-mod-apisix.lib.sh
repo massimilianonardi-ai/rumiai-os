@@ -59,7 +59,8 @@ PUBLIC FUNCTIONS
         or multiple candidates fail closed (statuses 45-49). A failed
         container probe, missing container shell or container disappearing
         during the scan is an error (52), not proof of no APISIX candidate.
-        An unsafe/unreadable generated configuration fails with 53.
+        An unsafe/unreadable Docker generated configuration fails with 53;
+        the corresponding unsafe host configuration fails with 55.
         A discovered candidate lacking a verified master fails with 51;
         unexpected observation output fails with 54. These status codes
         apply to no-operand discovery; explicit runtime still preserves its
