@@ -72,7 +72,9 @@ PUBLIC FUNCTIONS
         of one nonconventional Docker root when its generated nginx.conf and
         actual master/pidfile can be checked there. The process title is
         never printed. A malformed/unsafe discovered prefix fails status 56;
-        an invalid rechecked selection fails status 57.
+        an invalid rechecked selection fails status 57. If the visible
+        master advertises -p but its generated nginx.conf is missing,
+        discovery fails status 58, not as an absent container candidate.
         For a nonconventional Docker root the success prefix is:
         discovery_evidence=unique-process-prefix-candidate
         discovered_scope=docker
