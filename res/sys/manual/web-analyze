@@ -45,6 +45,9 @@ OUTPUT
       SCRIPTS.md       Compiled JS assets and best-effort React/Next evidence
       FLOWS.md         Mermaid diagram and table of observed scroll transitions
       LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
+      evidence-integrity.json
+                       Verified file/digest/size results, per-domain/target
+                       outcomes and post-capture discrepancy identities
       rest/target-graph-initial.json
                        Discovered/attached target and execution contexts
       rest/target-graph-final.json
@@ -114,7 +117,16 @@ OUTPUT
     The default command stops at this boundary; --scroll enables an additional
     exploration phase with a separate time budget.
     The existing bounded scroll sweep still follows as a separate operation.
-    Rest artifacts include per-artifact saved/unavailable outcomes and SHA-256.
+    Rest artifact statuses now propagate individual listener, stylesheet,
+    local/session storage and interrupted-capture failures. After Chromium
+    exits, the command validates the evidence root against file contents,
+    expected SHA-256 and byte lengths, nested IndexedDB/cache/CSS indexes,
+    DOM/CDP wire event counts, dropped logs and incomplete target coverage.
+    The private evidence-integrity.json reports saved/partial/failed/
+    interrupted/inapplicable/unsupported per domain and target. Readable
+    reports show only summary integrity statuses, not cookies, raw query
+    parameters, page text or other private browser content. Incomplete or
+    damaged evidence does not make the command claim complete acquisition.
     A REST status of partial must be inspected rather than interpreted as
     proof of complete source acquisition. Full initial/final rendered HTML
     is stored separately from bounded exploratory JSON snapshots.
