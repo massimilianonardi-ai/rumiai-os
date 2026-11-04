@@ -88,7 +88,10 @@ OUTPUT
       rest/targets/target-NNN/frame-context.json
                        Private per-frame storage keys, permission policy,
                        origin trials, isolation, resource tree, PWA manifest
-                       and available bucket names.
+                       and per-frame bucket names. Secondary distinct keys
+                       are queried in observed default execution contexts;
+                       unavailable/ambiguous context identity stays partial,
+                       with no implicit bucket or isolated-world creation.
       rest/targets/target-NNN/storage-partitions/index.json
                        Bounded per-storageKey/default-or-named-bucket selection
                        outcomes, distinct from legacy origin-scoped archives.
