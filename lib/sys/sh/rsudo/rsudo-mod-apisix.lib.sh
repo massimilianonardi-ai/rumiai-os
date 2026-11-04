@@ -576,10 +576,15 @@ discovery_error()
 home=/usr/local/apisix
 candidate_count=0
 selected=
-if [ -f "$home/conf/nginx.conf" ] && [ -r "$home/conf/nginx.conf" ]
+if [ -f "$home/conf/nginx.conf" ] && [ -r "$home/conf/nginx.conf" ] &&
+   [ ! -L "$home/conf/nginx.conf" ]
 then
   candidate_count=1
   selected=host
+elif [ -e "$home/conf/nginx.conf" ] || [ -L "$home/conf/nginx.conf" ]
+then
+  discovery_error host-generated-config-unsafe
+  exit 53
 fi
 
 # A present but inaccessible Docker manager prevents claims of uniqueness.
@@ -604,16 +609,31 @@ then
       exit 47
     }
 
-    # Inspect only a conventional path inside this particular container.
-    # A failed probe does not prove that other nonstandard installations
-    # are absent, and cannot be elevated into deployment-wide discovery.
-    if docker exec "$id" sh -c \
-      'test -f /usr/local/apisix/conf/nginx.conf && test -r /usr/local/apisix/conf/nginx.conf' \
-      >/dev/null 2>&1
-    then
-      candidate_count=$((candidate_count + 1))
-      selected="docker $id"
-    fi
+    # A real negative result is different from a failed inspection.
+    # Docker exit failures, an absent shell and disappearing containers
+    # must never be interpreted as proof of an absent APISIX candidate.
+    docker exec "$id" sh -c '
+      file=/usr/local/apisix/conf/nginx.conf
+      if [ ! -e "$file" ] && [ ! -L "$file" ]; then exit 60; fi
+      if [ -f "$file" ] && [ -r "$file" ] && [ ! -L "$file" ]; then exit 0; fi
+      exit 61
+    ' >/dev/null 2>&1
+    probe_status=$?
+    case "$probe_status" in
+      0)
+        candidate_count=$((candidate_count + 1))
+        selected="docker $id"
+      ;;
+      60) : ;;
+      61)
+        discovery_error docker-generated-config-unsafe
+        exit 53
+      ;;
+      *)
+        discovery_error docker-probe-failed
+        exit 52
+      ;;
+    esac
   done <<RSUDO_APISIX_RUNNING_IDS
 $ids
 RSUDO_APISIX_RUNNING_IDS
@@ -661,7 +681,7 @@ rsudo_mod_apisix_runtime()
           rsudo sh -s -- /usr/local/apisix)
         status=$?
         [ "$status" -eq 0 ] || exit "$status"
-        printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=host\n%s\n' "$observation"
+        scope=host
       ;;
       'docker '*)
         container=${selected#docker }
@@ -679,13 +699,31 @@ rsudo_mod_apisix_runtime()
           rsudo docker exec -i "$container" sh -s -- /usr/local/apisix)
         status=$?
         [ "$status" -eq 0 ] || exit "$status"
-        printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=docker\ncontainer_id=%s\n%s\n' "$container" "$observation"
+        scope=docker
       ;;
       *)
         log error apisix runtime-discovery-result-invalid
         exit 50
       ;;
     esac
+
+    # A discovered configuration file is not evidence of a running master.
+    # The explicit selector intentionally retains its pidfile-missing result;
+    # zero-operand discovery must not turn that into a successful instance.
+    case "$observation" in
+      *'runtime_evidence=pidfile-and-master-args'*'runtime_identity=process-consistent-config-unverified'*) : ;;
+      *'runtime_evidence=pidfile-missing'*)
+        log error apisix runtime-discovered-master-unverified scope "$scope"
+        exit 51
+      ;;
+      *)
+        log error apisix runtime-discovery-observation-invalid scope "$scope"
+        exit 54
+      ;;
+    esac
+    printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=%s\n' "$scope"
+    [ "$scope" != docker ] || printf 'container_id=%s\n' "$container"
+    printf '%s\n' "$observation"
     exit 0
   fi
 
