@@ -208,6 +208,16 @@ EVIDENCE
                          optional human-readable Wasm disassembly remains
                          separate from the binary module
 
+    When the installed Chromium CDP protocol advertises the optional
+    Page.addScriptToEvaluateOnNewDocument runImmediately parameter, the same
+    document-start observer is also installed in execution contexts that
+    already exist at target attachment time, including existing iframe
+    contexts. The source has a per-document duplicate-installation guard.
+    Older Chromium retains a best-effort Runtime.evaluate fallback for the
+    main context only. cdp-capabilities.json records
+    protocol.pageScriptRunImmediatelySupported. A late observer cannot
+    reconstruct changes that happened before it was installed.
+
     The document-start page observer now also registers a MutationObserver
     on document before the root element is required. It observes newly
     discovered open ShadowRoots and wraps attachShadow when supported to
