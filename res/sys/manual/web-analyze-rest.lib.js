@@ -95,10 +95,11 @@ OUTPUT
                                 ReportingAPI). Separates schema support,
                                 already enabled target domains, actually
                                 observed CDP events and explicit uncollected
-                                capabilities. Animation/Media notifications
-                                are the only optional enabled observers in
-                                this slice; no timing, playback or tracing
-                                controls are used. A silent supported domain
+                                capabilities. Animation/Media/WebAudio
+                                notifications are the only optional enabled
+                                observers in this slice; no timing, playback,
+                                realtime audio reads or tracing controls are
+                                used. A silent supported domain
                                 is not counted as captured evidence.
     rest/worker-provenance/index.json
                                 Private index of ServiceWorker registration and
