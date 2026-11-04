@@ -72,7 +72,11 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     external proxy and redirects, and uses bounded timeouts.
 
     The client secret is a pre-existing, protected remote single-line file.
-    The token store is a new path in a directory not writable by group/others.
+    The secret file and its immediate parent directory must be owned by the
+    effective remote sudo identity. Selected remote credential/CA paths must
+    be absolute, contain no dot/dotdot or empty segments, and traverse no
+    symbolic links. The CA file may be public. The token store is a new
+    path in a private directory owned by that sudo identity.
     No password/token is accepted on argv, written to stdout or emitted in
     diagnostic messages. HTTP Basic is sent through a private curl header
     file; POST client secrets are read by curl from a private file. Stores

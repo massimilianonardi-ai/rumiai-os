@@ -219,10 +219,49 @@ auth_error()
 {
   printf 'keycloak.auth.%s\n' "$1" >&2
 }
+# Validate every component, not only the basename: otherwise a symlink
+# in /trusted/link/secret can bypass the final-file check.
+private_path()
+{
+  pathname=$1
+  case "$pathname" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+  case "$pathname" in
+    /|*/|*'//'*) return 1 ;;
+  esac
+  rest=${pathname#/}
+  prefix=
+  while [ -n "$rest" ]
+  do
+    component=${rest%%/*}
+    case "$component" in
+      ''|.|..) return 1 ;;
+    esac
+    prefix="$prefix/$component"
+    [ ! -L "$prefix" ] || return 1
+    if [ "$component" = "$rest" ]
+    then
+      break
+    fi
+    [ -d "$prefix" ] || return 1
+    rest=${rest#*/}
+  done
+}
+# A private file or its immediate parent must belong to the effective sudo
+# identity. Numeric ls -n and id -u are portable to supported POSIX hosts.
+private_owner()
+{
+  file_owner=$(LC_ALL=C ls -ldn "$1" 2>/dev/null | awk '{print $3}') || return 1
+  [ -n "$file_owner" ] && [ "$file_owner" = "$(id -u)" ]
+}
 private_directory()
 {
   directory=$1
+  private_path "$directory" || return 1
   [ -d "$directory" ] && [ ! -L "$directory" ] || return 1
+  private_owner "$directory" || return 1
   mode=$(LC_ALL=C ls -ld "$directory" 2>/dev/null) || return 1
   mode=${mode%% *}
   case "$mode" in
@@ -236,7 +275,9 @@ private_directory()
 private_file()
 {
   file=$1
+  private_path "$file" || return 1
   [ -f "$file" ] && [ -r "$file" ] && [ ! -L "$file" ] || return 1
+  private_owner "$file" || return 1
   parent=${file%/*}
   [ -n "$parent" ] || parent=/
   private_directory "$parent" || return 1
@@ -281,7 +322,8 @@ command -v jq >/dev/null 2>&1 || {
   exit 89
 }
 [ -z "$ca_file" ] || {
-  [ -f "$ca_file" ] && [ -r "$ca_file" ] && [ ! -L "$ca_file" ] || {
+  private_path "$ca_file" &&
+    [ -f "$ca_file" ] && [ -r "$ca_file" ] && [ ! -L "$ca_file" ] || {
     auth_error ca-file-unavailable
     exit 75
   }
