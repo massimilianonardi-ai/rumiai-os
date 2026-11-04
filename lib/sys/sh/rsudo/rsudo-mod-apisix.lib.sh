@@ -542,6 +542,14 @@ then
     runtime_error process-cmdline-empty
     exit 42
   }
+elif [ -d "/proc/$pid" ]
+then
+  runtime_error process-cmdline-unreadable
+  exit 43
+elif [ -r /proc/self/cmdline ]
+then
+  runtime_error process-unobservable
+  exit 37
 else
   runtime_error process-inspector-unavailable
   exit 36
