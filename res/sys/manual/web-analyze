@@ -62,8 +62,10 @@ OUTPUT
       cdp-wire.jsonl         Every CDP packet observed by the connected
                              debugger, including unhandled events and results
       network-details.jsonl  Private, full CDP HTTP/request and live-message details
-      resources.jsonl  Complete CDP response capture index
-      resources/       Decoded HTTP response body artifacts by content hash
+      resources.jsonl  CDP response outcome index, including redirects,
+                       recovery source, failures and incomplete streams
+      resources/       Complete response bodies and named .partial artifacts,
+                       all indexed with SHA-256 and size
       scripts.jsonl    Complete Debugger.scriptParsed source index
       scripts/         JavaScript source artifacts by content hash
       *.jsonl          Lifecycle, DOM, interaction, network and runtime events
@@ -117,9 +119,19 @@ OUTPUT
     endpoint and is not assumed to be identical to a remote specification.
     A missing schema is recorded as unavailable, not silently substituted.
 
-    Resource capture is best effort. CDP cannot always retrieve bodies from
-    redirects, active streams or evicted responses; inspect statuses instead
-    of assuming complete acquisition.
+    Per-target CDP response buffering and durable-message configuration
+    are attempted when available; their actual results, not assumptions,
+    are preserved in summary.json resourceCapture.networkConfiguration.
+    Completed responses use Network.getResponseBody first, followed by
+    read-only streamed response or frame-resource lookup where supported.
+    Only EventSource and text/event-stream responses are candidates for
+    progressive stream capture. A partial response is never labeled saved
+    as a full body. Each redirect hop is indexed with the next URL; raw
+    request/response events remain in the private CDP wire ledger.
+    Stream memory is capped at 16 MiB per request and 64 MiB total.
+    Resource capture remains best effort: redirects, active streams,
+    unsupported commands, process swaps and evictions can prevent a
+    complete body. Inspect per-request statuses and limits.
 
 ENVIRONMENT
     Requires an initialized m environment (nonempty m_ROOT and m_LIB_DIR),
