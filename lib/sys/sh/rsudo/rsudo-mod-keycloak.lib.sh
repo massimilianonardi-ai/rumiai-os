@@ -90,7 +90,7 @@ rsudo_mod_keycloak_update()
 # cross in argv. Token/secret bytes remain on the selected remote system.
 _rsudo_mod_keycloak_auth_invalid()
 {
-  log error keycloak auth-invalid-option field "$1"
+  log error keycloak auth-invalid-option
   return 64
 }
 
@@ -261,6 +261,17 @@ safe_curl()
   fi
 }
 
+curl_failure()
+{
+  stage=$1
+  code=$2
+  case "$code" in
+    28) auth_error "$stage-timeout"; exit 77 ;;
+    35|51|58|60|77|83|90) auth_error "$stage-tls-failed"; exit 75 ;;
+    *) auth_error "$stage-transport-failed"; exit 76 ;;
+  esac
+}
+
 command -v curl >/dev/null 2>&1 || {
   auth_error curl-unavailable
   exit 89
@@ -333,8 +344,7 @@ expected_token_endpoint="$expected_issuer/protocol/openid-connect/token"
 # No automatic redirect, proxy or origin change is permitted for credentials.
 discovery_code=$(safe_curl --output "$tmp/discovery" \
   --write-out '%{http_code}' --url "$discovery") || {
-  auth_error discovery-transport-failed
-  exit 76
+  curl_failure discovery "$?"
 }
 [ "$discovery_code" = 200 ] || {
   auth_error discovery-http-failed
@@ -402,8 +412,7 @@ case "$method" in
 esac
 
 http_code=$(safe_curl "$@" --url "$expected_token_endpoint") || {
-  auth_error token-transport-failed
-  exit 76
+  curl_failure token "$?"
 }
 case "$http_code" in
   200) : ;;
