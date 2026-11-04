@@ -45,7 +45,8 @@ OUTPUT
       README.md        Analysis index, evidence counts, confidentiality notice
       DOM.md           Observed routes, headings, forms and interactive controls
       NETWORK.md       Request catalog (bounded summary), resource outcomes
-      SCRIPTS.md       Compiled JS assets and best-effort React/Next evidence
+      SCRIPTS.md       Compiled JS/Wasm archive kind, source-map provenance
+                       and best-effort React/Next evidence
       FLOWS.md         Mermaid diagram and table of observed scroll transitions
       LIMITATIONS.md   Coverage limits, missing resource outcomes and warnings
       evidence-integrity.json
