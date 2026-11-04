@@ -193,3 +193,44 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     This new auth interface does not replace any of the 16 legacy forwarding
     functions documented above. Calling their legacy forms still carries
     their original unsafe-input and error-model limitations.
+
+
+K04 PRIVATE ADMIN REST BEARER TRANSPORT PROBE
+
+    _rsudo_mod_keycloak_admin_transport_probe
+        --server HTTPS-BASE-URL --issuer-realm ISSUING-REALM
+        --target-realm TARGET-REALM
+        --token-file ABSOLUTE-REMOTE-EXISTING-STORE
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    This underscore-prefixed internal function is a K04 transport and
+    authorization boundary test, not a new public administrative command.
+    The regular rsudo keycloak request public interface belongs to K05
+    and is NOT implemented here. This private probe performs exactly one
+    GET of BASE/admin/realms/{URL-encoded-target-realm}, never an arbitrary
+    URL/method/body/query or a modification. It uses existing rsudo SSH/sudo
+    transport, reads the existing access_token from a private remote file,
+    validates RFC 6750 bearer syntax, and creates a private curl header file.
+    Tokens do not appear in command arguments, stdout or diagnostics.
+
+    The selected HTTPS Keycloak base and issuing realm are explicit. The
+    issuer is compared with trusted OIDC discovery. Remote CA verification,
+    redirects/proxies, timeouts, token-file ancestry/owner/mode checks and
+    exact selected-realm JSON response identity are enforced. Successful
+    output is intentionally ONLY:
+        {"http_status":200,"authorized":true,"body_suppressed":true}
+    The Admin REST body can contain private realm configuration and is
+    never forwarded or logged by this K04 probe. A 401 (invalid/expired
+    token) exits 79, 403 (insufficient rights) exits 80, 404 (unavailable
+    or absent resource) exits 81. TLS, timeout, trust, malformed response,
+    and other HTTP failures use the corresponding existing public failure
+    categories. A successful GET proves only the selected realm permission
+    observed by that request, not broader administrative capability.
+
+    This read-only proof has no caller-facing generic request contract.
+    K05 must separately implement the complete method/path/query/body and
+    byte-preserving response semantics, version/capability gating and safe
+    handling of known secret-bearing resources before any general public
+    Admin REST request is exposed. Other K04 authentication and sender-
+    constrained token modes remain pending. Do not use this probe as an
+    unsupported backdoor for arbitrary administration.
