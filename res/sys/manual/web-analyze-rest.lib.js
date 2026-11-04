@@ -25,7 +25,32 @@ PUBLIC FUNCTIONS
         artifact outcomes rather than silently synthesized as success.
         Filesystem failures propagate to the caller.
 
+    auditWebAnalyzeEvidence(directory, options = {})
+        directory   Root private run directory after the native CDP session
+                    has finalized summary.json and all archive streams.
+        options     Optional {write: boolean, interrupted: boolean}.
+                    write=true creates evidence-integrity.json once with
+                    private permissions; the default read-only invocation
+                    returns the same reconciliation without modifying files.
+        Returns a ledger of independently checked file digests, expected
+        sizes, source outcomes, JSONL parse/sequence checks, per-target
+        and per-domain statuses and reconciliation discrepancies.
+        Statuses are saved, partial, failed, interrupted, inapplicable and
+        unsupported, with private file paths but no copied response contents.
+        IndexedDB pages, Cache Storage response bodies and CSS sources are
+        verified recursively against their own referenced SHA-256/size.
+        Re-audit read-only after evidence tampering detects missing, altered
+        or permission-exposed files rather than trusting a previous manifest.
+
+        A successfully read file does not prove its contents are authentic;
+        hash agreement proves only agreement with its saved index. Some
+        browser events can be missing before debugger attachment. A captured
+        REST manifest may still have partial network, DOM or storage coverage.
+        Integrity status is not a universal page-reconstruction certificate.
+
 OUTPUT
+    evidence-integrity.json     Post-finalization verified index/file ledger
+                                and per-target/per-domain aggregate statuses
     rest/manifest.json          Capture ledger: status, per-artifact failures
     rest/README.md              Human-readable evidence index
     rest/target-graph-initial.json
@@ -94,6 +119,11 @@ SECURITY
     browser profiles without reviewing their contents.
 
 LIMITATIONS
+    Event listener groups with failed CDP subcalls, stylesheet source failures,
+    local/session storage subfailures and interrupted rest collection are now
+    represented as partial/interrupted outcomes rather than as saved solely
+    because their index file could be written.
+
     IndexedDB values use CDP deep serialization where supported; some complex
     browser objects may not be represented byte-for-byte. Unavailable
     values or failed requests are marked partial. Cache Storage bodies are
