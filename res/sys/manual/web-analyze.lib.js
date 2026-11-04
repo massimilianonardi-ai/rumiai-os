@@ -181,10 +181,13 @@ EVIDENCE
                          separate partialBody metadata when available
       resources/         CDP-decoded complete or explicitly partial bodies,
                          stored by content hash with source extensions
-      scripts.jsonl      parsed-script metadata, source availability,
-                         SHA-256 and pathname
-      scripts/           JavaScript sources from Debugger.getScriptSource,
-                         including dynamically compiled or inline scripts
+      scripts.jsonl      parsed-script metadata (script language, context,
+                         compilation hash, module flag, source-map reference),
+                         archive kind, SHA-256, availability and pathname
+      scripts/           JavaScript source text and, where CDP returns it,
+                         binary WebAssembly bytecode from getScriptSource;
+                         optional human-readable Wasm disassembly remains
+                         separate from the binary module
 
     The document-start page observer now also registers a MutationObserver
     on document before the root element is required. It observes newly
@@ -244,7 +247,15 @@ EVIDENCE
     identical bodies may share a content-addressed file. CDP can expose
     bodies from cache/service workers, but cannot guarantee bytes for all
     network activity, streaming requests, WebSocket traffic or response
-    bodies evicted before retrieval. The saved bytes are the body returned
+    bodies evicted before retrieval. Some Chromium versions may provide
+    only textual WebAssembly disassembly rather than bytecode; this is
+    labelled wasm-text-only with bytecodeStatus=unavailable and does not
+    certify the original binary. A saved Wasm bytecode artifact uses the
+    exact CDP base64-decoded bytes with a separate content digest.
+    Source-map URLs from scriptParsed remain reference metadata; the
+    companion rest collector may resolve inline data or already archived
+    map bodies without new browser/network requests.
+    The saved bytes are the body returned
     by CDP (after transport/content decoding where applicable), not a raw
     packet capture. JavaScript compilation metadata is captured for
     parsed scripts, but this does not itself enumerate registered event
