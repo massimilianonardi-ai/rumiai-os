@@ -84,6 +84,7 @@ OUTPUT
                        to already archived browser Network responses, bodies
                        and frame resource tree. No fetches or install attempts;
                        not-observed references and worker scope remain explicit.
+                       Correlation is by exact URL, not proof of shared request ID.
       rest/targets/target-NNN/frame-context.json
                        Private per-frame storage keys, permission policy,
                        origin trials, isolation, resource tree, PWA manifest
