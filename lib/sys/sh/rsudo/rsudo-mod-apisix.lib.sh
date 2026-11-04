@@ -455,3 +455,83 @@ rsudo_mod_apisix_inspect()
 
   printf 'configured_mode=%s\nconfiguration_evidence=on-disk\nruntime_identity=unverified\nmutation_readiness=not-established\n' "$_rsudo_mod_apisix_selected"
 )
+
+# Read-only evidence from APISIX's nginx pidfile and master process.
+# APISIX 3.16/3.19 CLI writes logs/nginx.pid and starts OpenResty using
+# -p <home> -c <home>/conf/nginx.conf. This cannot prove the source
+# config.yaml/-c profile used by the running gateway.
+rsudo_mod_apisix_runtime()
+(
+  [ "$#" -eq 1 ] || {
+    log error apisix runtime-invalid-arguments count "$#"
+    exit 30
+  }
+  case "$1" in
+    /*) : ;;
+    *) log error apisix runtime-invalid-home; exit 31 ;;
+  esac
+
+  RSUDO_INTERACTIVE=
+  rsudo sh -s -- "$1" <<'RSUDO_APISIX_RUNTIME_REMOTE'
+home=$1
+
+runtime_error()
+{
+  printf 'apisix.runtime.%s\n' "$1" >&2
+}
+
+while [ "$home" != / ] && [ "${home%/}" != "$home" ]
+do
+  home=${home%/}
+done
+
+[ "$home" != / ] && [ -d "$home" ] &&
+  [ -f "$home/conf/nginx.conf" ] && [ -r "$home/conf/nginx.conf" ] || {
+  runtime_error generated-config-unavailable
+  exit 32
+}
+
+pidfile=$home/logs/nginx.pid
+if [ ! -e "$pidfile" ] && [ ! -L "$pidfile" ]
+then
+  printf 'runtime_evidence=pidfile-missing\nruntime_identity=unverified\nmutation_readiness=not-established\n'
+  exit 0
+fi
+[ -f "$pidfile" ] && [ -r "$pidfile" ] && [ ! -L "$pidfile" ] || {
+  runtime_error pidfile-unsafe-or-unreadable
+  exit 33
+}
+pid=$(cat "$pidfile") || {
+  runtime_error pidfile-read-failed
+  exit 34
+}
+case "$pid" in
+  ''|*[!0-9]*) runtime_error pidfile-invalid; exit 35 ;;
+esac
+[ "$pid" -gt 1 ] 2>/dev/null || {
+  runtime_error pidfile-invalid
+  exit 35
+}
+
+command -v ps >/dev/null 2>&1 || {
+  runtime_error process-inspector-unavailable
+  exit 36
+}
+# Keep process arguments private: they could contain unrelated credentials.
+process_title=$(LC_ALL=C ps -p "$pid" -o args= 2>/dev/null) || {
+  runtime_error process-unobservable
+  exit 37
+}
+case "$process_title" in
+  'nginx: master process '*|'openresty: master process '*) : ;;
+  *) runtime_error pid-not-nginx-master; exit 38 ;;
+esac
+case "$process_title" in
+  *" -p $home -c $home/conf/nginx.conf"*|*" -p $home/ -c $home/conf/nginx.conf"*)
+    : ;;
+  *) runtime_error master-prefix-mismatch; exit 39 ;;
+esac
+
+printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\nruntime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n' "$pid"
+RSUDO_APISIX_RUNTIME_REMOTE
+)
