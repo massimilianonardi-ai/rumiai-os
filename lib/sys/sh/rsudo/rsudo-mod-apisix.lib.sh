@@ -458,7 +458,8 @@ rsudo_mod_apisix_inspect()
 
 # Read-only evidence from APISIX's nginx pidfile and master process.
 # APISIX 3.16/3.19 CLI writes logs/nginx.pid and starts OpenResty using
-# -p <home> -c <home>/conf/nginx.conf. This cannot prove the source
+# -p <home> -c <home>/conf/nginx.conf. Docker also uses -p and -g.
+# Neither invocation proves the source
 # config.yaml/-c profile used by the running gateway.
 rsudo_mod_apisix_runtime()
 (
@@ -528,6 +529,11 @@ case "$process_title" in
 esac
 case "$process_title" in
   *" -p $home -c $home/conf/nginx.conf"*|*" -p $home/ -c $home/conf/nginx.conf"*)
+    : ;;
+  *" -p $home -g daemon off;"|*" -p $home/ -g daemon off;"|\
+  *" -p $home -g 'daemon off;'"|*" -p $home/ -g 'daemon off;'")
+    # The official APISIX Docker entrypoint uses the default generated
+    # conf/nginx.conf under -p and stays foreground using -g daemon off;.
     : ;;
   *) runtime_error master-prefix-mismatch; exit 39 ;;
 esac
