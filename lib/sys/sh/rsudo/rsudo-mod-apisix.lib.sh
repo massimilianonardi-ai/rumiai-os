@@ -266,9 +266,12 @@ then
       esac
     done
     home=$(CDPATH= cd -- "${apisix_cmd%/*}/.." 2>/dev/null && pwd -P) || home=
-    if [ -n "$home" ] && [ ! -r "$home/conf/config.yaml" ]
+    # A detected executable with an unresolved home must not silently fall
+    # back to a possibly unrelated installation.
+    if [ -z "$home" ] || [ ! -r "$home/conf/config.yaml" ]
     then
-      home=
+      mode_error launcher-installation-unresolved
+      exit 7
     fi
   fi
 fi
