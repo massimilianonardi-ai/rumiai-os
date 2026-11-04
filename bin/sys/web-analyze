@@ -344,6 +344,22 @@ function readJsonl(file)
   return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(line => JSON.parse(line));
 }
 
+function displayOrigin(value)
+{
+  try
+  {
+    const url = new URL(value);
+    if (!['http:', 'https:'].includes(url.protocol)) return '[non-http resource]';
+    return url.origin;
+  }
+  catch (_) {return '[inline or opaque resource]';}
+}
+function displayMethod(value)
+{
+  const method = String(value || '').toUpperCase();
+  return ['GET','POST','PUT','PATCH','DELETE','HEAD','OPTIONS']
+    .includes(method) ? method : 'OTHER';
+}
 function markdown(value)
 {
   return String(value ?? '').replace(/\s+/g, ' ').replace(/[|`]/g, '\\$&').slice(0, 250);
@@ -394,9 +410,9 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   catch (_) { /* Missing rest evidence is explicitly reported below. */ }
   const overview = [
     '# Web analysis — observed evidence', '',
-    `- Requested URL: ${url}`,
-    `- Initial document: ${first ? first.url : '(not observed)'}`,
-    `- Title: ${first ? markdown(first.title) : '(not observed)'}`,
+    `- Requested origin: ${displayOrigin(url)} (full URL retained in private evidence)`,
+    `- Initial document origin: ${first ? displayOrigin(first.url) : '(not observed)'}`,
+    '- Document title and page text: private; inspect the captured DOM evidence locally.',
     `- Observed DOM states: ${states.length}; distinct controls: ${knownControls.length}`,
     `- Automated scroll: ${scrollEnabled ? 'explicitly enabled' : 'not performed'}`,
     `- Initial DOM settlement: ${first?.settlement?.status || 'not observed'}`,
@@ -448,18 +464,19 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '', 'Full initial and final rendered HTML and their metadata are in',
     '`states/dom-rest-{initial,final}.{html,json}`.',
     '', '## Pages', '',
-    table([...pages].map(page => [page]), ['Observed URL']),
+    table([...pages].map(page => [displayOrigin(page)]), ['Observed origin']),
     '## Headings (first observed state)', '',
-    table((first?.headings || []).map(h => [h.level, h.text]), ['Level', 'Text']),
+    table((first?.headings || []).map(h => [h.level, '[private]', String(h.text || '').length]),
+    ['Level', 'Text', 'Length']),
     '## Interactive elements (up to first 500 distinct)', '',
-    table(knownControls.slice(0, 500).map(c => [c.tag, c.role || c.type, c.label,
-      c.href || c.action || '', c.first, c.last]),
+    table(knownControls.slice(0, 500).map(c => [c.tag, '[private]', '[private]',
+      '[private]', c.first, c.last]),
     ['Element', 'Role/type', 'Label', 'Target/action', 'First state', 'Last state']),
     `Total distinct inventoried elements: ${knownControls.length}.`, '',
     '## Forms (first observed state)', '',
-    table((first?.forms || []).map(f => [f.selector, f.method, f.action,
-      f.inputs.map(i => `${i.name || i.tag}:${i.type || i.tag}`).join(', ')]),
-    ['Selector', 'Method', 'Action', 'Input types']), ''
+    table((first?.forms || []).map(f =>
+      ['[private]', displayMethod(f.method), '[private]', f.inputs.length]),
+    ['Selector', 'Method', 'Action', 'Input count']), ''
   ];
   save(path.join(directory, 'DOM.md'), dom.join('\n') + '\n');
 
@@ -475,7 +492,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   const networkConfig = summary.resourceCapture?.networkConfiguration || [];
   const network = ['# Network and resource archive', '',
     'The browser/CDP observer saves responses it can retrieve; failures, redirects and active streams are explicit.',
-    'These URLs can include signed query parameters. Handle this document as confidential.', '',
+    'Raw resource URLs and signed parameters are retained in private JSONL evidence.', '',
     '## CDP response retention configuration', '',
     'Durable messages and stream capture depend on the running browser version;',
     'an unsupported or failed capability never implies that all bodies are preserved.',
@@ -490,8 +507,8 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     'A .partial artifact is not a complete HTTP response.', '',
     '## Resource types', '', table([...kinds], ['Type', 'Observed outcomes']),
     '## Request outcomes (up to 350; full catalog: resources.jsonl)', '',
-    table(requests.slice(0, 350).map(r => [r.resourceType, r.method, r.httpStatus,
-      r.status, r.url, r.file || '']), ['Type', 'Method', 'HTTP', 'Capture', 'URL', 'Saved artifact']),
+    table(requests.slice(0, 350).map(r => [r.resourceType, displayMethod(r.method), r.httpStatus,
+      r.status, displayOrigin(r.url), r.file || '']), ['Type', 'Method', 'HTTP', 'Capture', 'Origin', 'Saved artifact']),
     `Indexed resource outcomes: ${resources.length}; saved bodies: ${saved.length}; unresolved: ${resources.length - saved.length}.`, ''
   ];
   save(path.join(directory, 'NETWORK.md'), network.join('\n') + '\n');
@@ -503,11 +520,12 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     `Observed React DOM markers: ${Math.max(0, ...states.map(s => s.frameworks.reactDomMarkers))}.`,
     `Next.js __NEXT_DATA__ marker: ${states.some(s => s.frameworks.nextData) ? 'observed' : 'not observed'}.`,
     '', '## Best-effort runtime React component names', '',
-    components.size ? [...components].sort().map(name => '- `' + name.replace(/`/g, '') + '`').join('\n') :
+    components.size ? `Recovered component-name count: ${components.size}; names remain private.` :
       'No component names recovered through DOM-attached React Fiber markers.',
     '', '## Compiled scripts (first 250; full catalog: scripts.jsonl)', '',
-    table(scriptFiles.slice(0, 250).map(s => [s.url, s.bytes, s.file, s.sourceMapURL]),
-      ['Source URL', 'Bytes', 'Saved artifact', 'Source map URL']),
+    table(scriptFiles.slice(0, 250).map(s => [displayOrigin(s.url), s.bytes, s.file,
+      displayOrigin(s.sourceMapURL)]),
+      ['Source origin', 'Bytes', 'Saved artifact', 'Source-map origin']),
     `Parsed script events: ${scripts.length}; saved sources: ${scriptFiles.length}.`, ''
   ];
   save(path.join(directory, 'SCRIPTS.md'), js.join('\n') + '\n');
@@ -524,7 +542,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   const flows = ['# Observed transitions', '',
     'Edges represent actual passive scroll/observation steps; they are not inferred click navigation or verified business workflows.',
     '', '```mermaid', ...mermaid, '```', '',
-    table(transitions.map(t => [t.from, t.to, t.cause?.container, t.cause?.from, t.cause?.to,
+    table(transitions.map(t => [t.from, t.to, '[private]', t.cause?.from, t.cause?.to,
       t.newControls, t.urlChanged]),
     ['From', 'To', 'Scroll container', 'Scroll from', 'Scroll to', 'New controls', 'URL changed']),
     '## Candidate interaction surfaces', '',
@@ -584,7 +602,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     `- Browser-specific CDP schema retrieval: ${capabilities?.protocol?.status || 'unavailable'}.`,
     '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
     '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
-    '', '## Warnings', '', ...(warnings.length ? warnings.map(item => '- ' + item) : ['- None reported.']), ''
+    '', '## Warnings', '', `- Count: ${warnings.length}; private details remain in capture diagnostics.`, ''
   ];
   save(path.join(directory, 'LIMITATIONS.md'), limits.join('\n') + '\n');
 }
