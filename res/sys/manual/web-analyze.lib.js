@@ -66,6 +66,11 @@ PUBLIC FUNCTION
                         This introduces CSS profiling overhead; it does not
                         synthesize user input or change page style rules.
 
+        For page targets, the recorder also attempts version-gated
+        ServiceWorker.enable (passive event subscription only), archiving
+        registration/version events as raw private CDP packets. It never
+        requests worker start/stop/update or unregisters a registration.
+
         The function launches Chromium and instruments targets, then starts
         initial navigation without requiring the remote page to finish loading.
         It allows up to 1 second for a fast navigation acknowledgement; a slow
