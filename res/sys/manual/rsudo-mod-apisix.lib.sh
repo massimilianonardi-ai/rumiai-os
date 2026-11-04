@@ -52,11 +52,19 @@ PUBLIC FUNCTIONS
         APISIX installation. With no arguments, the resolver examines the
         conventional /usr/local/apisix/conf/nginx.conf location on the remote
         host and inside every running Docker container accessible through
-        the remote manager. It accepts exactly one readable generated-config
-        candidate and rechecks that instance's pidfile/master before success;
-        an inaccessible Docker listing, invalid manager records, no candidate
-        or multiple candidates fail closed (statuses 45-49). If Docker is
-        absent, an observed conventional host candidate may still be checked.
+        the remote manager. It accepts exactly one ordinary, readable,
+        non-symlink generated-config candidate; the real master must then
+        be observable, not merely have a configuration file on disk.
+        An inaccessible Docker listing, invalid manager records, no candidate
+        or multiple candidates fail closed (statuses 45-49). A failed
+        container probe, missing container shell or container disappearing
+        during the scan is an error (52), not proof of no APISIX candidate.
+        An unsafe/unreadable generated configuration fails with 53.
+        A discovered candidate lacking a verified master fails with 51;
+        unexpected observation output fails with 54. These status codes
+        apply to no-operand discovery; explicit runtime still preserves its
+        documented pidfile-missing observation. If Docker is absent, an
+        observed conventional host candidate may still be checked.
         This is best-effort conventional-root discovery, not a proof that
         nonstandard installations, external services or other namespaces
         do not exist. Docker candidates must support remote docker exec/sh.
