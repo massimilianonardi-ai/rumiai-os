@@ -22,18 +22,20 @@ DISPATCH
 PUBLIC FUNCTIONS
     rsudo_mod_apisix_runtime absolute-remote-apisix-home
         Read-only evidence for an explicitly selected APISIX installation.
-        Checks the generated conf/nginx.conf and logs/nginx.pid, then uses
-        remote ps to verify that the PID is an nginx/OpenResty master.
+        Checks generated conf/nginx.conf and logs/nginx.pid, then observes
+        the PID through POSIX ps or guarded Linux /proc/<pid>/cmdline where
+        minimal containers lack ps. A namespaced master may have PID 1.
+        Both paths require an nginx/OpenResty master process title.
         Supports both the APISIX CLI -p/-c invocation and the official
         Docker foreground -p/-g invocation for the generated default config.
-        The installation prefix must match the explicitly selected home. Never logs or emits
-        raw process arguments. Missing PID file reports
+        The installation prefix must match the explicitly selected home.
+        Raw process arguments are never printed or logged. Missing PID file reports
         runtime_evidence=pidfile-missing, runtime_identity=unverified and
         mutation_readiness=not-established, without claiming stopped state.
         A matching master reports runtime_evidence=pidfile-and-master-args,
         process_pid=<pid>, runtime_identity=process-consistent-config-unverified,
         mutation_readiness=not-established. Invalid/unsafe/mismatching
-        evidence fails non-zero with diagnostics (status 30-39).
+        evidence fails non-zero with branch-specific diagnostics (status 30-43).
         A PID file and process title are insufficient to prove the running
         config.yaml, custom -c, APISIX_PROFILE or container ownership.
         This operation never authorizes writes.
