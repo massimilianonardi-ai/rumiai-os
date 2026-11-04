@@ -84,7 +84,15 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
         --token-type-hint access_token|refresh_token
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
-    rsudo_mod_keycloak_auth acquire|status|revoke [corresponding-options...]
+    rsudo [rsudo-options] keycloak auth refresh
+        --server HTTPS-BASE-URL --issuer-realm REALM
+        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-secret-file ABSOLUTE-REMOTE-PATH
+        --token-file ABSOLUTE-REMOTE-EXISTING-STORE
+        --token-store SAME-ABSOLUTE-REMOTE-STORE
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    rsudo_mod_keycloak_auth acquire|refresh|status|revoke [corresponding-options...]
 
     Revoke uses the OIDC discovery revocation endpoint at the exact selected
     HTTPS issuer; a mismatched, absent, or redirected endpoint fails closed.
@@ -135,7 +143,7 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     are implemented with client-secret-basic/client-secret-post, plus protected
     token-store inspection. Other grants (browser code, device, CIBA, JWT,
     token exchange), and other client authenticators
-    (JWT signing, X509), refresh, introspection and Admin REST
+    (JWT signing, X509), introspection and Admin REST
     permission checks remain pending K04. They fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
     New general request and convenience APIs are pending K05/K06.
