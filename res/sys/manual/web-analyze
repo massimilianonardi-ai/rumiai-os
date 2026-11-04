@@ -10,7 +10,8 @@ DESCRIPTION
     waits for a heuristic document-settled condition before the initial
     full rendered-DOM snapshot, then acquires a read-only deep-rest phase
     (CDP DOM tree including Shadow DOM, layout/style snapshots, native MHTML,
-    CSSOM/style source, runtime element/storage details, listener locations,
+    CSSOM/style source, Accessibility trees with DOM backend identities,
+    runtime element/storage details, listener locations,
     frame targets, redacted network event metadata and archived responses).
     It inventories controls/forms/headings and best-effort React runtime
     markers without issuing user input. With the optional --scroll operand,
@@ -58,7 +59,9 @@ OUTPUT
                        Private chronological mutation data before scrolling
       rest/            Rest-phase indexed evidence, cookies, per-target
                        local/session/IndexedDB/Cache Storage, DOM/layout/CSS,
-                       listeners, runtime environment and native MHTML
+                       per-frame Accessibility trees with explicit support/
+                       failure outcomes, listeners, runtime environment and
+                       native MHTML
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
@@ -120,7 +123,7 @@ OUTPUT
     Rest artifact statuses now propagate individual listener, stylesheet,
     local/session storage and interrupted-capture failures. After Chromium
     exits, the command validates the evidence root against file contents,
-    expected SHA-256 and byte lengths, nested IndexedDB/cache/CSS indexes,
+    expected SHA-256 and byte lengths, nested IndexedDB/cache/CSS/AX indexes,
     DOM/CDP wire event counts, dropped logs and incomplete target coverage.
     The private evidence-integrity.json reports saved/partial/failed/
     interrupted/inapplicable/unsupported per domain and target. Readable
