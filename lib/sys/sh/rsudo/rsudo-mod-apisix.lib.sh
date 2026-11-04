@@ -645,6 +645,7 @@ rsudo_mod_apisix_runtime()
     log error apisix runtime-invalid-arguments count "$#"
     exit 30
   }
+  RSUDO_INTERACTIVE=
 
   # Zero-argument normal path: discover a unique conventional installation
   # candidate, recheck the real master in its selected namespace, and emit
@@ -693,7 +694,6 @@ rsudo_mod_apisix_runtime()
     *) log error apisix runtime-invalid-home; exit 31 ;;
   esac
 
-  RSUDO_INTERACTIVE=
   if [ "$#" -eq 1 ]
   then
     _rsudo_mod_apisix_runtime_remote_source | rsudo sh -s -- "$1"
