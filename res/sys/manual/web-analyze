@@ -83,8 +83,10 @@ OUTPUT
                        installed protocol methods, observed wire events and
                        already enabled targets for animation, media, audio,
                        WebRTC, tracing, background and reporting domains.
-                       Does not activate, trace or profile anything; schema
-                       availability alone is never recorded as captured data.
+                       Enables only passive Animation/Media event notifications
+                       on page/iframe targets when supported. Does not alter
+                       playback or timing, run tracing or profile the page;
+                       schema availability is not counted as captured data.
       rest/worker-provenance/index.json
                        Private offline correlation of native CDP target/frame
                        lifetime events, worker script versions, service-worker
