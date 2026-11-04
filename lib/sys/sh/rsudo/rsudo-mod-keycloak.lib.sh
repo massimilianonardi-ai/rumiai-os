@@ -115,7 +115,7 @@ rsudo_mod_keycloak_auth()
   esac
 
   server= issuer= client= method= secret_file= token_store= token_file= ca_file=
-  auth_mode=
+  auth_mode= username= password_file=
   while [ "$#" -gt 0 ]
   do
     [ "$#" -ge 2 ] || {
@@ -132,6 +132,8 @@ rsudo_mod_keycloak_auth()
       --client-auth) method=$value ;;
       --auth-mode) auth_mode=$value ;;
       --client-secret-file) secret_file=$value ;;
+      --username) username=$value ;;
+      --password-file) password_file=$value ;;
       --token-store) token_store=$value ;;
       --token-file) token_file=$value ;;
       --ca-file) ca_file=$value ;;
@@ -144,10 +146,10 @@ rsudo_mod_keycloak_auth()
 
   case "$action" in
     acquire)
-      [ "$auth_mode" = client-credentials ] || {
-        log error keycloak auth-grant-unimplemented
-        exit 73
-      }
+      case "$auth_mode" in
+        client-credentials|password) : ;;
+        *) log error keycloak auth-grant-unimplemented; exit 73 ;;
+      esac
       case "$method" in
         client-secret-basic|client-secret-post) : ;;
         *) log error keycloak auth-client-method-unimplemented; exit 73 ;;
@@ -160,6 +162,22 @@ rsudo_mod_keycloak_auth()
         log error keycloak auth-missing-protected-files
         exit 70
       }
+      if [ "$auth_mode" = password ]
+      then
+        [ -n "$username" ] || {
+          log error keycloak auth-password-missing-username
+          exit 64
+        }
+        [ -n "$password_file" ] || {
+          log error keycloak auth-password-missing-secret-file
+          exit 70
+        }
+      else
+        [ -z "$username" ] && [ -z "$password_file" ] || {
+          log error keycloak auth-client-credentials-with-user-parameters
+          exit 64
+        }
+      fi
       ;;
     status)
       [ -n "$token_file" ] || {
@@ -167,14 +185,15 @@ rsudo_mod_keycloak_auth()
         exit 70
       }
       [ -z "$auth_mode" ] && [ -z "$method" ] &&
-        [ -z "$secret_file" ] && [ -z "$token_store" ] || {
+        [ -z "$secret_file" ] && [ -z "$token_store" ] &&
+        [ -z "$username" ] && [ -z "$password_file" ] || {
         log error keycloak auth-status-incompatible-options
         exit 64
       }
       ;;
   esac
 
-  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file"
+  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file"
   do
     [ -z "$selected" ] && continue
     case "$selected" in
@@ -203,7 +222,8 @@ rsudo_mod_keycloak_auth()
   # this operation requires normal non-interactive source delivery instead.
   RSUDO_INTERACTIVE=
   rsudo -- sh -s -- "$action" "$server" "$issuer" "$client" "$method" \
-    "$secret_file" "$token_store" "$token_file" "$ca_file" <<'KEYCLOAK_AUTH_REMOTE'
+    "$secret_file" "$token_store" "$token_file" "$ca_file" \
+    "$auth_mode" "$username" "$password_file" <<'KEYCLOAK_AUTH_REMOTE'
 action=$1
 server=$2
 issuer=$3
@@ -213,6 +233,9 @@ secret_file=$6
 token_store=$7
 token_file=$8
 ca_file=$9
+auth_mode=${10}
+username=${11}
+password_file=${12}
 
 umask 077
 auth_error()
@@ -349,6 +372,13 @@ private_file "$secret_file" || {
   auth_error client-secret-file-unavailable-or-insecure
   exit 70
 }
+if [ "$auth_mode" = password ]
+then
+  private_file "$password_file" || {
+    auth_error user-password-file-unavailable-or-insecure
+    exit 70
+  }
+fi
 parent=${token_store%/*}
 [ -n "$parent" ] || parent=/
 private_directory "$parent" || {
@@ -427,9 +457,45 @@ esac
   exit 70
 }
 
+case "$auth_mode" in
+  client-credentials) grant_type=client_credentials ;;
+  password) grant_type=password ;;
+  *) auth_error grant-internal-selection-invalid; exit 90 ;;
+esac
+
+if [ "$auth_mode" = password ]
+then
+  # Preserve spaces/punctuation in a single-line password without putting
+  # its bytes in the curl argv or a shell program. Reject NUL/control loss.
+  [ "$(wc -l < "$password_file")" -eq 1 ] 2>/dev/null || {
+    auth_error user-password-format-invalid
+    exit 70
+  }
+  password=$(cat "$password_file") || {
+    auth_error user-password-read-failed
+    exit 70
+  }
+  [ -n "$password" ] &&
+    [ "$(printf '%s\n' "$password" | wc -c)" -eq
+      "$(wc -c < "$password_file")" ] 2>/dev/null || {
+    auth_error user-password-bytes-invalid
+    exit 70
+  }
+  printf '%s' "$password" > "$tmp/password-data" || {
+    auth_error user-password-private-copy-failed
+    exit 87
+  }
+  unset password
+fi
+
 set -- --output "$tmp/response" --write-out '%{http_code}' \
   --header 'Accept: application/json' \
-  --data-urlencode 'grant_type=client_credentials'
+  --data-urlencode "grant_type=$grant_type"
+if [ "$auth_mode" = password ]
+then
+  set -- "$@" --data-urlencode "username=$username" \
+    --data-urlencode "password@$tmp/password-data"
+fi
 case "$method" in
   client-secret-basic)
     case "$client" in
@@ -523,6 +589,6 @@ rm -f "$staged" || {
   exit 88
 }
 staged=
-printf '{"stored":true,"grant":"client_credentials","server_validated":false}\n'
+printf '{"stored":true,"grant":"%s","server_validated":false}\n' "$grant_type"
 KEYCLOAK_AUTH_REMOTE
 )

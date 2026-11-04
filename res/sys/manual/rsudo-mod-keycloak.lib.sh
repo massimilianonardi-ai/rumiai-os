@@ -58,6 +58,21 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
+    rsudo [rsudo-options] keycloak auth acquire
+        --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode password
+        --username USERNAME --password-file ABSOLUTE-REMOTE-PATH
+        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-secret-file ABSOLUTE-REMOTE-PATH
+        --token-store ABSOLUTE-REMOTE-NEW-FILE
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    The password flow requires an explicitly configured Direct Access Grant
+    on the confidential Keycloak client. User password and client secret must
+    be separate protected remote single-line files ending in one newline.
+    Password text may contain spaces; no password value is passed through
+    shell/curl arguments or printed. Invalid user credentials return OAuth
+    grant status 72. This flow is never an implicit fallback.
+
     rsudo [rsudo-options] keycloak auth status
         --token-file ABSOLUTE-REMOTE-PATH
 
@@ -92,9 +107,10 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     jq, mktemp, base64 (for Basic), and standard utilities. A local
     Keycloak installation and remote m runtime are NOT required.
 
-    Only client credentials with client-secret-basic/client-secret-post and
-    protected token-store inspection are implemented here. Other grants
-    (browser code, device, password, CIBA, JWT, exchange), client auth
+    Client credentials and explicitly enabled Direct Access Grant/password
+    are implemented with client-secret-basic/client-secret-post, plus protected
+    token-store inspection. Other grants (browser code, device, CIBA, JWT,
+    token exchange), and other client authenticators
     (JWT signing, X509), refresh, revocation, introspection and Admin REST
     permission checks remain pending K04. They fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
