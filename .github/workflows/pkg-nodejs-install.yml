@@ -33,7 +33,26 @@ jobs:
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           ./m osarch set linux-x86_64
           RUMIAI_TEST_RUMIAI_OS_ROOT="$PWD" sh .nodejs-tests/tests/rumiai-os/pkg-repository-nodejs/contract.test
-          ./m pkg depend 'nodejs@v26.8.2!linux-x86_64'
+          if ! ./m pkg depend 'nodejs@v26.8.2!linux-x86_64'; then
+            ./m sh -c '
+              . "$m_LIB_DIR/sys/sh/core.lib.sh"
+              loadsyslib "pkg/repository/pkg-repository-nodejs"
+              repo="$m_STATE_SYS_DIR/sys/pkg/cache/catalog/v1/pkg/nodejs/linux-x86_64/repository"
+              printf "Node repository exists: "
+              test -d "$repo" && echo yes || echo no
+              printf "Node repository major: "
+              cat "$repo/major"
+              printf "Node index v26 line count: "
+              pkg_repository_list_versions "$repo" > /tmp/rumiai-node-releases.txt
+              status=$?
+              echo "list status=$status"
+              wc -l /tmp/rumiai-node-releases.txt
+              grep -Fx "v26.8.2" /tmp/rumiai-node-releases.txt || :
+              pkg_repository_resolve_version "$repo" "v26.8.2"
+              echo "exact resolve status=$?"
+            ' || :
+            exit 1
+          fi
           ./m pkg install 'nodejs@v26.8.2!linux-x86_64'
           ./m pkg default nodejs
           test "$(./m node --version)" = v26.8.2
