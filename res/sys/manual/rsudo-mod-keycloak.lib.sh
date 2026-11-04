@@ -76,7 +76,31 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     rsudo [rsudo-options] keycloak auth status
         --token-file ABSOLUTE-REMOTE-PATH
 
-    rsudo_mod_keycloak_auth acquire|status [corresponding-options...]
+    rsudo [rsudo-options] keycloak auth revoke
+        --server HTTPS-BASE-URL --issuer-realm REALM
+        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-secret-file ABSOLUTE-REMOTE-PATH
+        --token-file ABSOLUTE-REMOTE-EXISTING-STORE
+        --token-type-hint access_token|refresh_token
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    rsudo_mod_keycloak_auth acquire|status|revoke [corresponding-options...]
+
+    Revoke uses the OIDC discovery revocation endpoint at the exact selected
+    HTTPS issuer; a mismatched, absent, or redirected endpoint fails closed.
+    The token to revoke is selected explicitly from the protected JSON store
+    using --token-type-hint; its value never appears in curl argv, stdout,
+    or diagnostics. The confidential-client secret is read from a protected
+    remote file. An absent selected token fails status 73 without contacting
+    the revocation endpoint. Revoking a refresh token can also invalidate
+    client consent for that client; this is an explicit operator action.
+    On accepted HTTP 200, output is a nonsecret JSON acknowledgement with
+    revocation_requested=true and invalidity_verified=false. OAuth revocation
+    responses do not certify that the token existed or that every downstream
+    JWT resource server has stopped accepting it. The existing token store
+    is deliberately not removed or changed; auth status is still structural
+    and does not assert current token validity. Use an appropriately protected
+    caller-side process to retire any locally held token references.
 
     These new public operations invoke the existing rsudo SSH/sudo execution
     and curl/jq installed on the selected remote target. They require an
@@ -111,7 +135,7 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     are implemented with client-secret-basic/client-secret-post, plus protected
     token-store inspection. Other grants (browser code, device, CIBA, JWT,
     token exchange), and other client authenticators
-    (JWT signing, X509), refresh, revocation, introspection and Admin REST
+    (JWT signing, X509), refresh, introspection and Admin REST
     permission checks remain pending K04. They fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
     New general request and convenience APIs are pending K05/K06.

@@ -103,9 +103,9 @@ rsudo_mod_keycloak_auth()
   action=$1
   shift
   case "$action" in
-    acquire|status) : ;;
-    refresh|revoke)
-      log error keycloak auth-lifecycle-not-implemented action "$action"
+    acquire|status|revoke) : ;;
+    refresh)
+      log error keycloak auth-refresh-not-implemented
       exit 73
       ;;
     *)
@@ -115,7 +115,7 @@ rsudo_mod_keycloak_auth()
   esac
 
   server= issuer= client= method= secret_file= token_store= token_file= ca_file=
-  auth_mode= username= password_file=
+  auth_mode= username= password_file= token_type_hint=
   while [ "$#" -gt 0 ]
   do
     [ "$#" -ge 2 ] || {
@@ -136,6 +136,7 @@ rsudo_mod_keycloak_auth()
       --password-file) password_file=$value ;;
       --token-store) token_store=$value ;;
       --token-file) token_file=$value ;;
+      --token-type-hint) token_type_hint=$value ;;
       --ca-file) ca_file=$value ;;
       *)
         _rsudo_mod_keycloak_auth_invalid "$option"
@@ -146,6 +147,10 @@ rsudo_mod_keycloak_auth()
 
   case "$action" in
     acquire)
+      [ -z "$token_file" ] && [ -z "$token_type_hint" ] || {
+        log error keycloak auth-acquire-incompatible-token-selector
+        exit 64
+      }
       case "$auth_mode" in
         client-credentials|password) : ;;
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
@@ -179,6 +184,29 @@ rsudo_mod_keycloak_auth()
         }
       fi
       ;;
+    revoke)
+      [ -z "$auth_mode" ] && [ -z "$username" ] &&
+        [ -z "$password_file" ] && [ -z "$token_store" ] || {
+        log error keycloak auth-revoke-incompatible-options
+        exit 64
+      }
+      case "$method" in
+        client-secret-basic|client-secret-post) : ;;
+        *) log error keycloak auth-revoke-client-method-unsupported; exit 73 ;;
+      esac
+      [ -n "$issuer" ] && [ -n "$client" ] || {
+        log error keycloak auth-revoke-missing-client-or-issuer
+        exit 64
+      }
+      [ -n "$secret_file" ] && [ -n "$token_file" ] || {
+        log error keycloak auth-revoke-missing-protected-files
+        exit 70
+      }
+      case "$token_type_hint" in
+        access_token|refresh_token) : ;;
+        *) log error keycloak auth-revoke-token-hint-invalid; exit 64 ;;
+      esac
+      ;;
     status)
       [ -n "$token_file" ] || {
         log error keycloak auth-missing-token-file
@@ -186,7 +214,8 @@ rsudo_mod_keycloak_auth()
       }
       [ -z "$auth_mode" ] && [ -z "$method" ] &&
         [ -z "$secret_file" ] && [ -z "$token_store" ] &&
-        [ -z "$username" ] && [ -z "$password_file" ] || {
+        [ -z "$username" ] && [ -z "$password_file" ] &&
+        [ -z "$token_type_hint" ] || {
         log error keycloak auth-status-incompatible-options
         exit 64
       }
@@ -201,7 +230,7 @@ rsudo_mod_keycloak_auth()
       *) log error keycloak auth-nonabsolute-remote-file; exit 70 ;;
     esac
   done
-  if [ "$action" = acquire ]
+  if [ "$action" != status ]
   then
     case "$server" in
       https://?*) : ;;
@@ -223,7 +252,7 @@ rsudo_mod_keycloak_auth()
   RSUDO_INTERACTIVE=
   rsudo -- sh -s -- "$action" "$server" "$issuer" "$client" "$method" \
     "$secret_file" "$token_store" "$token_file" "$ca_file" \
-    "$auth_mode" "$username" "$password_file" <<'KEYCLOAK_AUTH_REMOTE'
+    "$auth_mode" "$username" "$password_file" "$token_type_hint" <<'KEYCLOAK_AUTH_REMOTE'
 action=$1
 server=$2
 issuer=$3
@@ -236,6 +265,7 @@ ca_file=$9
 auth_mode=${10}
 username=${11}
 password_file=${12}
+token_type_hint=${13}
 
 umask 077
 auth_error()
@@ -372,6 +402,13 @@ private_file "$secret_file" || {
   auth_error client-secret-file-unavailable-or-insecure
   exit 70
 }
+if [ "$action" = revoke ]
+then
+  private_file "$token_file" || {
+    auth_error revoke-token-store-unavailable-or-insecure
+    exit 70
+  }
+fi
 if [ "$auth_mode" = password ]
 then
   private_file "$password_file" || {
@@ -379,16 +416,19 @@ then
     exit 70
   }
 fi
-parent=${token_store%/*}
-[ -n "$parent" ] || parent=/
-private_directory "$parent" || {
-  auth_error token-store-directory-untrusted
-  exit 87
-}
-[ ! -e "$token_store" ] && [ ! -L "$token_store" ] || {
-  auth_error token-store-already-exists
-  exit 87
-}
+if [ "$action" = acquire ]
+then
+  parent=${token_store%/*}
+  [ -n "$parent" ] || parent=/
+  private_directory "$parent" || {
+    auth_error token-store-directory-untrusted
+    exit 87
+  }
+  [ ! -e "$token_store" ] && [ ! -L "$token_store" ] || {
+    auth_error token-store-already-exists
+    exit 87
+  }
+fi
 command -v mktemp >/dev/null 2>&1 || {
   auth_error mktemp-unavailable
   exit 89
@@ -414,6 +454,7 @@ encoded_issuer=$(jq -rn --arg realm "$issuer" '$realm | @uri') || {
 expected_issuer="$server/realms/$encoded_issuer"
 discovery="$expected_issuer/.well-known/openid-configuration"
 expected_token_endpoint="$expected_issuer/protocol/openid-connect/token"
+expected_revocation_endpoint="$expected_issuer/protocol/openid-connect/revoke"
 
 # No automatic redirect, proxy or origin change is permitted for credentials.
 discovery_code=$(safe_curl --output "$tmp/discovery" \
@@ -434,6 +475,14 @@ jq -e --arg expected "$expected_token_endpoint" \
   auth_error token-endpoint-mismatch
   exit 67
 }
+if [ "$action" = revoke ]
+then
+  jq -e --arg expected "$expected_revocation_endpoint" \
+    '.revocation_endpoint == $expected' "$tmp/discovery" >/dev/null 2>&1 || {
+    auth_error revoke-endpoint-mismatch
+    exit 67
+  }
+fi
 
 # Only a single newline-terminated graphic secret is accepted. This also
 # detects embedded NUL and control-byte tricks that shell read might discard.
@@ -457,11 +506,36 @@ esac
   exit 70
 }
 
-case "$auth_mode" in
-  client-credentials) grant_type=client_credentials ;;
-  password) grant_type=password ;;
-  *) auth_error grant-internal-selection-invalid; exit 90 ;;
-esac
+if [ "$action" = revoke ]
+then
+  # RFC 7009 accepts both kinds. An explicit choice prevents silently
+  # revoking a refresh token (which can also revoke client consent).
+  jq -e --arg kind "$token_type_hint" \
+    '.[$kind] | type == "string" and length > 0' \
+    "$token_file" >/dev/null 2>&1 || {
+    auth_error revoke-selected-token-missing
+    exit 73
+  }
+  jq -jr --arg kind "$token_type_hint" '.[$kind]' \
+    "$token_file" > "$tmp/revoke-token" || {
+    auth_error revoke-token-extraction-failed
+    exit 86
+  }
+  [ -s "$tmp/revoke-token" ] || {
+    auth_error revoke-token-empty
+    exit 86
+  }
+  set -- --output "$tmp/response" --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
+    --data-urlencode "token@$tmp/revoke-token" \
+    --data-urlencode "token_type_hint=$token_type_hint"
+else
+  case "$auth_mode" in
+    client-credentials) grant_type=client_credentials ;;
+    password) grant_type=password ;;
+    *) auth_error grant-internal-selection-invalid; exit 90 ;;
+  esac
+fi
 
 if [ "$auth_mode" = password ]
 then
@@ -488,13 +562,16 @@ then
   unset password
 fi
 
-set -- --output "$tmp/response" --write-out '%{http_code}' \
-  --header 'Accept: application/json' \
-  --data-urlencode "grant_type=$grant_type"
-if [ "$auth_mode" = password ]
+if [ "$action" = acquire ]
 then
-  set -- "$@" --data-urlencode "username=$username" \
-    --data-urlencode "password@$tmp/password-data"
+  set -- --output "$tmp/response" --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
+    --data-urlencode "grant_type=$grant_type"
+  if [ "$auth_mode" = password ]
+  then
+    set -- "$@" --data-urlencode "username=$username" \
+      --data-urlencode "password@$tmp/password-data"
+  fi
 fi
 case "$method" in
   client-secret-basic)
@@ -521,8 +598,16 @@ case "$method" in
     ;;
 esac
 
-http_code=$(safe_curl "$@" --url "$expected_token_endpoint") || {
-  curl_failure token "$?"
+if [ "$action" = revoke ]
+then
+  endpoint=$expected_revocation_endpoint
+  stage=revoke
+else
+  endpoint=$expected_token_endpoint
+  stage=token
+fi
+http_code=$(safe_curl "$@" --url "$endpoint") || {
+  curl_failure "$stage" "$?"
 }
 case "$http_code" in
   200) : ;;
@@ -550,6 +635,14 @@ case "$http_code" in
   5??) auth_error token-server-error; exit 85 ;;
   *) auth_error token-unexpected-http; exit 86 ;;
 esac
+if [ "$action" = revoke ]
+then
+  # RFC 7009 success is an accepted request, not proof that a previously
+  # issued JWT has stopped working everywhere. Do not modify the store.
+  printf '{"revocation_requested":true,"token_type_hint":"%s","invalidity_verified":false}\n' \
+    "$token_type_hint"
+  exit 0
+fi
 jq -e '(.access_token | type == "string" and length > 0) and
   (.token_type == "Bearer") and
   (.expires_in | type == "number" and . > 0)' \
