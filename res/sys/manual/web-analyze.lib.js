@@ -184,10 +184,13 @@ EVIDENCE
     flag is not used while a target is suspended. The observed result per
     target is in summary.json resourceCapture.networkConfiguration.
 
-    For Fetch/XHR/EventSource, Network.streamResourceContent is attempted
-    when advertised by the browser schema. Buffered data and subsequent
-    dataReceived chunks are preserved in order within a 16 MiB per-request
-    and 64 MiB total in-memory limit. Completed bodies prefer
+    Streaming is activated for EventSource requests and for responses
+    identified as text/event-stream, only when the browser advertises
+    Network.streamResourceContent. Ordinary Fetch/XHR responses are not
+    forcibly streamed: doing so can disturb completion and resource-body
+    recovery. Buffered data and subsequent dataReceived chunks are
+    preserved in order within a 16 MiB per-request and 64 MiB total
+    in-memory limit. Completed bodies prefer
     Network.getResponseBody; if unavailable, complete streamed data or
     read-only Page.getResourceContent for known frame resources may be used.
     No resource URLs are replayed or re-requested. Incomplete and aborted
