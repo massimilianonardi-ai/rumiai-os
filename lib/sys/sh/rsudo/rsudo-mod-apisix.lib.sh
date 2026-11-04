@@ -456,24 +456,11 @@ rsudo_mod_apisix_inspect()
   printf 'configured_mode=%s\nconfiguration_evidence=on-disk\nruntime_identity=unverified\nmutation_readiness=not-established\n' "$_rsudo_mod_apisix_selected"
 )
 
-# Read-only evidence from APISIX's nginx pidfile and master process.
-# APISIX 3.16/3.19 CLI writes logs/nginx.pid and starts OpenResty using
-# -p <home> -c <home>/conf/nginx.conf. Docker also uses -p and -g.
-# Neither invocation proves the source
-# config.yaml/-c profile used by the running gateway.
-rsudo_mod_apisix_runtime()
-(
-  [ "$#" -eq 1 ] || {
-    log error apisix runtime-invalid-arguments count "$#"
-    exit 30
-  }
-  case "$1" in
-    /*) : ;;
-    *) log error apisix runtime-invalid-home; exit 31 ;;
-  esac
-
-  RSUDO_INTERACTIVE=
-  rsudo sh -s -- "$1" <<'RSUDO_APISIX_RUNTIME_REMOTE'
+# The remote program is constant data and is streamed without interpolating
+# caller-selected paths or Docker IDs into executable shell source.
+_rsudo_mod_apisix_runtime_remote_source()
+{
+  cat <<'RSUDO_APISIX_RUNTIME_REMOTE'
 home=$1
 
 runtime_error()
@@ -571,6 +558,47 @@ esac
 
 printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\nruntime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n' "$pid"
 RSUDO_APISIX_RUNTIME_REMOTE
+}
+
+# Read-only APISIX master evidence. The optional immutable Docker ID targets
+# one explicitly selected container namespace through the remote manager.
+# This does not identify the source config or authorize any API mutation.
+rsudo_mod_apisix_runtime()
+(
+  [ "$#" -ge 1 ] && [ "$#" -le 2 ] || {
+    log error apisix runtime-invalid-arguments count "$#"
+    exit 30
+  }
+  case "$1" in
+    /*) : ;;
+    *) log error apisix runtime-invalid-home; exit 31 ;;
+  esac
+
+  RSUDO_INTERACTIVE=
+  if [ "$#" -eq 1 ]
+  then
+    _rsudo_mod_apisix_runtime_remote_source | rsudo sh -s -- "$1"
+  else
+    # Never let a user-supplied Docker option, mutable name or abbreviated
+    # ID choose the target. Docker's full 64-hex identity is immutable.
+    container=$2
+    case "$container" in
+      *[!0123456789abcdef]*)
+        log error apisix runtime-invalid-container-id
+        exit 44
+      ;;
+    esac
+    [ "${#container}" -eq 64 ] || {
+      log error apisix runtime-invalid-container-id
+      exit 44
+    }
+
+    # docker exec -i carries the static source on stdin. Its container ID
+    # resolves the process and mount namespaces; the program still checks
+    # the expected APISIX home, pidfile and master arguments inside them.
+    _rsudo_mod_apisix_runtime_remote_source |
+      rsudo docker exec -i "$container" sh -s -- "$1"
+  fi
 )
 
 # Advanced read-only Admin API request over the existing rsudo transport.
