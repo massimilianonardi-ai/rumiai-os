@@ -76,6 +76,27 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     rsudo [rsudo-options] keycloak auth status
         --token-file ABSOLUTE-REMOTE-PATH
 
+    rsudo [rsudo-options] keycloak auth status
+        --token-file ABSOLUTE-REMOTE-PATH
+        --server HTTPS-BASE-URL --issuer-realm REALM
+        --client-id ID --client-auth client-secret-basic|client-secret-post
+        --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    Without the complete remote server/client context, status is an offline
+    structural protected-file check and responds with stored=true and
+    server_validated=false. With that complete explicit context, status
+    requests the issuer's OIDC introspection_endpoint through verified HTTPS.
+    The stored access_token is sent via a private curl form-data file, and
+    confidential-client Basic/Post authentication uses the protected remote
+    secret file. An incomplete context is rejected, not silently downgraded.
+    Introspection emits only stored=true, server_validated=true and
+    active=true|false. No token, provider claims, credentials or response
+    body is echoed. active=false is a valid response, not a transport failure.
+    Active introspection proves only issuer-side state at observation time:
+    it does not confer realm administrator permission or attest every
+    downstream JWT cache. No implicit remote verification occurs.
+
     rsudo [rsudo-options] keycloak auth revoke
         --server HTTPS-BASE-URL --issuer-realm REALM
         --client-id ID --client-auth client-secret-basic|client-secret-post
@@ -106,8 +127,9 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     revocation_requested=true and invalidity_verified=false. OAuth revocation
     responses do not certify that the token existed or that every downstream
     JWT resource server has stopped accepting it. The existing token store
-    is deliberately not removed or changed; auth status is still structural
-    and does not assert current token validity. Use an appropriately protected
+    is deliberately not removed or changed; offline auth status remains
+    structural, while explicitly authorized online status introspects the
+    access token. Use an appropriately protected
     caller-side process to retire any locally held token references.
 
     These new public operations invoke the existing rsudo SSH/sudo execution
@@ -128,12 +150,18 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     diagnostic messages. HTTP Basic is sent through a private curl header
     file; POST client secrets are read by curl from a private file. Stores
     contain the provider's response JSON and have private 0600 permissions.
-    Store publication uses a same-directory exclusive hard link: if another
-    acquisition has already created the destination, the loser fails without
-    overwriting the winning token. This is an append-only new-store path, not
-    a concurrent refresh mechanism; no existing store is replaced. Status checks only structural
-    readability; server_validated=false does not mean a token is currently
-    valid, unexpired, or authorized for a target realm.
+    Acquisition publishes a new store using an exclusive same-directory
+    hard link: an existing destination is never overwritten by acquisition.
+    Refresh requires token-file and token-store to name the same existing
+    private store. It holds an exclusive per-store private directory lock
+    across protected input, HTTP refresh and same-directory atomic replacement.
+    It requires a returned successor refresh token and never prints tokens.
+    A pre-existing lock fails closed; stale locks need investigated operator
+    recovery. Cooperative callers serialize, but uncoordinated external
+    writers are not covered by a universal compare-and-swap guarantee.
+    A failure may leave an expired remote token and require manual re-login.
+    Offline status checks structural readability only; server_validated=false
+    is not evidence of validity, expiry or administrator permission.
 
     The remote host must provide POSIX sh, curl supporting @file headers,
     jq, mktemp, base64 (for Basic), and standard utilities. A local
@@ -143,8 +171,8 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     are implemented with client-secret-basic/client-secret-post, plus protected
     token-store inspection. Other grants (browser code, device, CIBA, JWT,
     token exchange), and other client authenticators
-    (JWT signing, X509), introspection and Admin REST
-    permission checks remain pending K04. They fail closed with status 73.
+    (JWT signing, X509) and Admin REST bearer transport and permission
+    checks remain pending K04. They fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
     New general request and convenience APIs are pending K05/K06.
 
