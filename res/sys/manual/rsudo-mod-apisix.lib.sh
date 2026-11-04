@@ -17,7 +17,7 @@ DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
-    rsudo apisix runtime absolute-remote-apisix-home [full-docker-container-id]
+    rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
     rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
@@ -47,8 +47,23 @@ PUBLIC FUNCTIONS
         Invalid arguments, credential paths/permissions/format, unsupported
         resource, port and curl availability have distinct status 44-51.
 
-    rsudo_mod_apisix_runtime absolute-remote-apisix-home [full-docker-container-id]
-        Read-only evidence for an explicitly selected APISIX installation.
+    rsudo_mod_apisix_runtime [absolute-remote-apisix-home [full-docker-container-id]]
+        Read-only process evidence for an automatically or explicitly selected
+        APISIX installation. With no arguments, the resolver examines the
+        conventional /usr/local/apisix/conf/nginx.conf location on the remote
+        host and inside every running Docker container accessible through
+        the remote manager. It accepts exactly one readable generated-config
+        candidate and rechecks that instance's pidfile/master before success;
+        an inaccessible Docker listing, invalid manager records, no candidate
+        or multiple candidates fail closed (statuses 45-49). If Docker is
+        absent, an observed conventional host candidate may still be checked.
+        This is best-effort conventional-root discovery, not a proof that
+        nonstandard installations, external services or other namespaces
+        do not exist. Docker candidates must support remote docker exec/sh.
+        Successful no-operand output prefixes the usual runtime fields with
+        discovery_evidence=unique-conventional-candidate and
+        discovered_scope=host|docker; the docker case also emits
+        container_id=<full-id>. No files or HTTP resources are changed.
         Checks generated conf/nginx.conf and logs/nginx.pid, then observes
         the PID through POSIX ps or guarded Linux /proc/<pid>/cmdline where
         minimal containers lack ps. A namespaced master may have PID 1.
@@ -73,9 +88,9 @@ PUBLIC FUNCTIONS
         A PID file and process title are insufficient to prove the running
         config.yaml, custom -c, APISIX_PROFILE or effective Admin listener.
         The optional Docker selector scopes observation through the remote
-        manager but is not proof of configuration provenance or permission
-        to change the gateway. It does not discover containers automatically,
-        and the observable runtime identity remains config-unverified.
+        manager; automatic conventional-root discovery does not establish
+        what the gateway actually loaded or which Admin listener it owns.
+        The observable runtime identity remains config-unverified.
         This operation never authorizes writes.
 
     rsudo_mod_apisix_inspect [remote-apisix-home [remote-config.yaml]]
