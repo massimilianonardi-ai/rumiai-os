@@ -13,7 +13,8 @@ DESCRIPTION
 PUBLIC FUNCTIONS
     captureRestEvidence(session, directory, options = {})
         session     Active startWebAnalyze() return value; must expose
-                    sendTarget, targets, styleSheets, networkActivity.
+                    sendTarget, targets, targetGraph, styleSheets,
+                    networkActivity.
         directory   Root private run directory (existing).
         options     Optional {interrupted: () => boolean} to stop between
                     target captures.
