@@ -78,6 +78,14 @@ OUTPUT
                        results are retained separately under rest/security/.
                        HTTP does not imply a TLS chain; unsupported commands,
                        missing observations and bounds remain explicit.
+      rest/worker-provenance/index.json
+                       Private offline correlation of native CDP target/frame
+                       lifetime events, worker script versions, service-worker
+                       registrations and observed default execution contexts.
+                       ServiceWorker.enable subscribes to updates only when the
+                       installed browser protocol supports it; no start/update,
+                       unregister or network fetch is triggered. Missing OOPIFs
+                       or unattached targets are not treated as complete.
       rest/pwa-resources/index.json
                        Private, read-only manifest/resource provenance: exact
                        observed manifest, start URL and icon references matched
