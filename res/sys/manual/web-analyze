@@ -87,8 +87,15 @@ OUTPUT
                        recovery source, failures and incomplete streams
       resources/       Complete response bodies and named .partial artifacts,
                        all indexed with SHA-256 and size
-      scripts.jsonl    Complete Debugger.scriptParsed source index
-      scripts/         JavaScript source artifacts by content hash
+      scripts.jsonl    Debugger.scriptParsed language/context/provenance and
+                       JavaScript or Wasm bytecode/source outcomes
+      scripts/         Content-addressed JavaScript source, WebAssembly
+                       binary bytecode or explicitly labelled disassembly
+      rest/source-maps/index.json
+                       Rest-boundary source map references and limitations
+      rest/source-maps/<sha>.bin
+                       Original recovered map bytes from inline data or
+                       responses already archived by native CDP
       *.jsonl          Lifecycle, DOM, interaction, network and runtime events
       summary.json     Recording totals and incomplete-resource counters
       profile/         Dedicated Chromium browsing profile for this run
@@ -141,6 +148,15 @@ OUTPUT
     A REST status of partial must be inspected rather than interpreted as
     proof of complete source acquisition. Full initial/final rendered HTML
     is stored separately from bounded exploratory JSON snapshots.
+
+    The rest collector also inventories compiled-script source map references
+    and resolves only data: maps or source maps already captured as complete
+    network response bodies. It performs no extra map downloads and cannot
+    certify maps never loaded by the page/browser. Source-map v3 payloads
+    retain sourceRoot, mappings, names and embedded sourcesContent in the
+    original bytes; index entries expose bounded source counts, original
+    script URL, full digest and clear unavailable/partial outcomes.
+    All source-map and Wasm binary files are private and independently audited.
 
     The command opts into Chromium CSS rule-usage tracking before initial
     navigation for available attached page/iframe targets. Tracking stops
