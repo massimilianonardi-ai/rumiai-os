@@ -676,9 +676,9 @@ command -v curl >/dev/null 2>&1 || {
 # prevent environment proxy settings, and redirects are never followed.
 # Curl's HTTP failure status is preserved (22), with no error-body leak.
 url=http://127.0.0.1:$port/apisix/admin/$resource
-curl -q --silent --show-error --fail --noproxy '*' --proxy '' \\
-  --proto '=http' --max-redirs 0 --connect-timeout 3 --max-time 15 \\
-  --header "@$credential_file" --header 'Accept: application/json' \\
+curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
+  --proto '=http' --max-redirs 0 --connect-timeout 3 --max-time 15 \
+  --header "@$credential_file" --header 'Accept: application/json' \
   --url "$url"
 RSUDO_APISIX_ADMIN_READ_REMOTE
 )
