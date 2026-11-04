@@ -644,7 +644,8 @@ async function main(args)
   let summary;
   try
   {
-    try {session = await startWebAnalyze({url: url.href, outputDir: directory, headless: true});}
+    try {session = await startWebAnalyze({url: url.href, outputDir: directory, headless: true,
+      cssRuleUsage: true});}
     catch (error) {throw failure(8, 'chromium-capture-start-failed', error.message);}
     states = await explore(session, directory, warnings, () => interrupted,
       captureRestEvidence, args[2] === '--scroll');
