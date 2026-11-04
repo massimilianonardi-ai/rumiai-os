@@ -65,6 +65,10 @@ OUTPUT
     rest/css-rule-usage/target-NNN.json
                                 Full used/unused CDP CSS rule ranges for
                                 targets that supported selector tracking
+    rest/css-rule-usage-error.json
+                                Private name/code/message/stack if initial
+                                selector coverage fails before its index is
+                                written; remaining rest evidence continues
     rest/dom-history-contexts.json
                                 Per-document Runtime observer counters, timing,
                                 install/hook status, truncations and failures
@@ -157,6 +161,9 @@ LIMITATIONS
     input. The manual-session recorder does not enable it by default.
     Missing target attachment, unsupported protocol methods and the
     64-target / 20-second collection limit are not silently completed.
+    If CSS rule-use collection itself throws, the collector records a
+    partial coverage result and a private diagnostic file without aborting
+    independent DOM, storage, network and accessibility acquisitions.
 
     The CSS pass uses the browser-specific protocol schema to check availability
     of CSS.getComputedStyleForNode, CSS.getMatchedStylesForNode and
