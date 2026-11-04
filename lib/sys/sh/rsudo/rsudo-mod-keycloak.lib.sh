@@ -225,13 +225,25 @@ rsudo_mod_keycloak_auth()
         log error keycloak auth-missing-token-file
         exit 70
       }
-      [ -z "$auth_mode" ] && [ -z "$method" ] &&
-        [ -z "$secret_file" ] && [ -z "$token_store" ] &&
+      [ -z "$auth_mode" ] && [ -z "$token_store" ] &&
         [ -z "$username" ] && [ -z "$password_file" ] &&
         [ -z "$token_type_hint" ] || {
         log error keycloak auth-status-incompatible-options
         exit 64
       }
+      if [ -n "$server" ] || [ -n "$issuer" ] || [ -n "$client" ] ||
+        [ -n "$method" ] || [ -n "$secret_file" ] || [ -n "$ca_file" ]
+      then
+        [ -n "$server" ] && [ -n "$issuer" ] && [ -n "$client" ] &&
+          [ -n "$method" ] && [ -n "$secret_file" ] || {
+          log error keycloak auth-status-incomplete-introspection-context
+          exit 64
+        }
+        case "$method" in
+          client-secret-basic|client-secret-post) : ;;
+          *) log error keycloak auth-status-client-method-unsupported; exit 73 ;;
+        esac
+      fi
       ;;
   esac
 
@@ -243,7 +255,7 @@ rsudo_mod_keycloak_auth()
       *) log error keycloak auth-nonabsolute-remote-file; exit 70 ;;
     esac
   done
-  if [ "$action" != status ]
+  if [ "$action" != status ] || [ -n "$server" ]
   then
     case "$server" in
       https://?*) : ;;
@@ -406,9 +418,14 @@ then
     auth_error token-store-invalid
     exit 86
   }
-  # Does not assert expiry, revocation, issuer or Admin REST authorization.
-  printf '{"stored":true,"server_validated":false}\n'
-  exit 0
+  if [ -z "$server" ]
+  then
+    # Does not assert expiry, revocation, issuer or Admin REST authorization.
+    printf '{"stored":true,"server_validated":false}\n'
+    exit 0
+  fi
+  # Explicit issuer/client context requests server-side introspection. The
+  # access token remains in a protected file and no provider claims are echoed.
 fi
 
 private_file "$secret_file" || {
@@ -473,6 +490,7 @@ expected_issuer="$server/realms/$encoded_issuer"
 discovery="$expected_issuer/.well-known/openid-configuration"
 expected_token_endpoint="$expected_issuer/protocol/openid-connect/token"
 expected_revocation_endpoint="$expected_issuer/protocol/openid-connect/revoke"
+expected_introspection_endpoint="$expected_issuer/protocol/openid-connect/token/introspect"
 
 # No automatic redirect, proxy or origin change is permitted for credentials.
 discovery_code=$(safe_curl --output "$tmp/discovery" \
@@ -498,6 +516,14 @@ then
   jq -e --arg expected "$expected_revocation_endpoint" \
     '.revocation_endpoint == $expected' "$tmp/discovery" >/dev/null 2>&1 || {
     auth_error revoke-endpoint-mismatch
+    exit 67
+  }
+fi
+if [ "$action" = status ]
+then
+  jq -e --arg expected "$expected_introspection_endpoint" \
+    '.introspection_endpoint == $expected' "$tmp/discovery" >/dev/null 2>&1 || {
+    auth_error introspection-endpoint-mismatch
     exit 67
   }
 fi
@@ -561,6 +587,21 @@ then
   }
 fi
 
+if [ "$action" = status ]
+then
+  jq -jr '.access_token' "$token_file" > "$tmp/introspection-token" || {
+    auth_error introspection-token-extraction-failed
+    exit 86
+  }
+  [ -s "$tmp/introspection-token" ] || {
+    auth_error introspection-token-empty
+    exit 86
+  }
+  set -- --output "$tmp/response" --write-out '%{http_code}' \
+    --header 'Accept: application/json' \
+    --data-urlencode "token@$tmp/introspection-token" \
+    --data-urlencode 'token_type_hint=access_token'
+fi
 if [ "$action" = revoke ]
 then
   # RFC 7009 accepts both kinds. An explicit choice prevents silently
@@ -665,6 +706,10 @@ if [ "$action" = revoke ]
 then
   endpoint=$expected_revocation_endpoint
   stage=revoke
+elif [ "$action" = status ]
+then
+  endpoint=$expected_introspection_endpoint
+  stage=introspection
 else
   endpoint=$expected_token_endpoint
   stage=token
@@ -698,6 +743,18 @@ case "$http_code" in
   5??) auth_error token-server-error; exit 85 ;;
   *) auth_error token-unexpected-http; exit 86 ;;
 esac
+if [ "$action" = status ]
+then
+  jq -e '(.active | type == "boolean")' "$tmp/response" >/dev/null 2>&1 || {
+    auth_error introspection-response-invalid
+    exit 86
+  }
+  jq -c '{stored:true, server_validated:true, active:.active}' "$tmp/response" || {
+    auth_error introspection-redacted-response-failed
+    exit 86
+  }
+  exit 0
+fi
 if [ "$action" = revoke ]
 then
   # RFC 7009 success is an accepted request, not proof that a previously
