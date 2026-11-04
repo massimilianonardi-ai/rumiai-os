@@ -560,15 +560,134 @@ printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\nruntime_identi
 RSUDO_APISIX_RUNTIME_REMOTE
 }
 
+# Read-only, best-effort discovery of APISIX's conventional installation.
+# Only observed generated-config candidates are considered. This cannot
+# enumerate arbitrary installation roots, container images or service managers.
+# All selection and ambiguity decisions happen on the remote host.
+_rsudo_mod_apisix_runtime_discover()
+(
+  RSUDO_INTERACTIVE=
+  rsudo sh -s <<'RSUDO_APISIX_RUNTIME_DISCOVER'
+discovery_error()
+{
+  printf 'apisix.runtime.%s\n' "$1" >&2
+}
+
+home=/usr/local/apisix
+candidate_count=0
+selected=
+if [ -f "$home/conf/nginx.conf" ] && [ -r "$home/conf/nginx.conf" ]
+then
+  candidate_count=1
+  selected=host
+fi
+
+# A present but inaccessible Docker manager prevents claims of uniqueness.
+# Absence of Docker is acceptable for an observed host candidate only.
+if command -v docker >/dev/null 2>&1
+then
+  ids=$(docker ps --quiet --no-trunc) || {
+    discovery_error docker-list-failed
+    exit 46
+  }
+  while IFS= read -r id
+  do
+    [ -n "$id" ] || continue
+    case "$id" in
+      *[!0123456789abcdef]*)
+        discovery_error docker-list-invalid-id
+        exit 47
+      ;;
+    esac
+    [ "${#id}" -eq 64 ] || {
+      discovery_error docker-list-invalid-id
+      exit 47
+    }
+
+    # Inspect only a conventional path inside this particular container.
+    # A failed probe does not prove that other nonstandard installations
+    # are absent, and cannot be elevated into deployment-wide discovery.
+    if docker exec "$id" sh -c \
+      'test -f /usr/local/apisix/conf/nginx.conf && test -r /usr/local/apisix/conf/nginx.conf' \
+      >/dev/null 2>&1
+    then
+      candidate_count=$((candidate_count + 1))
+      selected="docker $id"
+    fi
+  done <<RSUDO_APISIX_RUNNING_IDS
+$ids
+RSUDO_APISIX_RUNNING_IDS
+else
+  [ "$candidate_count" -gt 0 ] || {
+    discovery_error docker-unavailable
+    exit 45
+  }
+fi
+
+[ "$candidate_count" -gt 0 ] || {
+  discovery_error candidate-unresolved
+  exit 48
+}
+[ "$candidate_count" -eq 1 ] || {
+  discovery_error candidates-ambiguous
+  exit 49
+}
+printf '%s\n' "$selected"
+RSUDO_APISIX_RUNTIME_DISCOVER
+)
+
 # Read-only APISIX master evidence. The optional immutable Docker ID targets
 # one explicitly selected container namespace through the remote manager.
 # This does not identify the source config or authorize any API mutation.
 rsudo_mod_apisix_runtime()
 (
-  [ "$#" -ge 1 ] && [ "$#" -le 2 ] || {
+  [ "$#" -le 2 ] || {
     log error apisix runtime-invalid-arguments count "$#"
     exit 30
   }
+
+  # Zero-argument normal path: discover a unique conventional installation
+  # candidate, recheck the real master in its selected namespace, and emit
+  # discovery provenance only after successful process observation.
+  if [ "$#" -eq 0 ]
+  then
+    selected=$(_rsudo_mod_apisix_runtime_discover)
+    status=$?
+    [ "$status" -eq 0 ] || exit "$status"
+    case "$selected" in
+      host)
+        observation=$(_rsudo_mod_apisix_runtime_remote_source |
+          rsudo sh -s -- /usr/local/apisix)
+        status=$?
+        [ "$status" -eq 0 ] || exit "$status"
+        printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=host\n%s\n' "$observation"
+      ;;
+      'docker '*)
+        container=${selected#docker }
+        case "$container" in
+          *[!0123456789abcdef]*)
+            log error apisix runtime-discovery-result-invalid
+            exit 50
+          ;;
+        esac
+        [ "${#container}" -eq 64 ] || {
+          log error apisix runtime-discovery-result-invalid
+          exit 50
+        }
+        observation=$(_rsudo_mod_apisix_runtime_remote_source |
+          rsudo docker exec -i "$container" sh -s -- /usr/local/apisix)
+        status=$?
+        [ "$status" -eq 0 ] || exit "$status"
+        printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=docker\ncontainer_id=%s\n%s\n' "$container" "$observation"
+      ;;
+      *)
+        log error apisix runtime-discovery-result-invalid
+        exit 50
+      ;;
+    esac
+    exit 0
+  fi
+
   case "$1" in
     /*) : ;;
     *) log error apisix runtime-invalid-home; exit 31 ;;
