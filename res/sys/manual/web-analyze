@@ -71,6 +71,13 @@ OUTPUT
                        platform fonts and per-frame Accessibility trees with support/
                        failure outcomes, listeners, runtime environment and
                        native MHTML
+      rest/targets/target-NNN/frame-context.json
+                       Private read-only per-frame storage keys, permission
+                       policy, origin trials, isolation, page resources, PWA
+                       manifest and available bucket names. Missing CDP support
+                       and bounded/incomplete coverage remain explicit. OPFS
+                       support is probed without opening/creating its root;
+                       partition and bucket data recovery is still incomplete.
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
