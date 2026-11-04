@@ -71,8 +71,10 @@ PUBLIC FUNCTION
         registration/version events as raw private CDP packets. It never
         requests worker start/stop/update or unregisters a registration.
         For attached page/iframe targets, browser-schema-gated Animation.enable,
-        Media.enable and WebAudio.enable subscribe to naturally occurring
-        animation, media-player and audio-context/node events. Failed or
+        Media.enable, WebAudio.enable and Preload.enable subscribe to naturally
+        occurring animation, media, audio-context/node and browser speculation
+        rule/prefetch/prerender events. Preload.enable does not create a rule,
+        trigger a prefetch or navigate the page. Failed or
         unsupported observers are visible in targetGraph domains and are not
         treated as captured evidence. No animation seeking/pausing, playback
         control or WebAudio realtime-data acquisition is invoked.
