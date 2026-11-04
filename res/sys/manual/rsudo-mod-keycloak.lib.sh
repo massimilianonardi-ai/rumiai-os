@@ -100,7 +100,8 @@ K04 EARLY IMPLEMENTATION — SECURE SERVICE-ACCOUNT TOKEN STORE
     Relevant failures include 64 invalid invocation, 65 invalid HTTPS
     selection, 67 mismatched realm/issuer/discovery, 70 unsafe credential
     path, 71 client authentication rejected, 72 OAuth grant denied,
-    73 unimplemented/unsupported mode, 75 CA failure, 76 transport failure,
+    73 unimplemented/unsupported grant or client policy, 75 CA failure,
+    76 transport failure,
     80 forbidden, 83 throttled, 85 server error, 86 invalid protocol data,
     87 unsafe store/output, 89 missing remote prerequisite, 90 internal
     failure. Remote rsudo execution errors may retain their own status

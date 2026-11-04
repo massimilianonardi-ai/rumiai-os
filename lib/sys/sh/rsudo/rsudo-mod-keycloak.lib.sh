@@ -419,10 +419,20 @@ http_code=$(safe_curl "$@" --url "$expected_token_endpoint") || {
 case "$http_code" in
   200) : ;;
   400|401)
-    if jq -e '.error == "invalid_client"' "$tmp/response" >/dev/null 2>&1
+    if jq -e '.error == "invalid_client"' "$tmp/response" >/dev/null 2>&1 ||
+      { [ "$http_code" = 401 ] &&
+        jq -e '.error == "unauthorized_client"' "$tmp/response" >/dev/null 2>&1; }
     then
+      # Keycloak 26.7.3 also uses unauthorized_client / HTTP 401 for an
+      # invalid client secret, distinct from grant-policy HTTP 400.
       auth_error client-authentication-denied
       exit 71
+    fi
+    if jq -e '.error == "unauthorized_client" or .error == "unsupported_grant_type"' \
+      "$tmp/response" >/dev/null 2>&1
+    then
+      auth_error client-grant-disabled
+      exit 73
     fi
     auth_error oauth-grant-denied
     exit 72
