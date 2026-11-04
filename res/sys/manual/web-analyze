@@ -155,6 +155,14 @@ OUTPUT
       summary.json     Recording totals and incomplete-resource counters
       profile/         Dedicated Chromium browsing profile for this run
 
+    When Chromium's installed CDP schema supports runImmediately for
+    Page.addScriptToEvaluateOnNewDocument, observation is also installed
+    in existing execution contexts, including existing frames. A fallback
+    on older Chromium covers the main context only. The support outcome
+    is in cdp-capabilities.json under
+    protocol.pageScriptRunImmediatelySupported. Earlier missed mutations
+    remain unobservable and are never reconstructed from snapshots.
+
     The detailed document-start DOM observer also records node IDs stable
     inside each JavaScript context, insertion/removal history (even for
     nodes absent at final snapshot), callback-time markup/text and attribute
