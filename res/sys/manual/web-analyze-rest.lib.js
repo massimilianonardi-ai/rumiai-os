@@ -38,8 +38,8 @@ PUBLIC FUNCTIONS
         Statuses are saved, partial, failed, interrupted, inapplicable and
         unsupported, with private file paths but no copied response contents.
         IndexedDB pages, Cache Storage response bodies, CSS sources and
-        frame-scoped Accessibility tree responses are verified recursively
-        against their own referenced SHA-256/size.
+        frame-scoped Accessibility tree responses and the per-node CSS result
+        pages are verified recursively against their indexed SHA-256/size.
         Re-audit read-only after evidence tampering detects missing, altered
         or permission-exposed files rather than trusting a previous manifest.
 
@@ -94,6 +94,11 @@ OUTPUT
          accessibility/frame-NNN.json
                                 Unmodified CDP Accessibility.getFullAXTree
                                 nodes, including backendDOMNodeId mappings
+         css-nodes/index.json   CSS capability inventory and element counts,
+                                acquisition limits and partial outcomes
+         css-nodes/page-NNN.json
+                                Per-node computed/matched rules, CSS custom
+                                properties, pseudo rules and platform fonts
          layout.json            Current layout metrics
          event-listeners.json   CDP listeners for window/document/root subtree
     rest/resources-at-rest.jsonl  Indexed response outcomes before input
@@ -132,6 +137,18 @@ LIMITATIONS
     than being presented as complete. The method does not require enabling
     Accessibility, which could change ongoing browser performance behavior.
     AX responses may contain private accessible names and values.
+
+    The CSS pass uses the browser-specific protocol schema to check availability
+    of CSS.getComputedStyleForNode, CSS.getMatchedStylesForNode and
+    CSS.getPlatformFontsForNode. It traverses the CDP DOM tree including
+    available shadow and frame descendants, querying at most 384 element
+    identities per target, in bounded batches within a 20-second budget.
+    Unknown support, unsupported methods, per-node errors, interruptions and
+    unvisited elements are indexed explicitly. Applied/matched CSS, inherited
+    custom properties, pseudo selectors and resolved font details can expose
+    private page data. The pass does not force CSS pseudo states or animations.
+    A saved index describes the observed DOM at one instant, not every
+    unmounted/virtualized element or future CSS state.
 
     Event listener groups with failed CDP subcalls, stylesheet source failures,
     local/session storage subfailures and interrupted rest collection are now
