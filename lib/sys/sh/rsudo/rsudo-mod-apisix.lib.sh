@@ -609,8 +609,8 @@ then
       exit 47
     }
 
-    # Inspect a concrete running container. The actual foreground master,
-    # when it is namespace PID 1, can advertise its selected OpenResty -p
+    # Inspect a concrete running container. An observed master, including
+    # a background master under a different namespace PID, advertises its -p
     # prefix; a stale conventional nginx.conf must not override that prefix.
     # This is process evidence, NOT loaded-source or listener attribution.
     # Only the static shell program below executes; the process title is
@@ -618,25 +618,39 @@ then
     observed_home=$(docker exec "$id" sh -c '
       home=/usr/local/apisix
       from_master_prefix=0
+      # Inspect all observable container processes, not only PID 1. A
+      # background nginx/OpenResty master may run under a shell or supervisor.
+      # This is a Linux procfs best-effort observation, never loaded-source
+      # evidence; process arguments remain data rather than executable source.
       if [ -r /proc/1/cmdline ] && command -v tr >/dev/null 2>&1
       then
-        title=$(LC_ALL=C tr "\000" " " < /proc/1/cmdline) || exit 62
-        case "$title" in
-          "nginx: master process "*|"openresty: master process "*)
-            set -f
-            set -- $title
-            while [ "$#" -ge 2 ]
-            do
-              if [ "$1" = -p ]
-              then
-                home=$2
-                from_master_prefix=1
-                break
-              fi
-              shift
-            done
-          ;;
-        esac
+        master_count=0
+        for cmdline in /proc/[0-9]*/cmdline
+        do
+          [ -r "$cmdline" ] || continue
+          title=$(LC_ALL=C tr "\000" " " < "$cmdline") || exit 62
+          case "$title" in
+            "nginx: master process "*|"openresty: master process "*)
+              master_count=$((master_count + 1))
+              [ "$master_count" -eq 1 ] || exit 64
+              set -f
+              set -- $title
+              prefix_found=0
+              while [ "$#" -ge 2 ]
+              do
+                if [ "$1" = -p ]
+                then
+                  home=$2
+                  from_master_prefix=1
+                  prefix_found=1
+                  break
+                fi
+                shift
+              done
+              [ "$prefix_found" -eq 1 ] || exit 62
+            ;;
+          esac
+        done
       fi
       # Only safe absolute no-whitespace roots can be automatically selected.
       # Operators can still target other roots through the explicit API.
@@ -688,6 +702,10 @@ then
       63)
         discovery_error docker-master-generated-config-missing
         exit 58
+      ;;
+      64)
+        discovery_error docker-multiple-masters
+        exit 59
       ;;
       *)
         discovery_error docker-probe-failed
