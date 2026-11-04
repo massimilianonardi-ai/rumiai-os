@@ -476,7 +476,7 @@ then
     exit 70
   }
   [ -n "$password" ] &&
-    [ "$(printf '%s\n' "$password" | wc -c)" -eq
+    [ "$(printf '%s\n' "$password" | wc -c)" -eq \
       "$(wc -c < "$password_file")" ] 2>/dev/null || {
     auth_error user-password-bytes-invalid
     exit 70
