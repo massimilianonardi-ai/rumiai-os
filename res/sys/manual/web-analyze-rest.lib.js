@@ -125,7 +125,14 @@ OUTPUT
          frame-context.json     Private schema-gated per-frame storage keys,
                                 permissions policy, origin trials and security
                                 isolation, page resource tree, PWA manifest and
-                                best-effort bucket-name inventory.
+                                per-observed-frame named bucket discovery.
+                                Primary-frame names come from its page world;
+                                secondary distinct storage keys use previously
+                                observed default Runtime execution contexts via
+                                protocol-gated uniqueContextId/contextId, never
+                                a new isolated world or storageBuckets.open.
+                                Context absence, ambiguity and execution errors
+                                remain explicitly partial or unsupported.
          storage-partitions/index.json
                                 Separate bounded selections for observed frame
                                 storage keys and named/default buckets. Uses
