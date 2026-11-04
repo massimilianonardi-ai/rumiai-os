@@ -49,6 +49,10 @@ OUTPUT
                        Discovered/attached target and execution contexts
       rest/target-graph-final.json
                        Refreshed target hierarchy and unresolved attachments
+      rest/dom-history-contexts.json
+                       Instrumentation health, context/frame IDs and loss flags
+      rest/dom-mutations-at-rest.jsonl
+                       Private chronological mutation data before scrolling
       rest/            Rest-phase indexed evidence, cookies, per-target
                        local/session/IndexedDB/Cache Storage, DOM/layout/CSS,
                        listeners, runtime environment and native MHTML
@@ -61,6 +65,9 @@ OUTPUT
                              only present when discovery succeeds
       cdp-wire.jsonl         Every CDP packet observed by the connected
                              debugger, including unhandled events and results
+      dom-mutations.jsonl    Private detailed mutation chronology: added and
+                             removed nodes, text and attribute changes,
+                             Shadow DOM roots, execution contexts and frames
       network-details.jsonl  Private, full CDP HTTP/request and live-message details
       resources.jsonl  CDP response outcome index, including redirects,
                        recovery source, failures and incomplete streams
@@ -71,6 +78,17 @@ OUTPUT
       *.jsonl          Lifecycle, DOM, interaction, network and runtime events
       summary.json     Recording totals and incomplete-resource counters
       profile/         Dedicated Chromium browsing profile for this run
+
+    The detailed document-start DOM observer also records node IDs stable
+    inside each JavaScript context, insertion/removal history (even for
+    nodes absent at final snapshot), callback-time markup/text and attribute
+    old/current values. A supported attachShadow interception observes new
+    open and closed roots, including nested ones, but changes browser method
+    identity and cannot capture closed roots created before installation,
+    missed early instrumentation or every intermediate synchronous value.
+    Markup/text snapshots exceeding 256 Ki UTF-16 code units are clipped
+    with explicit flags, not silently treated as complete. These archives
+    are confidential and are not copied to privacy-redacted dom.jsonl.
 
     DOM quiet observation also watches discovered open Shadow DOM trees and
     readable same-origin iframe documents, but inaccessible frames cannot
