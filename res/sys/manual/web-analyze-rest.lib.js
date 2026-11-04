@@ -37,8 +37,9 @@ PUBLIC FUNCTIONS
         and per-domain statuses and reconciliation discrepancies.
         Statuses are saved, partial, failed, interrupted, inapplicable and
         unsupported, with private file paths but no copied response contents.
-        IndexedDB pages, Cache Storage response bodies and CSS sources are
-        verified recursively against their own referenced SHA-256/size.
+        IndexedDB pages, Cache Storage response bodies, CSS sources and
+        frame-scoped Accessibility tree responses are verified recursively
+        against their own referenced SHA-256/size.
         Re-audit read-only after evidence tampering detects missing, altered
         or permission-exposed files rather than trusting a previous manifest.
 
@@ -88,6 +89,11 @@ OUTPUT
          dom-tree.json          CDP DOM.getDocument(depth=-1,pierce=true)
          dom-snapshot.json      CDP DOM/layout/selected computed style table
          frame-tree.json        CDP frame tree
+         accessibility/index.json
+                                Per-frame full AX tree outcomes and frame IDs
+         accessibility/frame-NNN.json
+                                Unmodified CDP Accessibility.getFullAXTree
+                                nodes, including backendDOMNodeId mappings
          layout.json            Current layout metrics
          event-listeners.json   CDP listeners for window/document/root subtree
     rest/resources-at-rest.jsonl  Indexed response outcomes before input
@@ -119,6 +125,14 @@ SECURITY
     browser profiles without reviewing their contents.
 
 LIMITATIONS
+    Full accessibility trees are collected only when the browser-specific
+    protocol inventory exposes Accessibility.getFullAXTree. Each discovered
+    frame is queried with its own frame ID (up to 128 per target); failure,
+    missing frame discovery and capped enumeration remain partial rather
+    than being presented as complete. The method does not require enabling
+    Accessibility, which could change ongoing browser performance behavior.
+    AX responses may contain private accessible names and values.
+
     Event listener groups with failed CDP subcalls, stylesheet source failures,
     local/session storage subfailures and interrupted rest collection are now
     represented as partial/interrupted outcomes rather than as saved solely
