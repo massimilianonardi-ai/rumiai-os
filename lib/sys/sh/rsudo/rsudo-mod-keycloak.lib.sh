@@ -842,3 +842,184 @@ staged=
 printf '{"stored":true,"grant":"%s","server_validated":false}\n' "$grant_type"
 KEYCLOAK_AUTH_REMOTE
 )
+
+
+# K04 private read-only Admin Bearer transport proof. Not the public K05 API.
+# Only an explicitly selected realm GET is reachable; response body is secret.
+_rsudo_mod_keycloak_admin_transport_probe()
+(
+  server= issuer= realm= token_file= ca_file=
+  while [ "$#" -gt 0 ]
+  do
+    [ "$#" -ge 2 ] || { log error keycloak admin-probe-option-value; exit 64; }
+    key=$1 value=$2
+    shift 2
+    case "$key" in
+      --server) server=$value ;;
+      --issuer-realm) issuer=$value ;;
+      --target-realm) realm=$value ;;
+      --token-file) token_file=$value ;;
+      --ca-file) ca_file=$value ;;
+      *) log error keycloak admin-probe-unsupported-option option "$key"; exit 64 ;;
+    esac
+  done
+  [ -n "$issuer" ] && [ -n "$realm" ] && [ -n "$token_file" ] || {
+    log error keycloak admin-probe-missing-selection
+    exit 64
+  }
+  case "$server" in https://?*) : ;;
+    *) log error keycloak admin-probe-untrusted-server; exit 65 ;; esac
+  case "$server" in
+    *'?'*|*'#'*|*'@'*|*' '*|*'\'*|*'
+'*)
+      log error keycloak admin-probe-invalid-server-url
+      exit 65 ;;
+  esac
+  case "$server" in */) server=${server%/} ;; esac
+  for file in "$token_file" "$ca_file"
+  do
+    [ -n "$file" ] || continue
+    case "$file" in /*) : ;;
+      *) log error keycloak admin-probe-nonabsolute-path; exit 70 ;; esac
+  done
+
+  RSUDO_INTERACTIVE=
+  rsudo -- sh -s -- "$server" "$issuer" "$realm" "$token_file" "$ca_file" <<'KEYCLOAK_K04_ADMIN_REMOTE'
+server=$1 issuer=$2 realm=$3 token_file=$4 ca_file=$5
+umask 077
+admin_error() { printf 'keycloak.admin-probe.%s\n' "$1" >&2; }
+safe_path()
+{
+  case "$1" in /*) : ;; *) return 1 ;; esac
+  case "$1" in /|*/|*'//'*) return 1 ;; esac
+  remaining=${1#/}
+  prefix=
+  while [ -n "$remaining" ]
+  do
+    part=${remaining%%/*}
+    case "$part" in ''|.|..) return 1 ;; esac
+    prefix="$prefix/$part"
+    [ ! -L "$prefix" ] || return 1
+    [ "$part" = "$remaining" ] && break
+    [ -d "$prefix" ] || return 1
+    remaining=${remaining#*/}
+  done
+}
+owned_by_sudo()
+{
+  owner=$(LC_ALL=C ls -ldn "$1" 2>/dev/null | awk '{print $3}') || return 1
+  [ -n "$owner" ] && [ "$owner" = "$(id -u)" ]
+}
+private_token()
+{
+  safe_path "$1" && [ -f "$1" ] && [ -r "$1" ] &&
+    [ ! -L "$1" ] && owned_by_sudo "$1" || return 1
+  parent=${1%/*}
+  [ -n "$parent" ] || parent=/
+  safe_path "$parent" && [ -d "$parent" ] &&
+    owned_by_sudo "$parent" || return 1
+  permissions=$(LC_ALL=C ls -ld "$parent" 2>/dev/null) || return 1
+  permissions=${permissions%% *}
+  [ "$(printf '%s' "$permissions" | cut -c 6)" = '-' ] &&
+    [ "$(printf '%s' "$permissions" | cut -c 9)" = '-' ] || return 1
+  permissions=$(LC_ALL=C ls -ld "$1" 2>/dev/null) || return 1
+  permissions=${permissions%% *}
+  case "$permissions" in ????------) : ;; *) return 1 ;; esac
+}
+curl_safe()
+{
+  if [ -n "$ca_file" ]
+  then
+    curl -q --silent --show-error --noproxy '*' --proxy '' \
+      --proto '=https' --proto-redir '=https' --max-redirs 0 \
+      --connect-timeout 5 --max-time 25 --cacert "$ca_file" "$@"
+  else
+    curl -q --silent --show-error --noproxy '*' --proxy '' \
+      --proto '=https' --proto-redir '=https' --max-redirs 0 \
+      --connect-timeout 5 --max-time 25 "$@"
+  fi
+}
+curl_failed()
+{
+  case "$1" in
+    28) admin_error timeout; exit 77 ;;
+    35|51|58|60|77|83|90) admin_error tls-failed; exit 75 ;;
+    *) admin_error transport-failed; exit 76 ;;
+  esac
+}
+command -v curl >/dev/null 2>&1 || { admin_error curl-unavailable; exit 89; }
+command -v jq >/dev/null 2>&1 || { admin_error jq-unavailable; exit 89; }
+command -v mktemp >/dev/null 2>&1 || { admin_error mktemp-unavailable; exit 89; }
+private_token "$token_file" || {
+  admin_error token-file-unavailable-or-insecure
+  exit 70
+}
+[ -z "$ca_file" ] || {
+  safe_path "$ca_file" && [ -f "$ca_file" ] && [ -r "$ca_file" ] &&
+    [ ! -L "$ca_file" ] || { admin_error ca-file-unavailable; exit 75; }
+}
+# RFC 6750 b64token characters only, never HTTP control characters.
+jq -e '(.access_token | type == "string" and
+  test("^[A-Za-z0-9._~+/-]+=*$"))' "$token_file" >/dev/null 2>&1 || {
+  admin_error token-store-invalid
+  exit 86
+}
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/keycloak-admin.XXXXXXXX") || {
+  admin_error temp-unavailable
+  exit 87
+}
+trap 'rm -rf "$tmp"' 0
+trap 'exit 88' 1 2 3 15
+encoded_issuer=$(jq -rn --arg name "$issuer" '$name | @uri') || {
+  admin_error issuer-encoding-failed
+  exit 67
+}
+encoded_realm=$(jq -rn --arg name "$realm" '$name | @uri') || {
+  admin_error realm-encoding-failed
+  exit 64
+}
+expected="$server/realms/$encoded_issuer"
+discovery_code=$(curl_safe --output "$tmp/discovery" \
+  --write-out '%{http_code}' \
+  --url "$expected/.well-known/openid-configuration") || curl_failed "$?"
+[ "$discovery_code" = 200 ] || {
+  admin_error discovery-status
+  exit 67
+}
+jq -e --arg expected "$expected" '.issuer == $expected' \
+  "$tmp/discovery" >/dev/null 2>&1 || {
+  admin_error issuer-mismatch
+  exit 67
+}
+{
+  printf 'Authorization: Bearer '
+  jq -jr '.access_token' "$token_file"
+  printf '\n'
+} > "$tmp/header" || { admin_error header-unavailable; exit 87; }
+status=$(curl_safe --request GET --output "$tmp/response" \
+  --write-out '%{http_code}' --header "@$tmp/header" \
+  --header 'Accept: application/json' \
+  --url "$server/admin/realms/$encoded_realm") || curl_failed "$?"
+case "$status" in
+  200)
+    jq -e --arg expected "$realm" \
+      '(.realm | type == "string") and (.realm == $expected)' \
+      "$tmp/response" >/dev/null 2>&1 || {
+      admin_error realm-response-identity-mismatch
+      exit 86
+    }
+    # The resource can contain confidential configuration. Suppress it.
+    printf '{"http_status":200,"authorized":true,"body_suppressed":true}\n'
+    ;;
+  400) admin_error bad-request; exit 78 ;;
+  401) admin_error invalid-or-expired-bearer; exit 79 ;;
+  403) admin_error forbidden; exit 80 ;;
+  404) admin_error absent-or-disabled; exit 81 ;;
+  409) admin_error conflict; exit 82 ;;
+  429) admin_error throttled; exit 83 ;;
+  4??) admin_error other-client-failure; exit 84 ;;
+  5??) admin_error server-failure; exit 85 ;;
+  *) admin_error unexpected-http-status; exit 86 ;;
+esac
+KEYCLOAK_K04_ADMIN_REMOTE
+)
