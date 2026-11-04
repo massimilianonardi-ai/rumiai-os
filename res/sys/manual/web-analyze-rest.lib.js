@@ -104,11 +104,26 @@ OUTPUT
          frame-context.json     Private schema-gated per-frame storage keys,
                                 permissions policy, origin trials and security
                                 isolation, page resource tree, PWA manifest and
-                                best-effort bucket-name inventory. OPFS support
-                                is probed without retrieving the root.
-                                Missing methods, frame limits and failures
-                                remain explicit; no partition/bucket contents
-                                or OPFS files are certified complete.
+                                best-effort bucket-name inventory.
+         storage-partitions/index.json
+                                Separate bounded selections for observed frame
+                                storage keys and named/default buckets. Uses
+                                exact storageBucket CDP parameters only when
+                                present in installed Chromium /json/protocol.
+         storage-partitions/selection-NNN/indexeddb/
+                                Reuses complete per-store/page IndexedDB capture
+                                with explicit selection and item/time limits.
+         storage-partitions/selection-NNN/cache-storage/
+                                Reuses indexed Cache Storage body archiving.
+         storage-partitions/selection-NNN/opfs.json
+                                Read-only FileSystem.getDirectory metadata,
+                                bounded to 12 directories and depth 3 when
+                                available. Lists names/sizes but cannot recover
+                                file bytes. No page inputs, OPFS root creation,
+                                bucket writes or extra URL fetches are used.
+                                Unknown frame buckets, unsupported methods,
+                                interrupted reads and content limits are partial;
+                                origin-wide indexes remain separate.
          accessibility/index.json
                                 Per-frame full AX tree outcomes and frame IDs
          accessibility/frame-NNN.json
