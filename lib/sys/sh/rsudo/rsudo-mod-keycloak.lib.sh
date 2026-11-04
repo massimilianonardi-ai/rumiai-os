@@ -152,7 +152,7 @@ rsudo_mod_keycloak_auth()
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
       esac
       case "$method" in
-        client-secret-basic|client-secret-post) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
         *) log error keycloak auth-client-method-unimplemented; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
@@ -187,7 +187,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
         *) log error keycloak auth-refresh-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] &&
@@ -204,7 +204,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
         *) log error keycloak auth-revoke-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
@@ -240,7 +240,7 @@ rsudo_mod_keycloak_auth()
           exit 64
         }
         case "$method" in
-          client-secret-basic|client-secret-post) : ;;
+          client-secret-basic|client-secret-post|client-secret-jwt) : ;;
           *) log error keycloak auth-status-client-method-unsupported; exit 73 ;;
         esac
       fi
@@ -699,6 +699,59 @@ case "$method" in
     unset secret
     set -- "$@" --data-urlencode "client_id=$client" \
       --data-urlencode "client_secret@$tmp/secret-data"
+    ;;
+  client-secret-jwt)
+    # Keycloak client-secret-jwt with explicitly configured HS256 only.
+    # The HMAC secret, signed assertion and token remain out of argv/stdout.
+    command -v python3 >/dev/null 2>&1 || {
+      auth_error client-jwt-python-unavailable
+      exit 89
+    }
+    unset secret
+    python3 - "$secret_file" "$client" "$expected_issuer" \
+      > "$tmp/client-assertion" 2>/dev/null <<'K04_CLIENT_JWT_PYTHON'
+import base64
+import hashlib
+import hmac
+import json
+import secrets
+import sys
+import time
+
+def b64url(payload):
+    return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
+
+secret_file, client, audience = sys.argv[1:]
+with open(secret_file, "rb") as source:
+    raw = source.read()
+if not raw.endswith(b"\n") or len(raw) < 2 or raw.count(b"\n") != 1:
+    raise ValueError("invalid protected client secret")
+key = raw[:-1]
+now = int(time.time())
+header = {"alg": "HS256", "typ": "JWT"}
+claims = {
+    "iss": client,
+    "sub": client,
+    "aud": audience,
+    "jti": secrets.token_urlsafe(24),
+    "iat": now,
+    "nbf": now,
+    "exp": now + 30,
+}
+h = b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+p = b64url(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
+message = (h + "." + p).encode("ascii")
+signature = b64url(hmac.new(key, message, hashlib.sha256).digest())
+sys.stdout.write(h + "." + p + "." + signature)
+K04_CLIENT_JWT_PYTHON
+    jwt_status=$?
+    [ "$jwt_status" -eq 0 ] && [ -s "$tmp/client-assertion" ] || {
+      auth_error client-jwt-signing-failed
+      exit 90
+    }
+    set -- "$@" --data-urlencode "client_id=$client" \
+      --data-urlencode 'client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer' \
+      --data-urlencode "client_assertion@$tmp/client-assertion"
     ;;
 esac
 
