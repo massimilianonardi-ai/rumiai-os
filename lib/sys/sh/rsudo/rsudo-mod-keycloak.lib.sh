@@ -584,7 +584,8 @@ then
     --header 'Accept: application/json' \
     --data-urlencode "token@$tmp/revoke-token" \
     --data-urlencode "token_type_hint=$token_type_hint"
-else
+elif [ "$action" = acquire ]
+then
   case "$auth_mode" in
     client-credentials) grant_type=client_credentials ;;
     password) grant_type=password ;;
