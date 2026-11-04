@@ -3,7 +3,9 @@ NAME
 
 DESCRIPTION
     This module currently forwards its former public operations to the preserved legacy implementation. The forwarding is temporary; the new backend architecture is under development.
-    This interface does not yet provide the new multi-mode administration contract.
+    Most operations still use the legacy API. A new read-only configured-mode
+    discovery operation is available, but resource routing and standalone
+    mutation are not yet implemented.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
     Do not provide untrusted shell-sensitive values to legacy operations.
@@ -13,8 +15,26 @@ LOADING
 
 DISPATCH
     rsudo apisix <operation> [operands...]
+    rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_mode [remote-apisix-home [remote-config.yaml]]
+        Resolve the selected on-disk APISIX deployment configuration through
+        the remote APISIX LuaJIT/YAML parser and installed defaults. This is a
+        read-only operation. Prints exactly one configured backend:
+        traditional-admin, standalone-api, standalone-file-yaml,
+        standalone-file-json, or no-admin-data-plane.
+        The remote configuration is not proof of a running process's active
+        configuration. For custom -c or APISIX_PROFILE deployments, specify
+        the exact remote installation home and selected configuration path.
+        With no operands, the remote module attempts to identify an APISIX
+        installation using the installed apisix launcher, then a verified
+        conventional package location. Unresolvable or ambiguous cases fail.
+        Both optional path arguments, when present, must be absolute.
+        The operation needs a suitable remote LuaJIT with APISIX's lyaml and
+        apisix.cli.config Lua modules available. It does not expose keys or
+        print the configuration contents.
+
     rsudo_mod_apisix_set_auth_vars host port keycloak_host keycloak_port realm client_id client_secret [session_secret] — set legacy APISIX/Keycloak state and plugin templates
     rsudo_mod_apisix_json_string_or_array singular_key plural_key space_separated_values — emit a JSON fragment (legacy splitting rules)
     rsudo_mod_apisix_key — extract a configured Admin API key from a legacy fixed path
@@ -52,6 +72,12 @@ PUBLIC FUNCTIONS
     rsudo_mod_apisix_create_global_rule id plugin_fragment — create global plugin rule
 
 OUTPUT AND STATUS
+    Mode discovery returns status 0 with one configured-backend identifier.
+    Invalid argument count, non-absolute operands, remote lookup/parse failures
+    and unsupported configurations fail non-zero with branch-specific stderr
+    markers. The caller may not treat successful discovery as evidence of live
+    process state or safe authorization to modify the target.
+
     Legacy functions either set caller shell state or emit raw text/HTTP output.
     Remote functions require an initialized rsudo context and remote dependencies.
     Their status is the status emitted by the underlying legacy implementation;
