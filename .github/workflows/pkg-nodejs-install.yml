@@ -1,0 +1,42 @@
+name: Managed Node.js package and release-index verification
+
+on:
+  push:
+    paths:
+      - 'lib/sys/sh/pkg/repository/pkg-repository-nodejs.lib.sh'
+      - '.github/workflows/pkg-nodejs-install.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  nodejs:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out actual m / RumiAI product
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check out permanent Node.js adapter regression at exact revision
+        uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: ec55ced36b18d174b36b6fe88488e410ed8ae77a
+          path: .nodejs-tests
+          persist-credentials: false
+      - name: Verify release-index parsing and real managed Node install
+        shell: bash
+        run: |
+          set -euo pipefail
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          ./m osarch set linux-x86_64
+          RUMIAI_TEST_RUMIAI_OS_ROOT="$PWD" sh .nodejs-tests/tests/rumiai-os/pkg-repository-nodejs/contract.test
+          ./m pkg depend 'nodejs@v26.8.2!linux-x86_64'
+          ./m pkg install 'nodejs@v26.8.2!linux-x86_64'
+          ./m pkg default nodejs
+          test "$(./m node --version)" = v26.8.2
+          ./m node lib/sys/js/jsc.lib.js lib/sys/js/core/modules-js.json lib/sys/js/core/document2d-browser.generated.js
+          ./m node --check lib/sys/js/core/document2d-browser.generated.js
+          echo 'PASS: release index, package installation, m node and real jsc'
