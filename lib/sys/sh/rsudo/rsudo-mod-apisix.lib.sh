@@ -190,7 +190,7 @@ rsudo_mod_apisix_create_global_rule()
 # Returns one of:
 #   traditional-admin | standalone-api | standalone-file-yaml |
 #   standalone-file-json | no-admin-data-plane | unsupported
-rsudo_mod_apisix_mode()
+_rsudo_mod_apisix_backend()
 (
   if [ "$#" -gt 2 ]
   then
@@ -420,10 +420,9 @@ end
 RSUDO_APISIX_MODE_REMOTE
 )
 
-# This is the internal selection point for future resource operations. It
-# currently returns only a proven configured backend; mutation remains legacy
-# until the corresponding safe backend implementation has been validated.
-_rsudo_mod_apisix_backend()
+# The public read-only mode operation uses the same internal backend selector
+# intended for later mode-aware resource routing.
+rsudo_mod_apisix_mode()
 {
-  rsudo_mod_apisix_mode "$@"
+  _rsudo_mod_apisix_backend "$@"
 }
