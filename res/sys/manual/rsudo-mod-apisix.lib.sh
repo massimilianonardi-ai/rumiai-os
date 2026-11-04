@@ -77,7 +77,8 @@ PUBLIC FUNCTIONS
         master advertises -p but its generated nginx.conf is missing,
         discovery fails status 58, not as an absent container candidate.
         Multiple observed masters inside one container fail status 59
-        rather than selecting an arbitrary process.
+        rather than selecting an arbitrary process. A failed procfs
+        command-line read during the scan fails status 60.
         For a nonconventional Docker root the success prefix is:
         discovery_evidence=unique-process-prefix-candidate
         discovered_scope=docker
