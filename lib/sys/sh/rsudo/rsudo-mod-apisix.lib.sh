@@ -617,6 +617,7 @@ then
     # parsed as data and never interpolated into executable shell source.
     observed_home=$(docker exec "$id" sh -c '
       home=/usr/local/apisix
+      from_master_prefix=0
       if [ -r /proc/1/cmdline ] && command -v tr >/dev/null 2>&1
       then
         title=$(LC_ALL=C tr "\000" " " < /proc/1/cmdline) || exit 62
@@ -629,6 +630,7 @@ then
               if [ "$1" = -p ]
               then
                 home=$2
+                from_master_prefix=1
                 break
               fi
               shift
@@ -654,6 +656,7 @@ then
       file=$home/conf/nginx.conf
       if [ ! -e "$file" ] && [ ! -L "$file" ]
       then
+        [ "$from_master_prefix" -eq 0 ] || exit 63
         exit 60
       fi
       if [ -f "$file" ] && [ -r "$file" ] && [ ! -L "$file" ]
@@ -681,6 +684,10 @@ then
       62)
         discovery_error docker-process-prefix-invalid
         exit 56
+      ;;
+      63)
+        discovery_error docker-master-generated-config-missing
+        exit 58
       ;;
       *)
         discovery_error docker-probe-failed
