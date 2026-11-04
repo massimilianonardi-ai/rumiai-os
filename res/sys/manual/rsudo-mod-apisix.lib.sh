@@ -17,8 +17,25 @@ DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
+    rsudo apisix runtime absolute-remote-apisix-home
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_runtime absolute-remote-apisix-home
+        Read-only evidence for an explicitly selected APISIX installation.
+        Checks the generated conf/nginx.conf and logs/nginx.pid, then uses
+        remote ps to verify that the PID is an nginx/OpenResty master whose
+        visible -p/-c arguments match this installation. Never logs or emits
+        raw process arguments. Missing PID file reports
+        runtime_evidence=pidfile-missing, runtime_identity=unverified and
+        mutation_readiness=not-established, without claiming stopped state.
+        A matching master reports runtime_evidence=pidfile-and-master-args,
+        process_pid=<pid>, runtime_identity=process-consistent-config-unverified,
+        mutation_readiness=not-established. Invalid/unsafe/mismatching
+        evidence fails non-zero with diagnostics (status 30-39).
+        A PID file and process title are insufficient to prove the running
+        config.yaml, custom -c, APISIX_PROFILE or container ownership.
+        This operation never authorizes writes.
+
     rsudo_mod_apisix_inspect [remote-apisix-home [remote-config.yaml]]
         Calls the configured-mode resolver without attempting a mutation.
         Prints four stable key=value fields: configured_mode,
