@@ -151,6 +151,13 @@ EVIDENCE
                          message ledger, including unhandled notifications,
                          browser commands, target sessions and full results;
                          no filter by domain and no bounded diagnostic queue
+      dom-mutations.jsonl
+                         Sensitive ordered DOM mutation batches and shadow
+                         root attachment/observation, including stable node
+                         IDs scoped to one execution context, original text
+                         and markup snapshots for added/removed nodes,
+                         attribute old/current values, timing and frame
+                         provenance. This is separate from dom.jsonl.
       network-details.jsonl
                          unredacted CDP request/response metadata, headers,
                          available POST content (including best-effort CDP
@@ -166,6 +173,29 @@ EVIDENCE
                          SHA-256 and pathname
       scripts/           JavaScript sources from Debugger.getScriptSource,
                          including dynamically compiled or inline scripts
+
+    The document-start page observer now also registers a MutationObserver
+    on document before the root element is required. It observes newly
+    discovered open ShadowRoots and wraps attachShadow when supported to
+    observe both open and closed roots created after installation. Nodes
+    receive stable per-document IDs; CDP execution-context and frame IDs
+    distinguish different documents. Added/removed elements include a
+    callback-time markup snapshot. Character-data and attributes carry
+    previous values and callback-time current values. A node's current
+    value at callback is not proof of each intermediate value within a
+    mutation batch. Page instrumentation and attachShadow wrapping may
+    perturb behavior; closed roots created before the hook or through
+    a cached native function may not be observed.
+
+    Raw DOM values are stored in dom-mutations.jsonl through a separate,
+    synchronous 0600 evidence writer. Individual markup/text snapshots
+    are bounded to 256 Ki UTF-16 code units and the truncation counter
+    and per-field truncated flags must be inspected. Errors in this raw
+    writer are reported in summary.json resourceCapture.domHistory;
+    even a successful writer status does not prove the observer ran in
+    every frame, stayed installed, or observed unvisited application
+    states. Per-context rest snapshots and hook health are stored under
+    rest/dom-history-contexts.json.
 
     All wire packets received or sent on the connected debugger WebSocket
     are archived, including command results. The ledger cannot recover
@@ -208,7 +238,10 @@ EVIDENCE
     parsed scripts, but this does not itself enumerate registered event
     listeners or prove causality for DOM changes.
 
-    IMPORTANT: cdp-wire.jsonl contains unredacted CDP messages and may
+    IMPORTANT: dom-mutations.jsonl can include raw user-entered text,
+    passwords, authentication tokens and removed DOM content. It is
+    restricted private evidence, not an audit-friendly log.
+    cdp-wire.jsonl contains unredacted CDP messages and may
     include session keys, passwords, authorization headers, cookies, storage
     data and entire private responses. Handle it as highly confidential.
     network-details.jsonl can include authorization headers,
