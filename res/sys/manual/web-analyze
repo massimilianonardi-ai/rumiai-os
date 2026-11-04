@@ -72,12 +72,18 @@ OUTPUT
                        failure outcomes, listeners, runtime environment and
                        native MHTML
       rest/targets/target-NNN/frame-context.json
-                       Private read-only per-frame storage keys, permission
-                       policy, origin trials, isolation, page resources, PWA
-                       manifest and available bucket names. Missing CDP support
-                       and bounded/incomplete coverage remain explicit. OPFS
-                       support is probed without opening/creating its root;
-                       partition and bucket data recovery is still incomplete.
+                       Private per-frame storage keys, permission policy,
+                       origin trials, isolation, resource tree, PWA manifest
+                       and available bucket names.
+      rest/targets/target-NNN/storage-partitions/index.json
+                       Bounded per-storageKey/default-or-named-bucket selection
+                       outcomes, distinct from legacy origin-scoped archives.
+      rest/targets/target-NNN/storage-partitions/selection-NNN/
+                       Scoped IndexedDB records, Cache Storage metadata/body
+                       bytes and read-only CDP OPFS directory listings. File
+                       content bytes are not recovered from OPFS. Method/argument
+                       support is checked against the installed browser's
+                       /json/protocol; missing or truncated evidence is partial.
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
