@@ -31,6 +31,12 @@ OUTPUT
                                 Discovered/attached targets at rest entry
     rest/target-graph-final.json
                                 Refreshed target/worker/context graph and gaps
+    rest/dom-history-contexts.json
+                                Per-document Runtime observer counters, timing,
+                                install/hook status, truncations and failures
+    rest/dom-mutations-at-rest.jsonl
+                                Private snapshot of the raw mutation ledger
+                                before any subsequent automated scrolling
     rest/cookies.json           Browser-context cookies, including HttpOnly
     rest/network-details-at-rest.jsonl
                                 Raw network events frozen before interaction
@@ -68,6 +74,9 @@ OUTPUT
     root. Privacy-redacted event logs retain HTTP and WebSocket activity
     metadata; separate restricted network-details.jsonl preserves
     HTTP headers, available POST data and real-time messaging payloads.
+    The root dom-mutations.jsonl additionally records sensitive raw
+    additions/removals, attributes, text and observed ShadowRoot attachment.
+    All source contexts remain distinct via execution-context/frame IDs.
     Not all response bodies or code are exposed; inspect archive
     statuses, time bounds and the manifest.
 
@@ -98,6 +107,19 @@ LIMITATIONS
     Worker globals are evaluated in their own attached CDP sessions.
     Cross-origin iframe documents can have separate OOPIF targets when
     Chromium isolates their process; the frame tree is archived regardless.
+
+    The rest collector queries instrumentation health for applicable
+    document execution contexts. A missing hook, failed observer, initial
+    late installation or clipped mutation value marks the corresponding
+    artifact partial; unavailable contexts are not claimed complete.
+    Root dom-mutations.jsonl is chronological for binding-delivered
+    events, not an atomic record of browser execution. One callback may
+    observe only the latest value following multiple synchronous writes;
+    additions/removals before callback retain node identity and
+    callback-time markup where accessible. Closed shadow roots can be
+    observed only when the document-start attachShadow hook intercepted
+    their creation (or other CDP observations happen to expose them);
+    earlier roots and cached native calls remain limitations.
 
     The capture runs after the initial DOM-settlement heuristic, not from
     one globally frozen instant. Renderer DOM may still change while
