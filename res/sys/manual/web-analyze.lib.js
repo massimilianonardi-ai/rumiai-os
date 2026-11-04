@@ -156,11 +156,12 @@ EVIDENCE
                          available POST content (including best-effort CDP
                          Network.getRequestPostData results), WebSocket frames,
                          EventSource events and handshake messages; private
-      resources.jsonl    one indexed outcome per observed completed request,
-                         redirect or failure; full original response URL,
-                         type, status, SHA-256, bytes and saved pathname
-      resources/         exact decoded response bodies from CDP
-                         Network.getResponseBody, content-hash filenames
+      resources.jsonl    outcomes for completed requests, redirects,
+                         failures and unfinished streams, including linked
+                         redirect steps, body source, SHA-256/size and
+                         separate partialBody metadata when available
+      resources/         CDP-decoded complete or explicitly partial bodies,
+                         stored by content hash with source extensions
       scripts.jsonl      parsed-script metadata, source availability,
                          SHA-256 and pathname
       scripts/           JavaScript sources from Debugger.getScriptSource,
@@ -173,6 +174,25 @@ EVIDENCE
     final summary and must never be interpreted as a lossless archive.
     Browser capabilities identify the local Chromium protocol, not a
     guarantee that every available method was invoked.
+
+    The recorder requests Network.enable with 64 MiB total and 32 MiB
+    per-resource buffer limits, plus up to 1 MiB of request post data.
+    If unavailable, ordinary Network.enable is used with recorded fallback
+    status. When supported, the dedicated Network.configureDurableMessages
+    method is attempted after Network.enable to preserve response bodies
+    across process navigations. The deprecated enableDurableMessages
+    flag is not used while a target is suspended. The observed result per
+    target is in summary.json resourceCapture.networkConfiguration.
+
+    For Fetch/XHR/EventSource, Network.streamResourceContent is attempted
+    when advertised by the browser schema. Buffered data and subsequent
+    dataReceived chunks are preserved in order within a 16 MiB per-request
+    and 64 MiB total in-memory limit. Completed bodies prefer
+    Network.getResponseBody; if unavailable, complete streamed data or
+    read-only Page.getResourceContent for known frame resources may be used.
+    No resource URLs are replayed or re-requested. Incomplete and aborted
+    streams may produce SHA-256-indexed .partial artifacts, which never
+    mean that the complete response was recovered.
 
     The resource index records request failures, CDP-unavailable bodies,
     redirect responses without bodies, and unfinished requests. Two
