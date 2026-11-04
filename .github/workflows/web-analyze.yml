@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: f5cf7ad085c4b6db8aed3883635a09fdec7ba1a1
+          ref: 723b2e0e60d3bc81f7e4f483295e86518cbe6dd8
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -48,3 +48,14 @@ jobs:
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/web-analyze.test
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/command.test
+      - name: Exercise real verified HTTPS and browser certificate-chain capture
+        shell: bash
+        run: |
+          set -eu
+          if ! command -v certutil >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq libnss3-tools
+          fi
+          command -v openssl
+          export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
+          sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/https.test
