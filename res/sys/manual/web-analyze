@@ -10,7 +10,8 @@ DESCRIPTION
     waits for a heuristic document-settled condition before the initial
     full rendered-DOM snapshot, then acquires a read-only deep-rest phase
     (CDP DOM tree including Shadow DOM, layout/style snapshots, native MHTML,
-    CSSOM/style source, per-node resolved/matched CSS and platform fonts,
+    CSSOM/style source, initial-navigation CSS rule-usage coverage,
+    per-node resolved/matched CSS and platform fonts,
     Accessibility trees with DOM backend identities,
     runtime element/storage details, listener locations,
     frame targets, redacted network event metadata and archived responses).
@@ -50,6 +51,11 @@ OUTPUT
       evidence-integrity.json
                        Verified file/digest/size results, per-domain/target
                        outcomes and post-capture discrepancy identities
+      rest/css-rule-usage/index.json
+                       Start/stop timestamps, target coverage, used/unused
+                       rule totals, incomplete/unsupported tracking
+      rest/css-rule-usage/target-NNN.json
+                       Private CDP CSS rule-usage ranges per target
       rest/target-graph-initial.json
                        Discovered/attached target and execution contexts
       rest/target-graph-final.json
@@ -135,6 +141,16 @@ OUTPUT
     A REST status of partial must be inspected rather than interpreted as
     proof of complete source acquisition. Full initial/final rendered HTML
     is stored separately from bounded exploratory JSON snapshots.
+
+    The command opts into Chromium CSS rule-usage tracking before initial
+    navigation for available attached page/iframe targets. Tracking stops
+    when rest capture begins, before later deep CSS inspection and before
+    any optional --scroll. The rest/css-rule-usage/ archive retains exact
+    CDP rule-use ranges, per-target timestamps, used/unused counts and
+    unsupported/incomplete target outcomes. It is bounded to 64 targets
+    or 20 seconds. The result is coverage over an observed interval, not
+    a denominator of all possible CSS rules across future states. CSS
+    tracking has profiling overhead; it never synthesizes page input.
 
     Deep CSS inspection stores per-target css-nodes/index.json and
     css-nodes/page-NNN.json with real matched CSS rules/pseudo elements,
