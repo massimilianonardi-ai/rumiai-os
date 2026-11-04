@@ -572,3 +572,113 @@ esac
 printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\nruntime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n' "$pid"
 RSUDO_APISIX_RUNTIME_REMOTE
 )
+
+# Advanced read-only Admin API request over the existing rsudo transport.
+# The credential is an existing protected file on the remote host containing
+# exactly "X-API-KEY: <key>\n". Curl reads it using -H @file: the key never
+# appears in shell source, command argv, normal diagnostics or local state.
+# This does not infer the active backend; /configs is standalone API-driven,
+# whereas collection GETs are available on traditional/control-plane modes.
+rsudo_mod_apisix_admin_read()
+(
+  [ "$#" -ge 2 ] && [ "$#" -le 3 ] || {
+    log error apisix admin-read-invalid-arguments count "$#"
+    exit 44
+  }
+  case "$1" in
+    configs|routes|services|upstreams) : ;;
+    *) log error apisix admin-read-unsupported-resource; exit 45 ;;
+  esac
+  case "$2" in
+    /*) : ;;
+    *) log error apisix admin-read-invalid-credential-path; exit 46 ;;
+  esac
+  case "${3:-9180}" in
+    ''|*[!0-9]*) log error apisix admin-read-invalid-port; exit 50 ;;
+  esac
+  [ "${3:-9180}" -ge 1 ] 2>/dev/null && [ "${3:-9180}" -le 65535 ] 2>/dev/null || {
+    log error apisix admin-read-invalid-port
+    exit 50
+  }
+
+  RSUDO_INTERACTIVE=
+  rsudo sh -s -- "$1" "$2" "${3:-9180}" <<'RSUDO_APISIX_ADMIN_READ_REMOTE'
+resource=$1
+credential_file=$2
+port=$3
+
+admin_read_error()
+{
+  printf 'apisix.admin-read.%s\n' "$1" >&2
+}
+
+# Validate again in the privileged remote execution context.
+case "$resource" in
+  configs|routes|services|upstreams) : ;;
+  *) admin_read_error unsupported-resource; exit 45 ;;
+esac
+case "$credential_file" in
+  /*) : ;;
+  *) admin_read_error invalid-credential-path; exit 46 ;;
+esac
+case "$port" in
+  ''|*[!0-9]*) admin_read_error invalid-port; exit 50 ;;
+esac
+[ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || {
+  admin_read_error invalid-port
+  exit 50
+}
+
+# A caller must explicitly provision and protect a single-header file.
+# Never follow a symbolic link or accept group/world-readable credentials.
+[ -f "$credential_file" ] && [ -r "$credential_file" ] &&
+  [ ! -L "$credential_file" ] || {
+  admin_read_error credential-file-unavailable
+  exit 47
+}
+file_mode=$(LC_ALL=C ls -ld "$credential_file" 2>/dev/null) || {
+  admin_read_error credential-permissions-unavailable
+  exit 48
+}
+file_mode=${file_mode%% *}
+case "$file_mode" in
+  ????------) : ;;
+  *) admin_read_error credential-permissions-insecure; exit 48 ;;
+esac
+
+# Only one newline-terminated header is permitted. Reading into a private
+# shell variable is solely for validation; no secret is passed to a command
+# or printed. The file itself is passed to curl via the @file syntax.
+[ "$(wc -l < "$credential_file")" -eq 1 ] 2>/dev/null || {
+  admin_read_error credential-header-invalid
+  exit 49
+}
+IFS= read -r credential_header < "$credential_file" || {
+  admin_read_error credential-header-invalid
+  exit 49
+}
+case "$credential_header" in
+  'X-API-KEY: '?*) : ;;
+  *) admin_read_error credential-header-invalid; exit 49 ;;
+esac
+credential_value=${credential_header#X-API-KEY: }
+case "$credential_value" in
+  ''|*[![:graph:]]*) admin_read_error credential-header-invalid; exit 49 ;;
+esac
+unset credential_header credential_value file_mode
+
+command -v curl >/dev/null 2>&1 || {
+  admin_read_error curl-unavailable
+  exit 51
+}
+
+# Only loopback HTTP is allowed; -q disables .curlrc, --noproxy / --proxy
+# prevent environment proxy settings, and redirects are never followed.
+# Curl's HTTP failure status is preserved (22), with no error-body leak.
+url=http://127.0.0.1:$port/apisix/admin/$resource
+curl -q --silent --show-error --fail --noproxy '*' --proxy '' \\
+  --proto '=http' --max-redirs 0 --connect-timeout 3 --max-time 15 \\
+  --header "@$credential_file" --header 'Accept: application/json' \\
+  --url "$url"
+RSUDO_APISIX_ADMIN_READ_REMOTE
+)
