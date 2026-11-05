@@ -281,7 +281,7 @@ rsudo_mod_keycloak_auth()
       }
       [ -n "$client_jwt_alg" ] || client_jwt_alg=RS256
       case "$client_jwt_alg" in
-        RS256|RS384|RS512|PS256|PS384|PS512|ES256|ES384|ES512) : ;;
+        RS256|RS384|RS512|PS256|PS384|PS512|ES256|ES384|ES512|EdDSA) : ;;
         *) log error keycloak auth-private-key-alg-unsupported; exit 73 ;;
       esac
       ;;
@@ -831,7 +831,7 @@ K04_CLIENT_JWT_PYTHON
       --data-urlencode "client_assertion@$tmp/client-assertion"
     ;;
   private-key-jwt)
-    # RSA PKCS#1-v1.5, RSA-PSS and curve-bound ECDSA. Credentials stay on
+    # RSA PKCS#1-v1.5, RSA-PSS, curve-bound ECDSA and Ed25519. Keys stay on
     # the remote sudo target; the public certificate must match the key.
     command -v openssl >/dev/null 2>&1 || {
       auth_error private-key-openssl-unavailable
@@ -878,6 +878,17 @@ K04_CLIENT_JWT_PYTHON
           exit 73
         }
         ;;
+      EdDSA)
+        # EdDSA is a JWS algorithm, not a key-curve selector: for this
+        # incremental subset, only an actual Ed25519 key is accepted.
+        openssl pkey -pubin -in "$tmp/cert-public" -text -noout \
+          > "$tmp/eddsa-public-info" 2>/dev/null &&
+          grep -Fx 'ED25519 Public-Key:' "$tmp/eddsa-public-info" \
+          >/dev/null 2>&1 || {
+          auth_error private-key-ed25519-required
+          exit 73
+        }
+        ;;
       *)
         openssl rsa -pubin -in "$tmp/cert-public" -noout \
           >/dev/null 2>&1 || {
@@ -900,7 +911,7 @@ def urlsafe(raw):
 client, audience, algorithm = sys.argv[1:]
 if algorithm not in ("RS256", "RS384", "RS512",
                      "PS256", "PS384", "PS512",
-                     "ES256", "ES384", "ES512"):
+                     "ES256", "ES384", "ES512", "EdDSA"):
     raise ValueError("unsupported private key assertion algorithm")
 now = int(time.time())
 header = {"alg": algorithm, "typ": "JWT"}
@@ -921,8 +932,15 @@ K04_PRIVATE_KEY_JWT_PYTHON
       RS256|PS256|ES256) jwt_digest=sha256 ;;
       RS384|PS384|ES384) jwt_digest=sha384 ;;
       RS512|PS512|ES512) jwt_digest=sha512 ;;
+      EdDSA) : ;;
     esac
     case "$client_jwt_alg" in
+      EdDSA)
+        # Ed25519 signs the exact message bytes, with no external digest.
+        openssl pkeyutl -sign -rawin -inkey "$private_key_file" \
+          -passin pass: -in "$tmp/assertion-message" \
+          -out "$tmp/assertion-signature" 2>/dev/null
+        ;;
       PS*)
         # JWS RSA-PSS requires MGF1 with the selected SHA digest and a
         # salt exactly as long as that digest (-1 in OpenSSL).
@@ -941,6 +959,11 @@ K04_PRIVATE_KEY_JWT_PYTHON
       exit 90
     }
     case "$client_jwt_alg" in
+      EdDSA)
+        openssl pkeyutl -verify -rawin -pubin -inkey "$tmp/cert-public" \
+          -sigfile "$tmp/assertion-signature" -in "$tmp/assertion-message" \
+          >/dev/null 2>&1
+        ;;
       PS*)
         openssl dgst "-$jwt_digest" -verify "$tmp/cert-public" \
           -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
@@ -1011,6 +1034,8 @@ if sys.argv[3].startswith("ES"):
     if offset != len(sig):
         raise ValueError("extra ECDSA signature bytes")
     sig = r + s
+elif sys.argv[3] == "EdDSA" and len(sig) != 64:
+    raise ValueError("Ed25519 signature must be 64 bytes")
 
 sig = base64.urlsafe_b64encode(sig).rstrip(b"=").decode("ascii")
 sys.stdout.write(signed + "." + sig)
