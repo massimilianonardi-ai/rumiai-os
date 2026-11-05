@@ -214,6 +214,15 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     the verified OIDC introspection endpoint, and returns the server's
     active=true|false state without echoing provider claims. HTTP 200 is
     proof of an accepted introspection request, not proof that active=true.
+    For Keycloak releases enforcing token-audience authorization (including
+    26.7.3 and 26.8.1), the authenticated introspection client must be an
+    allowed audience of the access token. If the client is absent from aud,
+    Keycloak can return active=false even for a freshly acquired token.
+    Configure the legitimate audience through the client's approved token
+    scope/protocol mapper; do not disable audience verification, widen roles
+    or enable deprecated no-audience compatibility as an automatic fix.
+    This is a Keycloak policy/issuance prerequisite, not an assertion
+    signature failure or a proof of revocation.
 
     rsudo [rsudo-options] keycloak auth revoke
         --server HTTPS-BASE-URL --issuer-realm REALM
