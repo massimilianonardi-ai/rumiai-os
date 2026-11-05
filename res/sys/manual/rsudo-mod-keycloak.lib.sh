@@ -160,9 +160,14 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     client with provider client-x509, its exact certificate Subject DN and
     trust-anchor CA Subject DN. The TLS certificate handshake, Keycloak client
     policy and sender-constrained token requirements are separate checks.
-    Token acquisition/introspection alone does not establish that a bearer
-    can be replayed to a protected Admin REST endpoint: K04 Admin REST
-    sender-constrained proof and K05 general requests remain pending.
+    The fixed K04 Admin REST probe presents a selected certificate but
+    does not verify that a presented bearer token's cnf.x5t#S256 matches
+    the resource-side TLS client identity. Even when a token contains the
+    certificate thumbprint, do not assume Keycloak Admin REST rejects
+    bearer replay without the correct certificate. Treat this bearer as
+    replayable unless resource-side enforcement was verified for the
+    actual endpoint and release. K04 Admin REST sender-constrained proof
+    and K05 general requests remain pending.
     self-signed-tls-client-auth is not implemented by this option.
 
     This private-key-jwt credential selection is also supported in the
