@@ -111,7 +111,7 @@ rsudo_mod_keycloak_auth()
   esac
 
   server= issuer= client= method= secret_file= token_store= token_file= ca_file=
-  auth_mode= username= password_file= token_type_hint=
+  auth_mode= username= password_file= token_type_hint= client_jwt_alg=
   while [ "$#" -gt 0 ]
   do
     [ "$#" -ge 2 ] || {
@@ -126,6 +126,7 @@ rsudo_mod_keycloak_auth()
       --issuer-realm) issuer=$value ;;
       --client-id) client=$value ;;
       --client-auth) method=$value ;;
+      --client-jwt-alg) client_jwt_alg=$value ;;
       --auth-mode) auth_mode=$value ;;
       --client-secret-file) secret_file=$value ;;
       --username) username=$value ;;
@@ -247,6 +248,23 @@ rsudo_mod_keycloak_auth()
       ;;
   esac
 
+  # An algorithm pin is meaningful only for the signed-secret authenticator.
+  # Preserve the existing HS256 default on invocations already using JWT;
+  # never silently retry with another signing algorithm.
+  if [ -n "$client_jwt_alg" ] && [ "$method" != client-secret-jwt ]
+  then
+    log error keycloak auth-client-jwt-alg-without-signed-client
+    exit 64
+  fi
+  if [ "$method" = client-secret-jwt ]
+  then
+    [ -n "$client_jwt_alg" ] || client_jwt_alg=HS256
+    case "$client_jwt_alg" in
+      HS256|HS384|HS512) : ;;
+      *) log error keycloak auth-client-jwt-alg-unsupported; exit 73 ;;
+    esac
+  fi
+
   for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file"
   do
     [ -z "$selected" ] && continue
@@ -277,7 +295,8 @@ rsudo_mod_keycloak_auth()
   RSUDO_INTERACTIVE=
   rsudo -- sh -s -- "$action" "$server" "$issuer" "$client" "$method" \
     "$secret_file" "$token_store" "$token_file" "$ca_file" \
-    "$auth_mode" "$username" "$password_file" "$token_type_hint" <<'KEYCLOAK_AUTH_REMOTE'
+    "$auth_mode" "$username" "$password_file" "$token_type_hint" \
+    "$client_jwt_alg" <<'KEYCLOAK_AUTH_REMOTE'
 action=$1
 server=$2
 issuer=$3
@@ -291,6 +310,7 @@ auth_mode=${10}
 username=${11}
 password_file=${12}
 token_type_hint=${13}
+client_jwt_alg=${14}
 
 umask 077
 auth_error()
@@ -701,14 +721,14 @@ case "$method" in
       --data-urlencode "client_secret@$tmp/secret-data"
     ;;
   client-secret-jwt)
-    # Keycloak client-secret-jwt with explicitly configured HS256 only.
+    # Explicit Keycloak client-secret-jwt HS256/HS384/HS512 selection.
     # The HMAC secret, signed assertion and token remain out of argv/stdout.
     command -v python3 >/dev/null 2>&1 || {
       auth_error client-jwt-python-unavailable
       exit 89
     }
     unset secret
-    python3 - "$secret_file" "$client" "$expected_issuer" \
+    python3 - "$secret_file" "$client" "$expected_issuer" "$client_jwt_alg" \
       > "$tmp/client-assertion" 2>/dev/null <<'K04_CLIENT_JWT_PYTHON'
 import base64
 import hashlib
@@ -721,14 +741,18 @@ import time
 def b64url(payload):
     return base64.urlsafe_b64encode(payload).rstrip(b"=").decode("ascii")
 
-secret_file, client, audience = sys.argv[1:]
+secret_file, client, audience, algorithm = sys.argv[1:]
+digests = {"HS256": hashlib.sha256, "HS384": hashlib.sha384,
+           "HS512": hashlib.sha512}
+if algorithm not in digests:
+    raise ValueError("unsupported signed client algorithm")
 with open(secret_file, "rb") as source:
     raw = source.read()
 if not raw.endswith(b"\n") or len(raw) < 2 or raw.count(b"\n") != 1:
     raise ValueError("invalid protected client secret")
 key = raw[:-1]
 now = int(time.time())
-header = {"alg": "HS256", "typ": "JWT"}
+header = {"alg": algorithm, "typ": "JWT"}
 claims = {
     "iss": client,
     "sub": client,
@@ -741,7 +765,7 @@ claims = {
 h = b64url(json.dumps(header, separators=(",", ":")).encode("utf-8"))
 p = b64url(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
 message = (h + "." + p).encode("ascii")
-signature = b64url(hmac.new(key, message, hashlib.sha256).digest())
+signature = b64url(hmac.new(key, message, digests[algorithm]).digest())
 sys.stdout.write(h + "." + p + "." + signature)
 K04_CLIENT_JWT_PYTHON
     jwt_status=$?
