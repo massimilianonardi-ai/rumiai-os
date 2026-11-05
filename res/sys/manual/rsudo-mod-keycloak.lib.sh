@@ -170,6 +170,36 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     and K05 general requests remain pending.
     self-signed-tls-client-auth is not implemented by this option.
 
+    rsudo [rsudo-options] keycloak auth acquire
+        --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode client-credentials
+        --client-id ID --client-auth federated-jwt
+        --assertion-file ABSOLUTE-REMOTE-EXTERNAL-JWT
+        --token-store ABSOLUTE-REMOTE-NEW-FILE
+        [--ca-file ABSOLUTE-REMOTE-SERVER-CA]
+
+    This specific federated-jwt acquisition requires a registered confidential
+    Keycloak service client using the federated-jwt authenticator, an enabled
+    client-auth-federated server feature, an explicitly configured trusted OIDC
+    assertion issuer, and the expected external subject for this client.
+    The assertion must be a recent RS256 or other provider-accepted compact
+    signed JWT actually issued by the external provider; the module does not
+    mint it, install trust, or select another issuer automatically. The
+    assertion and token store are protected files on the selected remote
+    sudo identity, not caller-local paths. The external assertion file must
+    be owner-protected (0600), symlink-free, and contain exactly one compact
+    JWT (one final newline is permitted). The module checks its structure
+    before the request, then Keycloak independently enforces signature,
+    issuer, subject, expiration and audience policy. The selected client ID
+    is explicitly sent and checked against the bearer token's azp claim
+    from Keycloak's verified HTTPS response before any store is published.
+    No assertion, bearer token or signature is printed or passed as an
+    ordinary argument value. This mode rejects --client-secret-file,
+    --private-key-file, --certificate-file and --client-jwt-alg.
+    Only acquire with client-credentials and offline structural auth status
+    are offered; password grant, online introspection, refresh and revoke
+    with federated-jwt are not yet implemented. A short-lived assertion
+    cannot be implicitly reused for another operation.
+
     This private-key-jwt credential selection is also supported in the
     existing explicitly selected password acquire, online status, refresh
     and revoke operations: replace --client-secret-file and the client-secret
@@ -206,9 +236,10 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     A successful OAuth grant is not proof of Admin REST permissions.
 
     This does not implement the other asymmetric or sender-constrained
-    authenticators: Ed448, self-signed-tls-client-auth and federated JWT
-    remain separate K04 work. There is no fallback or
-    automatic client-key/certificate discovery.
+    authenticators: Ed448 and self-signed-tls-client-auth remain separate
+    K04 work. Federated JWT beyond the protected external assertion
+    client-credentials acquisition subset also remains pending. There is no
+    fallback or automatic client-key/certificate discovery.
 
     rsudo_mod_keycloak_auth acquire|refresh|status|revoke [corresponding-options...]
 
@@ -281,8 +312,8 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     stdout. There is no Basic/Post fallback. Server policy may reject
     a JWT authenticator or expired assertion; that does not justify
     retrying with weaker authentication. Other asymmetric JWT variants,
-    federated JWT and general sender-constrained Admin REST proof remain
-    pending.
+    federated JWT beyond the selected protected assertion acquisition
+    subset, and general sender-constrained Admin REST proof, remain pending.
     Python or cryptographic prerequisites missing for an explicitly chosen
     JWT method result in a nonzero error; no implicit fallback occurs.
 
@@ -294,10 +325,12 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     PS256/PS384/PS512, ECDSA ES256/ES384/ES512 and EdDSA
     (Ed25519 only) private-key-jwt subset, and the selected X.509
     tls-client-auth method with protected remote certificate/private key.
+    The federated-jwt authenticator is offered only for protected external
+    assertion client-credentials acquire and offline structural status.
     Other grants (browser code, device, CIBA, JWT authorization grant,
-    token exchange) and further client authenticators (Ed448,
-    federated JWT and self-signed-tls-client-auth) remain pending
-    K04. The existing private Admin REST transport probe is a fixed-route
+    token exchange) and further client authenticators/modes (Ed448,
+    federated-JWT refresh/revoke/introspection and self-signed-tls-client-auth)
+    remain pending K04. The existing private Admin REST transport probe is a fixed-route
     read-only proof, not the public K05 request interface. It can explicitly
     select --client-auth tls-client-auth with the same protected remote key
     and certificate for issuer discovery and the fixed Admin realm GET.
@@ -312,8 +345,8 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
 
     On these new operations, 0 means the documented local action succeeded.
     Relevant failures include 64 invalid invocation, 65 invalid HTTPS
-    selection, 67 mismatched realm/issuer/discovery, 70 unsafe credential
-    path, 71 client authentication rejected, 72 OAuth grant denied,
+    selection, 67 mismatched realm/issuer/discovery or federated token
+    client binding, 70 unsafe credential path, 71 client authentication rejected, 72 OAuth grant denied,
     73 unimplemented/unsupported grant or client policy, 75 CA failure,
     76 transport failure,
     80 forbidden, 83 throttled, 85 server error, 86 invalid protocol data,
