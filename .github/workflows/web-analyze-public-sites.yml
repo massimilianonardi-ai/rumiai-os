@@ -53,3 +53,68 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
+  public-shared-links:
+    name: Public shared link — ${{ matrix.label }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: amazon
+            url: 'https://www.amazon.it/hz/wishlist/ls/33ZKBWLPZJJVO'
+          - label: chatgpt
+            url: 'https://chatgpt.com/share/6aec94fc-0f1c-83ed-b62e-7343ca92b069'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          repository: massimilianonardi-ai/rumiai-tests
+          ref: 2b9b70f2d81503fe77e9e7b95c5946cc6e106750
+          path: .web-analyze-tests
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Capture the shared public page with real Chromium and retain sanitized evidence
+        shell: bash
+        env:
+          RUMIAI_TEST_WEB_ANALYZE_LIVE: '1'
+          RUMIAI_TEST_WEB_ANALYZE_LABEL: ${{ matrix.label }}
+          RUMIAI_TEST_WEB_ANALYZE_URL: ${{ matrix.url }}
+          RUMIAI_TEST_WEB_ANALYZE_OUTPUT_ROOT: ${{ runner.temp }}/web-analyze-shared/${{ matrix.label }}
+          RUMIAI_TEST_WEB_ANALYZE_EXPECTED_PRODUCT_COMMIT: ${{ github.sha }}
+        run: |
+          set -eu
+          # The test suite must not be an untracked subdirectory of the clean
+          # product checkout verified by the revision-pinned capture harness.
+          mv .web-analyze-tests "$RUNNER_TEMP/web-analyze-tests"
+          browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
+          test -n "$browser"
+          mkdir -p "$RUNNER_TEMP/web-analyze-bin"
+          cat > "$RUNNER_TEMP/web-analyze-bin/chromium" <<EOF
+          #!/bin/sh
+          exec "$browser" "\$@"
+          EOF
+          chmod +x "$RUNNER_TEMP/web-analyze-bin/chromium"
+          export PATH="$RUNNER_TEMP/web-analyze-bin:$PATH"
+          export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
+          node --check "$RUNNER_TEMP/web-analyze-tests/tests/rumiai-os/web-analyze/.support/physical-response-only.js"
+          umask 077
+          set +e
+          sh "$RUNNER_TEMP/web-analyze-tests/tests/rumiai-os/web-analyze/physical-response-only.test"
+          result=$?
+          set -e
+          case "$result" in
+            0) echo "Cached CSS response-only provenance: PASS (case exercised)" ;;
+            2) echo "Cached CSS response-only provenance: NOT EXERCISED (capture completed, trigger absent)" ;;
+            *) echo "Shared public link capture: FAIL or ERROR (status $result)" >&2; exit "$result" ;;
+          esac
+      - name: Upload sanitized summary only (no page content, profile or CDP wire)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-analyze-shared-${{ matrix.label }}-summary
+          path: ${{ runner.temp }}/web-analyze-shared/${{ matrix.label }}/response-only-*.json
+          if-no-files-found: ignore
+          retention-days: 7
