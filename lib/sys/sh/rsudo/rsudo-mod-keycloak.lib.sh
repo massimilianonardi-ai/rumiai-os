@@ -281,7 +281,7 @@ rsudo_mod_keycloak_auth()
       }
       [ -n "$client_jwt_alg" ] || client_jwt_alg=RS256
       case "$client_jwt_alg" in
-        RS256) : ;;
+        RS256|RS384|RS512) : ;;
         *) log error keycloak auth-private-key-alg-unsupported; exit 73 ;;
       esac
       ;;
@@ -831,7 +831,7 @@ K04_CLIENT_JWT_PYTHON
       --data-urlencode "client_assertion@$tmp/client-assertion"
     ;;
   private-key-jwt)
-    # RS256 only. Both the key and certificate reside on the selected remote
+    # RSA RS256/RS384/RS512 only. Key and certificate stay on the remote
     # sudo target. The public certificate must match the RSA signing key.
     command -v openssl >/dev/null 2>&1 || {
       auth_error private-key-openssl-unavailable
@@ -861,7 +861,7 @@ K04_CLIENT_JWT_PYTHON
       auth_error private-key-certificate-mismatch
       exit 70
     }
-    python3 - "$client" "$expected_issuer" \
+    python3 - "$client" "$expected_issuer" "$client_jwt_alg" \
       > "$tmp/assertion-message" 2>/dev/null <<'K04_PRIVATE_KEY_JWT_PYTHON'
 import base64
 import json
@@ -872,9 +872,11 @@ import time
 def urlsafe(raw):
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
-client, audience = sys.argv[1:]
+client, audience, algorithm = sys.argv[1:]
+if algorithm not in ("RS256", "RS384", "RS512"):
+    raise ValueError("unsupported RSA assertion algorithm")
 now = int(time.time())
-header = {"alg": "RS256", "typ": "JWT"}
+header = {"alg": algorithm, "typ": "JWT"}
 claims = {
     "iss": client, "sub": client, "aud": audience,
     "jti": secrets.token_urlsafe(24),
@@ -888,12 +890,17 @@ K04_PRIVATE_KEY_JWT_PYTHON
       auth_error private-key-assertion-build-failed
       exit 90
     }
-    openssl dgst -sha256 -sign "$private_key_file" -passin pass: \
+    case "$client_jwt_alg" in
+      RS256) rsa_digest=sha256 ;;
+      RS384) rsa_digest=sha384 ;;
+      RS512) rsa_digest=sha512 ;;
+    esac
+    openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
       -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null || {
       auth_error private-key-signature-failed
       exit 90
     }
-    openssl dgst -sha256 -verify "$tmp/cert-public" \
+    openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
       -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
       >/dev/null 2>&1 || {
       auth_error private-key-signature-verification-failed
