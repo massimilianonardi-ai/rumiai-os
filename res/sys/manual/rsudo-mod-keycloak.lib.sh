@@ -123,7 +123,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --client-id ID --client-auth private-key-jwt
         --private-key-file ABSOLUTE-REMOTE-KEY-PATH
         --certificate-file ABSOLUTE-REMOTE-CERT-PATH
-        [--client-jwt-alg RS256|RS384|RS512|PS256|PS384|PS512|ES256|ES384|ES512]
+        [--client-jwt-alg RS256|RS384|RS512|PS256|PS384|PS512|ES256|ES384|ES512|EdDSA]
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
@@ -140,10 +140,14 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     RSA-PSS PS256/PS384/PS512 (MGF1 with matching digest and digest-sized
     salt), and ECDSA ES256/ES384/ES512 with P-256/P-384/P-521 respectively.
     An ECDSA signature is encoded in the fixed-width JWS form rather than
-    the OpenSSL DER form. The key family and ECDSA curve are checked before
-    signing. --client-jwt-alg defaults to RS256 for this authenticator;
+    the OpenSSL DER form. The explicit EdDSA option currently accepts only
+    Ed25519 private keys/certificates (not Ed448), checks the actual public
+    key type and signs the exact JWS message using OpenSSL pkeyutl. Its JWS
+    signature is the unmodified 64-byte Ed25519 signature. The key family
+    and ECDSA curve are checked before signing. --client-jwt-alg defaults
+    to RS256 for this authenticator;
     unsupported algorithms are rejected without fallback.
-    RSA/EC private key and X.509 certificate must be
+    RSA/EC/Ed25519 private key and X.509 certificate must be
     pre-provisioned as root/sudo-identity-owned private remote regular files
     with mode 0600, without symbolic links in their paths. Encrypted keys
     requiring interactive passphrases are not supported in this subset.
@@ -159,8 +163,8 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     A successful OAuth grant is not proof of Admin REST permissions.
 
     This does not implement the other asymmetric or sender-constrained
-    authenticators: EdDSA, X509 mTLS and
-    federated JWT remain separate K04 work. There is no fallback or
+    authenticators: Ed448, X509 mTLS and federated JWT remain separate
+    K04 work. There is no fallback or
     automatic client-key/certificate discovery.
 
     rsudo_mod_keycloak_auth acquire|refresh|status|revoke [corresponding-options...]
@@ -243,9 +247,10 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     authenticated access-token introspection currently support Basic/Post
     and explicit HS256/HS384/HS512 client-secret-jwt confidential-client
     authentication, plus the selected RSA RS256/RS384/RS512, RSA-PSS
-    PS256/PS384/PS512 and ECDSA ES256/ES384/ES512 private-key-jwt subset.
+    PS256/PS384/PS512, ECDSA ES256/ES384/ES512 and EdDSA
+    (Ed25519 only) private-key-jwt subset.
     Other grants (browser code, device, CIBA, JWT authorization grant,
-    token exchange) and further client authenticators (EdDSA,
+    token exchange) and further client authenticators (Ed448,
     federated JWT and X509 mTLS) remain pending
     K04. The existing private Admin REST Bearer transport probe is a
     fixed-route read-only proof, not the public K05 request interface.
