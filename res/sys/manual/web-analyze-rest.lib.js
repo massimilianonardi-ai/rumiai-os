@@ -105,14 +105,17 @@ OUTPUT
                                 navigation, a prefetch or a new rule. No
                                 playback/timing/realtime reads or tracing.
     rest/worker-provenance/index.json
-                                Private index of ServiceWorker registration and
-                                version updates, worker/script target links,
-                                frame navigation and target graph provenance
-                                from observed CDP events. ServiceWorker.enable
-                                only subscribes when schema-supported, and
-                                unsupported, detached, ambiguous or truncated
-                                observations remain explicitly partial.
-                                No worker lifecycle or page mutation commands.
+                                Private correlation of passive ServiceWorker
+                                registration/version events and target lifetime
+                                with the already archived page environment.json
+                                navigator.serviceWorker.getRegistrations() data.
+                                A stopped worker can retain an activated
+                                registration without a live CDP worker target;
+                                runningStatus and target attachment are recorded
+                                separately. Missing/ambiguous browser snapshots
+                                or CDP versions remain partial. ServiceWorker.enable
+                                only subscribes when schema-supported; no worker
+                                lifecycle or page mutation commands.
     rest/pwa-resources/index.json
                                 Private offline correlation of the already read
                                 Page.getAppManifest and Page.getResourceTree
