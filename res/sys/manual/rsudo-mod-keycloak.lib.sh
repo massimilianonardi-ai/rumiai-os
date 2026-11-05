@@ -127,6 +127,38 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
+    rsudo [rsudo-options] keycloak auth acquire
+        --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode client-credentials
+        --client-id ID --client-auth tls-client-auth
+        --private-key-file ABSOLUTE-REMOTE-CLIENT-KEY
+        --certificate-file ABSOLUTE-REMOTE-CLIENT-CERT
+        --token-store ABSOLUTE-REMOTE-NEW-FILE
+        [--ca-file ABSOLUTE-REMOTE-SERVER-CA]
+
+    The tls-client-auth method is also available for explicitly enabled
+    password Direct Grants, online status/introspection, refresh and revoke,
+    with the same remote certificate/key selectors and each action's existing
+    token and user-password arguments. It never accepts --client-secret-file
+    or --client-jwt-alg, and never falls back to a client secret, signed JWT
+    or untrusted HTTPS. Both private remote files must be owned by the
+    selected sudo identity with mode 0600 and symlink-free paths; their
+    public keys must match. Encrypted private keys requiring interaction are
+    rejected. The protected key remains on the selected remote SSH/sudo
+    target: curl receives only --cert/--key paths and presents the client
+    certificate for issuer discovery and each OAuth operation over verified
+    HTTPS. --ca-file is for verifying the Keycloak HTTPS server, not the
+    CA trusted by Keycloak for authenticating this client.
+
+    The Keycloak server must request or require TLS client certificates,
+    trust the client certificate's issuing CA and configure the confidential
+    client with provider client-x509, its exact certificate Subject DN and
+    trust-anchor CA Subject DN. The TLS certificate handshake, Keycloak client
+    policy and sender-constrained token requirements are separate checks.
+    Token acquisition/introspection alone does not establish that a bearer
+    can be replayed to a protected Admin REST endpoint: K04 Admin REST
+    sender-constrained proof and K05 general requests remain pending.
+    self-signed-tls-client-auth is not implemented by this option.
+
     This private-key-jwt credential selection is also supported in the
     existing explicitly selected password acquire, online status, refresh
     and revoke operations: replace --client-secret-file and the client-secret
@@ -163,8 +195,8 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     A successful OAuth grant is not proof of Admin REST permissions.
 
     This does not implement the other asymmetric or sender-constrained
-    authenticators: Ed448, X509 mTLS and federated JWT remain separate
-    K04 work. There is no fallback or
+    authenticators: Ed448, self-signed-tls-client-auth and federated JWT
+    remain separate K04 work. There is no fallback or
     automatic client-key/certificate discovery.
 
     rsudo_mod_keycloak_auth acquire|refresh|status|revoke [corresponding-options...]
@@ -238,7 +270,8 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     stdout. There is no Basic/Post fallback. Server policy may reject
     a JWT authenticator or expired assertion; that does not justify
     retrying with weaker authentication. Other asymmetric JWT variants,
-    federated JWT and sender-constrained authentication remain pending.
+    federated JWT and general sender-constrained Admin REST proof remain
+    pending.
     Python or cryptographic prerequisites missing for an explicitly chosen
     JWT method result in a nonzero error; no implicit fallback occurs.
 
@@ -248,10 +281,11 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     and explicit HS256/HS384/HS512 client-secret-jwt confidential-client
     authentication, plus the selected RSA RS256/RS384/RS512, RSA-PSS
     PS256/PS384/PS512, ECDSA ES256/ES384/ES512 and EdDSA
-    (Ed25519 only) private-key-jwt subset.
+    (Ed25519 only) private-key-jwt subset, and the selected X.509
+    tls-client-auth method with protected remote certificate/private key.
     Other grants (browser code, device, CIBA, JWT authorization grant,
     token exchange) and further client authenticators (Ed448,
-    federated JWT and X509 mTLS) remain pending
+    federated JWT and self-signed-tls-client-auth) remain pending
     K04. The existing private Admin REST Bearer transport probe is a
     fixed-route read-only proof, not the public K05 request interface.
     Unimplemented modes fail closed with status 73.
