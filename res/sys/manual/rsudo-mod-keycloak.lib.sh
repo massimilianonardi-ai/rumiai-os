@@ -286,8 +286,15 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     Other grants (browser code, device, CIBA, JWT authorization grant,
     token exchange) and further client authenticators (Ed448,
     federated JWT and self-signed-tls-client-auth) remain pending
-    K04. The existing private Admin REST Bearer transport probe is a
-    fixed-route read-only proof, not the public K05 request interface.
+    K04. The existing private Admin REST transport probe is a fixed-route
+    read-only proof, not the public K05 request interface. It can explicitly
+    select --client-auth tls-client-auth with the same protected remote key
+    and certificate for issuer discovery and the fixed Admin realm GET.
+    It verifies key/certificate correspondence and refuses silent certificate
+    selection or incomplete credential pairs. This private transport
+    exercise alone does not verify that Keycloak Admin REST enforces
+    certificate-bound token claims or certify the future general
+    sender-constrained Admin REST request interface.
     Unimplemented modes fail closed with status 73.
     A service-account token's existence is NOT proof of Admin REST privileges.
     New general request and convenience APIs are pending K05/K06.
