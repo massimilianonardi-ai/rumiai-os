@@ -139,6 +139,19 @@ PUBLIC FUNCTIONS
         process_pid and runtime_identity are:
         service_manager_evidence=systemd-mainpid-and-cgroup
         service_unit=<systemd-service-unit>
+        On Linux, a separate optional socket-ownership observation is
+        emitted only when procfs and awk/readlink can independently match
+        a unique LISTEN 127.0.0.1:9180 TCP socket inode from the selected
+        master's own network namespace to one of that master's FDs:
+        listener_socket_evidence=master-fd-loopback-tcp
+        listener_socket=127.0.0.1:9180
+        It applies to either host or selected Docker namespace; a foreign
+        listener on the same port does not qualify. Missing/ambiguous/
+        unreadable socket evidence leaves these two fields absent, not an
+        error. The records are placed after any optional service fields
+        and before runtime_identity. This is kernel TCP ownership only:
+        it does not establish an Admin HTTP handler, its credentials or
+        whether the active source/profile matches an on-disk YAML file.
         If procfs/cgroup v2/systemctl is unavailable or the records do not
         agree, these fields are omitted rather than claiming service
         identity. Docker observation never queries a possibly host-mounted
