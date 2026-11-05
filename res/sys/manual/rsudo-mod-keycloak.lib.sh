@@ -170,9 +170,12 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     hashlib/hmac/secrets support on the selected remote sudo target. A local
     Keycloak installation and remote m runtime are NOT required.
 
-    client-secret-jwt is available ONLY when the selected Keycloak client
-    has the Signed JWT with Client Secret authenticator configured with
-    HS256. For each request, it creates a fresh JWT with iss/sub equal
+    client-secret-jwt requires the selected Keycloak client to use HS256,
+    HS384 or HS512. The optional --client-jwt-alg explicitly selects the
+    matching algorithm; omission preserves HS256 for existing invocations.
+    Basic/Post cannot accept this option. Unsupported values are rejected
+    without network access and authentication failure never causes fallback.
+    For each request, it creates a fresh JWT with iss/sub equal
     to the selected client ID, aud equal to the verified issuing realm URL,
     a random jti and a 30-second expiry. It signs using the protected
     remote single-line client secret file and transfers the assertion to
