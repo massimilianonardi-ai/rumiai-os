@@ -214,7 +214,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth|federated-jwt) : ;;
         *) log error keycloak auth-revoke-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
@@ -251,7 +251,7 @@ rsudo_mod_keycloak_auth()
           exit 64
         }
         case "$method" in
-          client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
+          client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth|federated-jwt) : ;;
           *) log error keycloak auth-status-client-method-unsupported; exit 73 ;;
         esac
       fi
@@ -827,8 +827,9 @@ then
 fi
 case "$method" in
   federated-jwt)
-    # The assertion comes from an independently configured external issuer;
-    # never generate it from the Keycloak client identity, and never pass
+    # The caller explicitly supplies this operation's assertion from an
+    # independently configured external issuer; never generate or reuse one
+    # implicitly, and never pass
     # assertion bytes as source, argv, stdout or diagnostics. Accept one
     # compact JWS and at most one final line feed from the protected file.
     jq -R -s -j 'if test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\n?$")
