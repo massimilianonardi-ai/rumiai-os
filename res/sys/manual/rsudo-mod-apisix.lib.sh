@@ -66,6 +66,22 @@ PUBLIC FUNCTIONS
         apply to no-operand discovery; explicit runtime still preserves its
         documented pidfile-missing observation. If Docker is absent, an
         observed conventional host candidate may still be checked.
+        On Linux the host probe also scans readable procfs command lines
+        whose processes share the observer's PID and mount namespaces.
+        An observed master with one safe absolute -p root and an ordinary
+        generated nginx.conf can select a nonconventional host installation.
+        More than one host master fails status 64, invalid/unresolved
+        prefixes fail 61, missing generated config fails 62, unsafe
+        generated config fails 63, failed scan fails 65, and unreadable
+        observer namespaces fail 66. A malformed reselected host path
+        fails status 67. If procfs, tr or readlink is unavailable, host
+        discovery remains limited to the conventional path. The new
+        result prefixes host runtime evidence with:
+        discovery_evidence=unique-process-prefix-candidate
+        discovered_scope=host
+        installation_root=<absolute-process-prefix>
+        This is a best-effort process observation, not a verified
+        service-manager unit or effective configuration identity.
         On Linux the Docker probe scans readable procfs command lines for
         nginx/OpenResty masters, including daemonized masters with PID != 1.
         One observed master can advertise a safe absolute -p prefix.
@@ -86,9 +102,13 @@ PUBLIC FUNCTIONS
         installation_root=<absolute-process-prefix>
         Otherwise the prefix remains discovery_evidence=unique-conventional-candidate
         with discovered_scope=host|docker and a Docker container_id as before.
+        A nonconventional host root uses process-prefix provenance without
+        a container_id.
         This is best-effort discovery, not a proof that arbitrary hosts,
         service managers, unobservable processes or external namespaces
-        do not exist. Docker candidates require docker exec/sh;
+        do not exist. Host process filtering deliberately excludes
+        nonmatching PID/mount namespaces and is not comprehensive service
+        discovery. Docker candidates require docker exec/sh;
         process-selected roots require readable Linux procfs master
         command-line evidence. Scanning is not a complete process census.
         No files or HTTP resources are changed.
