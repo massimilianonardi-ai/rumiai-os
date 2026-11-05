@@ -55,6 +55,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode client-credentials
         --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--client-jwt-alg HS256|HS384|HS512]
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
@@ -63,6 +64,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --username USERNAME --password-file ABSOLUTE-REMOTE-PATH
         --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--client-jwt-alg HS256|HS384|HS512]
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
@@ -81,6 +83,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --server HTTPS-BASE-URL --issuer-realm REALM
         --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--client-jwt-alg HS256|HS384|HS512]
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
     Without the complete remote server/client context, status is an offline
@@ -101,6 +104,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --server HTTPS-BASE-URL --issuer-realm REALM
         --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--client-jwt-alg HS256|HS384|HS512]
         --token-file ABSOLUTE-REMOTE-EXISTING-STORE
         --token-type-hint access_token|refresh_token
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
@@ -109,6 +113,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --server HTTPS-BASE-URL --issuer-realm REALM
         --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt
         --client-secret-file ABSOLUTE-REMOTE-PATH
+        [--client-jwt-alg HS256|HS384|HS512]
         --token-file ABSOLUTE-REMOTE-EXISTING-STORE
         --token-store SAME-ABSOLUTE-REMOTE-STORE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
@@ -165,7 +170,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     is not evidence of validity, expiry or administrator permission.
 
     The remote host must provide POSIX sh, curl supporting @file headers,
-    jq, mktemp, base64 (for Basic), and standard utilities. The HS256
+    jq, mktemp, base64 (for Basic), and standard utilities. The
     client-secret-jwt method additionally requires Python 3 with standard
     hashlib/hmac/secrets support on the selected remote sudo target. A local
     Keycloak installation and remote m runtime are NOT required.
