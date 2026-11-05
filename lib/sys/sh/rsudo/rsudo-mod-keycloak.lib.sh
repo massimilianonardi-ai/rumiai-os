@@ -156,7 +156,7 @@ rsudo_mod_keycloak_auth()
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
       esac
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
         *) log error keycloak auth-client-method-unimplemented; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
@@ -191,7 +191,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
         *) log error keycloak auth-refresh-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] &&
@@ -208,7 +208,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
         *) log error keycloak auth-revoke-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
@@ -245,7 +245,7 @@ rsudo_mod_keycloak_auth()
           exit 64
         }
         case "$method" in
-          client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
+          client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
           *) log error keycloak auth-status-client-method-unsupported; exit 73 ;;
         esac
       fi
@@ -269,6 +269,16 @@ rsudo_mod_keycloak_auth()
         HS256|HS384|HS512) : ;;
         *) log error keycloak auth-client-jwt-alg-unsupported; exit 73 ;;
       esac
+      ;;
+    tls-client-auth)
+      [ -z "$secret_file" ] && [ -z "$client_jwt_alg" ] || {
+        log error keycloak auth-tls-client-credential-incompatible
+        exit 64
+      }
+      [ -n "$private_key_file" ] && [ -n "$certificate_file" ] || {
+        log error keycloak auth-tls-client-files-missing
+        exit 70
+      }
       ;;
     private-key-jwt)
       [ -z "$secret_file" ] || {
@@ -426,6 +436,13 @@ private_file()
 }
 safe_curl()
 {
+  # Present the protected remote X.509 identity on each verified same-origin
+  # TLS request, including discovery, token, refresh, introspection and revoke.
+  # Paths only (never key bytes) appear in curl's argv.
+  if [ "$method" = tls-client-auth ]
+  then
+    set -- --cert "$certificate_file" --key "$private_key_file" "$@"
+  fi
   if [ -n "$ca_file" ]
   then
     curl -q --silent --show-error --noproxy '*' --proxy '' \
@@ -486,7 +503,7 @@ then
   # access token remains in a protected file and no provider claims are echoed.
 fi
 
-if [ "$method" = private-key-jwt ]
+if [ "$method" = private-key-jwt ] || [ "$method" = tls-client-auth ]
 then
   private_file "$private_key_file" || {
     auth_error private-key-file-unavailable-or-insecure
@@ -552,6 +569,35 @@ cleanup()
 trap cleanup 0
 trap 'exit 88' 1 2 3 15
 
+# Validate key/certificate correspondence *before* sending the certificate
+# to a remote endpoint. Both asymmetric JWT and mTLS use the exact same
+# protected keypair invariant; neither silently accepts encrypted keys.
+if [ "$method" = private-key-jwt ] || [ "$method" = tls-client-auth ]
+then
+  command -v openssl >/dev/null 2>&1 || {
+    auth_error client-certificate-openssl-unavailable
+    exit 89
+  }
+  command -v cmp >/dev/null 2>&1 || {
+    auth_error client-certificate-compare-unavailable
+    exit 89
+  }
+  openssl x509 -in "$certificate_file" -pubkey -noout \
+    > "$tmp/cert-public" 2>/dev/null || {
+    auth_error client-certificate-invalid
+    exit 70
+  }
+  openssl pkey -in "$private_key_file" -passin pass: -pubout \
+    > "$tmp/key-public" 2>/dev/null || {
+    auth_error client-private-key-unreadable-or-encrypted
+    exit 70
+  }
+  cmp -s "$tmp/cert-public" "$tmp/key-public" || {
+    auth_error client-certificate-key-mismatch
+    exit 70
+  }
+fi
+
 encoded_issuer=$(jq -rn --arg realm "$issuer" '$realm | @uri') || {
   auth_error invalid-issuer
   exit 67
@@ -599,7 +645,7 @@ then
 fi
 
 # Read a client secret only for secret-authenticating clients.
-if [ "$method" != private-key-jwt ]
+if [ "$method" != private-key-jwt ] && [ "$method" != tls-client-auth ]
 then
   # One newline-terminated graphic secret: do not lose NUL/control bytes.
   [ "$(wc -l < "$secret_file")" -eq 1 ] 2>/dev/null || {
@@ -751,6 +797,12 @@ then
   fi
 fi
 case "$method" in
+  tls-client-auth)
+    # Mutual-TLS certificate has already been checked against its private
+    # key. The selected server independently validates the chain and the
+    # client's exact certificate/CA policy; never send an OAuth secret.
+    set -- "$@" --data-urlencode "client_id=$client"
+    ;;
   client-secret-basic)
     case "$client" in
       *:*) auth_error client-basic-id-invalid; exit 64 ;;
@@ -832,34 +884,11 @@ K04_CLIENT_JWT_PYTHON
     ;;
   private-key-jwt)
     # RSA PKCS#1-v1.5, RSA-PSS, curve-bound ECDSA and Ed25519. Keys stay on
-    # the remote sudo target; the public certificate must match the key.
-    command -v openssl >/dev/null 2>&1 || {
-      auth_error private-key-openssl-unavailable
-      exit 89
-    }
+    # the remote sudo target; the matching public certificate is checked
+    # before discovery or signing.
     command -v python3 >/dev/null 2>&1 || {
       auth_error private-key-python-unavailable
       exit 89
-    }
-    command -v cmp >/dev/null 2>&1 || {
-      auth_error private-key-compare-unavailable
-      exit 89
-    }
-    openssl x509 -in "$certificate_file" -pubkey -noout \
-      > "$tmp/cert-public" 2>/dev/null || {
-      auth_error private-key-certificate-invalid
-      exit 70
-    }
-    # Empty passphrase forbids unexpected interactive prompts for encrypted
-    # private keys. Do not pass key bytes through an argument or stdin.
-    openssl pkey -in "$private_key_file" -passin pass: -pubout \
-      > "$tmp/key-public" 2>/dev/null || {
-      auth_error private-key-unreadable-or-encrypted
-      exit 70
-    }
-    cmp -s "$tmp/cert-public" "$tmp/key-public" || {
-      auth_error private-key-certificate-mismatch
-      exit 70
     }
     # OpenSSL can sign with an EC key even when the JOSE header says RS256;
     # require the actual key family and the exact JWA curve for ECDSA.
