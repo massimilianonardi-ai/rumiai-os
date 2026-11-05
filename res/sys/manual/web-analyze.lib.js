@@ -272,7 +272,16 @@ EVIDENCE
     mean that the complete response was recovered.
 
     The resource index records request failures, CDP-unavailable bodies,
-    redirect responses without bodies, and unfinished requests. Two
+    redirect responses without bodies, and unfinished requests.
+    If Chromium supplies a response event without a request event (for
+    example after enabling CSS inspection for cached stylesheets), the
+    response URL, type, frame, cache flag and status are preserved with
+    requestProvenance=response-only; the archive attempts normal CDP body
+    retrieval without inventing request method, initiator or timestamp.
+    A recovered body is saved but request provenance remains partial;
+    unavailable bytes retain an explicit body-unavailable outcome.
+    summary.json resourceCapture.responseOnly counts these observations,
+    separately from observed requestWillBeSent events. Two
     identical bodies may share a content-addressed file. CDP can expose
     bodies from cache/service workers, but cannot guarantee bytes for all
     network activity, streaming requests, WebSocket traffic or response
