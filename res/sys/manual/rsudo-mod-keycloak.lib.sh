@@ -187,18 +187,18 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     curl through a private 0600 temporary file, not through arguments or
     stdout. There is no Basic/Post fallback. Server policy may reject
     a JWT authenticator or expired assertion; that does not justify
-    retrying with weaker authentication. HS384/HS512, private-key JWT,
-    federated JWT and sender-constrained authentication remain pending.
+    retrying with weaker authentication. Private-key JWT, federated JWT
+    and sender-constrained authentication remain pending.
     Python or cryptographic prerequisites missing for an explicitly chosen
     JWT method result in a nonzero error; no implicit fallback occurs.
 
     Client credentials and explicitly enabled Direct Access Grant/password,
     refresh, explicit token revocation, protected structural status and
     authenticated access-token introspection currently support Basic/Post
-    and explicit HS256 client-secret-jwt confidential-client authentication. Other grants (browser code, device,
-    CIBA, JWT,
-    token exchange), and other client authenticator variants
-    (private-key JWT, federated JWT, HS384/512 and X509) remain pending
+    and explicit HS256/HS384/HS512 client-secret-jwt confidential-client
+    authentication. Other grants (browser code, device, CIBA, JWT
+    authorization grant, token exchange) and other client authenticators
+    (private-key JWT, federated JWT, X509) remain pending
     K04. The existing private Admin REST Bearer transport probe is a
     fixed-route read-only proof, not the public K05 request interface.
     Unimplemented modes fail closed with status 73.
