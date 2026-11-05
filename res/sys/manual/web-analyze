@@ -121,10 +121,12 @@ OUTPUT
                        outcomes, distinct from legacy origin-scoped archives.
       rest/targets/target-NNN/storage-partitions/selection-NNN/
                        Scoped IndexedDB records, Cache Storage metadata/body
-                       bytes and read-only CDP OPFS directory listings. File
-                       content bytes are not recovered from OPFS. Method/argument
-                       support is checked against the installed browser's
-                       /json/protocol; missing or truncated evidence is partial.
+                       bytes, CDP OPFS directories and private read-only
+                       default-bucket OPFS binary bodies (max 8 files, 256 KiB
+                       each, 512 KiB total) under opfs-bodies/*.bin with
+                       SHA-256 integrity verification. Named-bucket file bytes
+                       remain unavailable; limits and missing evidence are
+                       classified partial against installed /json/protocol.
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
                        dom-rest-{initial,final}.json (settlement evidence)
