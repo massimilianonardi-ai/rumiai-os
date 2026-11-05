@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: d6ad35ac4d879f7ce824394738505e494ecdf3e5
+          ref: df157f110530e246bb5f0241353bf46e4cc6b4ad
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -49,6 +49,7 @@ jobs:
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/web-analyze.test
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/command.test
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/inactive-profile.test
+          sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/orphan-response.test
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/oopif.test
       - name: Exercise real verified HTTPS and browser certificate-chain capture
         shell: bash
