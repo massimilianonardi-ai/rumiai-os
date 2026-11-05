@@ -147,7 +147,13 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     target: curl receives only --cert/--key paths and presents the client
     certificate for issuer discovery and each OAuth operation over verified
     HTTPS. --ca-file is for verifying the Keycloak HTTPS server, not the
-    CA trusted by Keycloak for authenticating this client.
+    CA trusted by Keycloak for authenticating this client. The current
+    X.509 curl transport requires a TLS backend capable of loading the
+    separate PEM --cert and --key files on the selected sudo target.
+    Apple's native SecureTransport curl cannot use that PEM pair directly;
+    configure a compatible installed curl (such as an OpenSSL-backed build)
+    in the remote sudo execution environment. No private-key PKCS#12 export,
+    keychain import, authenticator fallback or TLS bypass is performed.
 
     The Keycloak server must request or require TLS client certificates,
     trust the client certificate's issuing CA and configure the confidential
