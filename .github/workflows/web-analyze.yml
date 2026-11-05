@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: e2fcac5fc79bebff2f412306177ce13eeb8ed46e
+          ref: 53d9551d225d2bf2ecb5e3017b242cf2c417d833
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -35,6 +35,14 @@ jobs:
           node --check lib/sys/js/web-analyze.lib.js
           node --check lib/sys/js/web-analyze-rest.lib.js
           node --check bin/sys/web-analyze
+          node --check .web-analyze-tests/tests/rumiai-os/web-analyze/.support/physical-response-only.js
+          sh -n .web-analyze-tests/tests/rumiai-os/web-analyze/physical-response-only.test
+          if sh .web-analyze-tests/tests/rumiai-os/web-analyze/physical-response-only.test; then
+            echo 'opt-in physical test ran without authorization' >&2; exit 1
+          else
+            result=$?
+            test "$result" -eq 2
+          fi
           browser="$(command -v google-chrome || command -v chromium || command -v chromium-browser || true)"
           test -n "$browser"
           mkdir -p "$RUNNER_TEMP/web-analyze-bin"
