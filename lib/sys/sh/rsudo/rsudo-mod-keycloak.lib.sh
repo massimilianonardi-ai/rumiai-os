@@ -281,7 +281,7 @@ rsudo_mod_keycloak_auth()
       }
       [ -n "$client_jwt_alg" ] || client_jwt_alg=RS256
       case "$client_jwt_alg" in
-        RS256|RS384|RS512) : ;;
+        RS256|RS384|RS512|PS256|PS384|PS512) : ;;
         *) log error keycloak auth-private-key-alg-unsupported; exit 73 ;;
       esac
       ;;
@@ -831,7 +831,7 @@ K04_CLIENT_JWT_PYTHON
       --data-urlencode "client_assertion@$tmp/client-assertion"
     ;;
   private-key-jwt)
-    # RSA RS256/RS384/RS512 only. Key and certificate stay on the remote
+    # RSA PKCS#1-v1.5 and RSA-PSS only. Key/cert stay on the remote
     # sudo target. The public certificate must match the RSA signing key.
     command -v openssl >/dev/null 2>&1 || {
       auth_error private-key-openssl-unavailable
@@ -873,7 +873,7 @@ def urlsafe(raw):
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 client, audience, algorithm = sys.argv[1:]
-if algorithm not in ("RS256", "RS384", "RS512"):
+if algorithm not in ("RS256", "RS384", "RS512", "PS256", "PS384", "PS512"):
     raise ValueError("unsupported RSA assertion algorithm")
 now = int(time.time())
 header = {"alg": algorithm, "typ": "JWT"}
@@ -891,18 +891,43 @@ K04_PRIVATE_KEY_JWT_PYTHON
       exit 90
     }
     case "$client_jwt_alg" in
-      RS256) rsa_digest=sha256 ;;
-      RS384) rsa_digest=sha384 ;;
-      RS512) rsa_digest=sha512 ;;
+      RS256|PS256) rsa_digest=sha256 ;;
+      RS384|PS384) rsa_digest=sha384 ;;
+      RS512|PS512) rsa_digest=sha512 ;;
     esac
-    openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
-      -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null || {
+    case "$client_jwt_alg" in
+      PS*)
+        # JWS RSA-PSS requires MGF1 with the selected SHA digest and a
+        # salt exactly as long as that digest (-1 in OpenSSL).
+        openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
+          -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
+          -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null
+        ;;
+      *)
+        openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
+          -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null
+        ;;
+    esac
+    signature_status=$?
+    [ "$signature_status" -eq 0 ] || {
       auth_error private-key-signature-failed
       exit 90
     }
-    openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
-      -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
-      >/dev/null 2>&1 || {
+    case "$client_jwt_alg" in
+      PS*)
+        openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
+          -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
+          -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
+          >/dev/null 2>&1
+        ;;
+      *)
+        openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
+          -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
+          >/dev/null 2>&1
+        ;;
+    esac
+    signature_status=$?
+    [ "$signature_status" -eq 0 ] || {
       auth_error private-key-signature-verification-failed
       exit 90
     }
