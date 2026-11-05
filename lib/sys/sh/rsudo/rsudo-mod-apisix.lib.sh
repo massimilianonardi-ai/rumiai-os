@@ -462,6 +462,7 @@ _rsudo_mod_apisix_runtime_remote_source()
 {
   cat <<'RSUDO_APISIX_RUNTIME_REMOTE'
 home=$1
+observation_scope=${2:-docker}
 
 runtime_error()
 {
@@ -556,7 +557,70 @@ case "$process_title" in
   *) runtime_error master-prefix-mismatch; exit 39 ;;
 esac
 
-printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\nruntime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n' "$pid"
+# Optional independent evidence from the host's actual systemd manager.
+# Derive a unit only from kernel cgroup v2 membership, then cross-check it
+# against active manager state and its independently reported main PID.
+# This does not identify loaded APISIX source, Admin listener or write access.
+# A Docker observer never queries a potentially host-mounted systemd manager.
+service_unit=
+if [ "$observation_scope" = host ] &&
+   [ -r "/proc/$pid/cgroup" ] &&
+   command -v sed >/dev/null 2>&1 &&
+   command -v systemctl >/dev/null 2>&1
+then
+  process_group=$(LC_ALL=C sed -n 's/^0:://p' "/proc/$pid/cgroup") || process_group=
+  case "$process_group" in
+    /*) : ;;
+    *) process_group= ;;
+  esac
+  if [ -n "$process_group" ]
+  then
+    service_unit=$(printf '%s\n' "$process_group" |
+      LC_ALL=C sed -n 's@^.*/\([^/]*\.service\)\(/.*\)\{0,1\}$@\1@p') || service_unit=
+    case "$service_unit" in
+      ''|*[!a-zA-Z0-9_.@-]*) service_unit= ;;
+    esac
+  fi
+  if [ -n "$service_unit" ]
+  then
+    properties=$(LC_ALL=C systemctl --no-pager show \
+      --property=Id,MainPID,ControlGroup,ActiveState -- "$service_unit" 2>/dev/null) ||
+      properties=
+    match_id=0
+    match_pid=0
+    match_group=0
+    match_active=0
+    while IFS= read -r property
+    do
+      case "$property" in
+        "Id=$service_unit") match_id=1 ;;
+        "MainPID=$pid") match_pid=1 ;;
+        "ActiveState=active") match_active=1 ;;
+        ControlGroup=*)
+          unit_group=${property#ControlGroup=}
+          case "$unit_group" in
+            ''|/) : ;;
+            *) case "$process_group" in
+                 "$unit_group"|"$unit_group"/*) match_group=1 ;;
+               esac ;;
+          esac
+        ;;
+      esac
+    done <<RSUDO_APISIX_SYSTEMD_PROPERTIES
+$properties
+RSUDO_APISIX_SYSTEMD_PROPERTIES
+    [ "$match_id" -eq 1 ] && [ "$match_pid" -eq 1 ] &&
+      [ "$match_group" -eq 1 ] && [ "$match_active" -eq 1 ] ||
+      service_unit=
+  fi
+fi
+
+printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\n' "$pid"
+if [ -n "$service_unit" ]
+then
+  printf 'service_manager_evidence=systemd-mainpid-and-cgroup\nservice_unit=%s\n' "$service_unit"
+fi
+printf 'runtime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n'
 RSUDO_APISIX_RUNTIME_REMOTE
 }
 
@@ -855,7 +919,7 @@ rsudo_mod_apisix_runtime()
     case "$selected" in
       host)
         observation=$(_rsudo_mod_apisix_runtime_remote_source |
-          rsudo sh -s -- /usr/local/apisix)
+          rsudo sh -s -- /usr/local/apisix host)
         status=$?
         [ "$status" -eq 0 ] || exit "$status"
         scope=host
@@ -873,7 +937,7 @@ rsudo_mod_apisix_runtime()
           ;;
         esac
         observation=$(_rsudo_mod_apisix_runtime_remote_source |
-          rsudo sh -s -- "$selected_home")
+          rsudo sh -s -- "$selected_home" host)
         status=$?
         [ "$status" -eq 0 ] || exit "$status"
         scope=host
@@ -949,7 +1013,7 @@ rsudo_mod_apisix_runtime()
 
   if [ "$#" -eq 1 ]
   then
-    _rsudo_mod_apisix_runtime_remote_source | rsudo sh -s -- "$1"
+    _rsudo_mod_apisix_runtime_remote_source | rsudo sh -s -- "$1" host
   else
     # Never let a user-supplied Docker option, mutable name or abbreviated
     # ID choose the target. Docker's full 64-hex identity is immutable.
