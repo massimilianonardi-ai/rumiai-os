@@ -111,6 +111,7 @@ rsudo_mod_keycloak_auth()
   esac
 
   server= issuer= client= method= secret_file= token_store= token_file= ca_file=
+  private_key_file= certificate_file=
   auth_mode= username= password_file= token_type_hint= client_jwt_alg=
   while [ "$#" -gt 0 ]
   do
@@ -129,6 +130,8 @@ rsudo_mod_keycloak_auth()
       --client-jwt-alg) client_jwt_alg=$value ;;
       --auth-mode) auth_mode=$value ;;
       --client-secret-file) secret_file=$value ;;
+      --private-key-file) private_key_file=$value ;;
+      --certificate-file) certificate_file=$value ;;
       --username) username=$value ;;
       --password-file) password_file=$value ;;
       --token-store) token_store=$value ;;
@@ -153,14 +156,14 @@ rsudo_mod_keycloak_auth()
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
       esac
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
         *) log error keycloak auth-client-method-unimplemented; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
         log error keycloak auth-missing-client-or-issuer
         exit 64
       }
-      [ -n "$secret_file" ] && [ -n "$token_store" ] || {
+      [ -n "$token_store" ] || {
         log error keycloak auth-missing-protected-files
         exit 70
       }
@@ -188,11 +191,11 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
         *) log error keycloak auth-refresh-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] &&
-        [ -n "$secret_file" ] && [ -n "$token_file" ] &&
+        [ -n "$token_file" ] &&
         [ -n "$token_store" ] && [ "$token_file" = "$token_store" ] || {
         log error keycloak auth-refresh-requires-same-store
         exit 70
@@ -205,14 +208,14 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
         *) log error keycloak auth-revoke-client-method-unsupported; exit 73 ;;
       esac
       [ -n "$issuer" ] && [ -n "$client" ] || {
         log error keycloak auth-revoke-missing-client-or-issuer
         exit 64
       }
-      [ -n "$secret_file" ] && [ -n "$token_file" ] || {
+      [ -n "$token_file" ] || {
         log error keycloak auth-revoke-missing-protected-files
         exit 70
       }
@@ -233,39 +236,72 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       if [ -n "$server" ] || [ -n "$issuer" ] || [ -n "$client" ] ||
-        [ -n "$method" ] || [ -n "$secret_file" ] || [ -n "$ca_file" ]
+        [ -n "$method" ] || [ -n "$secret_file" ] || [ -n "$ca_file" ] ||
+        [ -n "$private_key_file" ] || [ -n "$certificate_file" ]
       then
         [ -n "$server" ] && [ -n "$issuer" ] && [ -n "$client" ] &&
-          [ -n "$method" ] && [ -n "$secret_file" ] || {
+          [ -n "$method" ] || {
           log error keycloak auth-status-incomplete-introspection-context
           exit 64
         }
         case "$method" in
-          client-secret-basic|client-secret-post|client-secret-jwt) : ;;
+          client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt) : ;;
           *) log error keycloak auth-status-client-method-unsupported; exit 73 ;;
         esac
       fi
       ;;
   esac
 
-  # An algorithm pin is meaningful only for the signed-secret authenticator.
-  # Preserve the existing HS256 default on invocations already using JWT;
-  # never silently retry with another signing algorithm.
-  if [ -n "$client_jwt_alg" ] && [ "$method" != client-secret-jwt ]
-  then
-    log error keycloak auth-client-jwt-alg-without-signed-client
-    exit 64
-  fi
-  if [ "$method" = client-secret-jwt ]
-  then
-    [ -n "$client_jwt_alg" ] || client_jwt_alg=HS256
-    case "$client_jwt_alg" in
-      HS256|HS384|HS512) : ;;
-      *) log error keycloak auth-client-jwt-alg-unsupported; exit 73 ;;
-    esac
-  fi
+  # The authenticator determines which credentials are valid. A selected
+  # algorithm is never retried or silently changed on server rejection.
+  case "$method" in
+    client-secret-jwt)
+      [ -z "$private_key_file" ] && [ -z "$certificate_file" ] || {
+        log error keycloak auth-client-jwt-credential-mismatch
+        exit 64
+      }
+      [ -n "$secret_file" ] || {
+        log error keycloak auth-client-secret-missing
+        exit 70
+      }
+      [ -n "$client_jwt_alg" ] || client_jwt_alg=HS256
+      case "$client_jwt_alg" in
+        HS256|HS384|HS512) : ;;
+        *) log error keycloak auth-client-jwt-alg-unsupported; exit 73 ;;
+      esac
+      ;;
+    private-key-jwt)
+      [ -z "$secret_file" ] || {
+        log error keycloak auth-private-key-secret-incompatible
+        exit 64
+      }
+      [ -n "$private_key_file" ] && [ -n "$certificate_file" ] || {
+        log error keycloak auth-private-key-files-missing
+        exit 70
+      }
+      [ -n "$client_jwt_alg" ] || client_jwt_alg=RS256
+      case "$client_jwt_alg" in
+        RS256) : ;;
+        *) log error keycloak auth-private-key-alg-unsupported; exit 73 ;;
+      esac
+      ;;
+    *)
+      [ -z "$client_jwt_alg" ] && [ -z "$private_key_file" ] &&
+        [ -z "$certificate_file" ] || {
+        log error keycloak auth-client-credentials-incompatible
+        exit 64
+      }
+      if [ "$action" != status ] || [ -n "$server" ]
+      then
+        [ -n "$secret_file" ] || {
+          log error keycloak auth-client-secret-missing
+          exit 70
+        }
+      fi
+      ;;
+  esac
 
-  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file"
+  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file" "$private_key_file" "$certificate_file"
   do
     [ -z "$selected" ] && continue
     case "$selected" in
@@ -296,7 +332,7 @@ rsudo_mod_keycloak_auth()
   rsudo -- sh -s -- "$action" "$server" "$issuer" "$client" "$method" \
     "$secret_file" "$token_store" "$token_file" "$ca_file" \
     "$auth_mode" "$username" "$password_file" "$token_type_hint" \
-    "$client_jwt_alg" <<'KEYCLOAK_AUTH_REMOTE'
+    "$client_jwt_alg" "$private_key_file" "$certificate_file" <<'KEYCLOAK_AUTH_REMOTE'
 action=$1
 server=$2
 issuer=$3
@@ -311,6 +347,8 @@ username=${11}
 password_file=${12}
 token_type_hint=${13}
 client_jwt_alg=${14}
+private_key_file=${15}
+certificate_file=${16}
 
 umask 077
 auth_error()
@@ -448,10 +486,22 @@ then
   # access token remains in a protected file and no provider claims are echoed.
 fi
 
-private_file "$secret_file" || {
-  auth_error client-secret-file-unavailable-or-insecure
-  exit 70
-}
+if [ "$method" = private-key-jwt ]
+then
+  private_file "$private_key_file" || {
+    auth_error private-key-file-unavailable-or-insecure
+    exit 70
+  }
+  private_file "$certificate_file" || {
+    auth_error certificate-file-unavailable-or-insecure
+    exit 70
+  }
+else
+  private_file "$secret_file" || {
+    auth_error client-secret-file-unavailable-or-insecure
+    exit 70
+  }
+fi
 if [ "$action" = revoke ] || [ "$action" = refresh ]
 then
   private_file "$token_file" || {
@@ -548,27 +598,30 @@ then
   }
 fi
 
-# Only a single newline-terminated graphic secret is accepted. This also
-# detects embedded NUL and control-byte tricks that shell read might discard.
-[ "$(wc -l < "$secret_file")" -eq 1 ] 2>/dev/null || {
-  auth_error secret-file-format-invalid
-  exit 70
-}
-secret=$(cat "$secret_file") || {
-  auth_error secret-file-read-failed
-  exit 70
-}
-case "$secret" in
-  ''|*[![:graph:]]*)
+# Read a client secret only for secret-authenticating clients.
+if [ "$method" != private-key-jwt ]
+then
+  # One newline-terminated graphic secret: do not lose NUL/control bytes.
+  [ "$(wc -l < "$secret_file")" -eq 1 ] 2>/dev/null || {
     auth_error secret-file-format-invalid
     exit 70
-    ;;
-esac
-[ "$(printf '%s\n' "$secret" | wc -c)" -eq \
-  "$(wc -c < "$secret_file")" ] 2>/dev/null || {
-  auth_error secret-file-bytes-invalid
-  exit 70
-}
+  }
+  secret=$(cat "$secret_file") || {
+    auth_error secret-file-read-failed
+    exit 70
+  }
+  case "$secret" in
+    ''|*[![:graph:]]*)
+      auth_error secret-file-format-invalid
+      exit 70
+      ;;
+  esac
+  [ "$(printf '%s\n' "$secret" | wc -c)" -eq \
+    "$(wc -c < "$secret_file")" ] 2>/dev/null || {
+    auth_error secret-file-bytes-invalid
+    exit 70
+  }
+fi
 
 if [ "$action" = refresh ]
 then
@@ -771,6 +824,94 @@ K04_CLIENT_JWT_PYTHON
     jwt_status=$?
     [ "$jwt_status" -eq 0 ] && [ -s "$tmp/client-assertion" ] || {
       auth_error client-jwt-signing-failed
+      exit 90
+    }
+    set -- "$@" --data-urlencode "client_id=$client" \
+      --data-urlencode 'client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer' \
+      --data-urlencode "client_assertion@$tmp/client-assertion"
+    ;;
+  private-key-jwt)
+    # RS256 only. Both the key and certificate reside on the selected remote
+    # sudo target. The public certificate must match the RSA signing key.
+    command -v openssl >/dev/null 2>&1 || {
+      auth_error private-key-openssl-unavailable
+      exit 89
+    }
+    command -v python3 >/dev/null 2>&1 || {
+      auth_error private-key-python-unavailable
+      exit 89
+    }
+    command -v cmp >/dev/null 2>&1 || {
+      auth_error private-key-compare-unavailable
+      exit 89
+    }
+    openssl x509 -in "$certificate_file" -pubkey -noout \
+      > "$tmp/cert-public" 2>/dev/null || {
+      auth_error private-key-certificate-invalid
+      exit 70
+    }
+    # Empty passphrase forbids unexpected interactive prompts for encrypted
+    # private keys. Do not pass key bytes through an argument or stdin.
+    openssl pkey -in "$private_key_file" -passin pass: -pubout \
+      > "$tmp/key-public" 2>/dev/null || {
+      auth_error private-key-unreadable-or-encrypted
+      exit 70
+    }
+    cmp -s "$tmp/cert-public" "$tmp/key-public" || {
+      auth_error private-key-certificate-mismatch
+      exit 70
+    }
+    python3 - "$client" "$expected_issuer" \
+      > "$tmp/assertion-message" 2>/dev/null <<'K04_PRIVATE_KEY_JWT_PYTHON'
+import base64
+import json
+import secrets
+import sys
+import time
+
+def urlsafe(raw):
+    return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
+
+client, audience = sys.argv[1:]
+now = int(time.time())
+header = {"alg": "RS256", "typ": "JWT"}
+claims = {
+    "iss": client, "sub": client, "aud": audience,
+    "jti": secrets.token_urlsafe(24),
+    "iat": now, "nbf": now, "exp": now + 30,
+}
+h = urlsafe(json.dumps(header, separators=(",", ":")).encode("utf-8"))
+p = urlsafe(json.dumps(claims, separators=(",", ":")).encode("utf-8"))
+sys.stdout.write(h + "." + p)
+K04_PRIVATE_KEY_JWT_PYTHON
+    [ "$?" -eq 0 ] && [ -s "$tmp/assertion-message" ] || {
+      auth_error private-key-assertion-build-failed
+      exit 90
+    }
+    openssl dgst -sha256 -sign "$private_key_file" -passin pass: \
+      -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null || {
+      auth_error private-key-signature-failed
+      exit 90
+    }
+    openssl dgst -sha256 -verify "$tmp/cert-public" \
+      -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
+      >/dev/null 2>&1 || {
+      auth_error private-key-signature-verification-failed
+      exit 90
+    }
+    python3 - "$tmp/assertion-message" "$tmp/assertion-signature" \
+      > "$tmp/client-assertion" 2>/dev/null <<'K04_PRIVATE_KEY_JWT_ENCODE'
+import base64
+import sys
+
+with open(sys.argv[1], "rb") as message:
+    signed = message.read().decode("ascii")
+with open(sys.argv[2], "rb") as signature:
+    sig = base64.urlsafe_b64encode(signature.read()).rstrip(b"=").decode("ascii")
+sys.stdout.write(signed + "." + sig)
+K04_PRIVATE_KEY_JWT_ENCODE
+    [ "$?" -eq 0 ] && [ -s "$tmp/client-assertion" ] || {
+      auth_error private-key-assertion-encode-failed
       exit 90
     }
     set -- "$@" --data-urlencode "client_id=$client" \
