@@ -123,7 +123,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --client-id ID --client-auth private-key-jwt
         --private-key-file ABSOLUTE-REMOTE-KEY-PATH
         --certificate-file ABSOLUTE-REMOTE-CERT-PATH
-        [--client-jwt-alg RS256]
+        [--client-jwt-alg RS256|RS384|RS512]
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
@@ -136,9 +136,9 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     --client-secret-file is invalid with private-key-jwt, and a private key
     or certificate is invalid with Basic/Post or client-secret-jwt.
 
-    The first private-key-jwt subset supports RSA PKCS#1-v1.5 RS256 only;
-    --client-jwt-alg defaults to RS256 for this authenticator, and any other
-    algorithm is rejected. RSA private key and X.509 certificate must be
+    The private-key-jwt subset supports RSA PKCS#1-v1.5 RS256, RS384 and
+    RS512. --client-jwt-alg defaults to RS256 for this authenticator;
+    unsupported algorithms are rejected without fallback. RSA private key and X.509 certificate must be
     pre-provisioned as root/sudo-identity-owned private remote regular files
     with mode 0600, without symbolic links in their paths. Encrypted keys
     requiring interactive passphrases are not supported in this subset.
@@ -154,7 +154,7 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     A successful OAuth grant is not proof of Admin REST permissions.
 
     This does not implement the other asymmetric or sender-constrained
-    authenticators: RS384/512, PS256/384/512, EC/EdDSA, X509 mTLS and
+    authenticators: RSA-PSS PS256/384/512, EC/EdDSA, X509 mTLS and
     federated JWT remain separate K04 work. There is no fallback or
     automatic client-key/certificate discovery.
 
@@ -237,9 +237,9 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     refresh, explicit token revocation, protected structural status and
     authenticated access-token introspection currently support Basic/Post
     and explicit HS256/HS384/HS512 client-secret-jwt confidential-client
-    authentication, plus the selected RS256 private-key-jwt subset.
+    authentication, plus the selected RSA RS256/RS384/RS512 private-key-jwt subset.
     Other grants (browser code, device, CIBA, JWT authorization grant,
-    token exchange) and further client authenticators (additional RSA,
+    token exchange) and further client authenticators (RSA-PSS,
     EC/EdDSA, federated JWT and X509 mTLS) remain pending
     K04. The existing private Admin REST Bearer transport probe is a
     fixed-route read-only proof, not the public K05 request interface.
