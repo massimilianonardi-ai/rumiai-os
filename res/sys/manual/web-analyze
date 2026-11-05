@@ -96,12 +96,14 @@ OUTPUT
                        and mere schema availability are not captured data.
       rest/worker-provenance/index.json
                        Private offline correlation of native CDP target/frame
-                       lifetime events, worker script versions, service-worker
-                       registrations and observed default execution contexts.
-                       ServiceWorker.enable subscribes to updates only when the
-                       installed browser protocol supports it; no start/update,
-                       unregister or network fetch is triggered. Missing OOPIFs
-                       or unattached targets are not treated as complete.
+                       events and ServiceWorker registrations/versions with
+                       existing browser getRegistrations() environment snapshots.
+                       Stopped versions are distinguished from missing worker
+                       targets: a persisted activated registration needs no
+                       running worker process. Ambiguous/unobserved CDP evidence
+                       remains partial. ServiceWorker.enable only subscribes;
+                       no start/stop/update/unregister or fetch is triggered.
+                       Missing OOPIF evidence remains explicitly incomplete.
       rest/pwa-resources/index.json
                        Private, read-only manifest/resource provenance: exact
                        observed manifest, start URL and icon references matched
