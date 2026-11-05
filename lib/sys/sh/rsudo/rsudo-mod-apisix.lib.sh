@@ -615,10 +615,44 @@ RSUDO_APISIX_SYSTEMD_PROPERTIES
   fi
 fi
 
+# Optional Linux kernel proof for the conventional loopback TCP endpoint.
+# Use the observed master's OWN network namespace and FD table; seeing port
+# 9180 elsewhere in the namespace is NOT evidence that this master owns it.
+# One unique listening socket inode is required. Missing tools, permissions,
+# IPv6-only listeners or multiple inodes simply leave the field absent.
+# This is a TCP ownership observation, NOT an Admin HTTP identity check.
+listener_socket=
+if [ -r "/proc/$pid/net/tcp" ] && [ -d "/proc/$pid/fd" ] &&
+   command -v awk >/dev/null 2>&1 &&
+   command -v readlink >/dev/null 2>&1
+then
+  listener_inode=$(LC_ALL=C awk '$2=="0100007F:23DC" && $4=="0A" {print $10}' \
+    "/proc/$pid/net/tcp" 2>/dev/null) || listener_inode=
+  case "$listener_inode" in
+    ''|*[!0-9]*) : ;;
+    *)
+      for fd in "/proc/$pid/fd/"*
+      do
+        [ -L "$fd" ] || continue
+        fd_target=$(readlink "$fd" 2>/dev/null) || continue
+        if [ "$fd_target" = "socket:[$listener_inode]" ]
+        then
+          listener_socket=127.0.0.1:9180
+          break
+        fi
+      done
+    ;;
+  esac
+fi
+
 printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\n' "$pid"
 if [ -n "$service_unit" ]
 then
   printf 'service_manager_evidence=systemd-mainpid-and-cgroup\nservice_unit=%s\n' "$service_unit"
+fi
+if [ -n "$listener_socket" ]
+then
+  printf 'listener_socket_evidence=master-fd-loopback-tcp\nlistener_socket=%s\n' "$listener_socket"
 fi
 printf 'runtime_identity=process-consistent-config-unverified\nmutation_readiness=not-established\n'
 RSUDO_APISIX_RUNTIME_REMOTE
