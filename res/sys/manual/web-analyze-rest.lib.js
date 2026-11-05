@@ -172,9 +172,14 @@ OUTPUT
          storage-partitions/selection-NNN/opfs.json
                                 Read-only FileSystem.getDirectory metadata,
                                 bounded to 12 directories and depth 3 when
-                                available. Lists names/sizes but cannot recover
-                                file bytes. No page inputs, OPFS root creation,
-                                bucket writes or extra URL fetches are used.
+                                available. Lists names/sizes, then reads up to eight previously
+                                observed default-bucket files via the exact
+                                default frame runtime context (256 KiB per file,
+                                512 KiB total). Bytes are private SHA-256
+                                addressed opfs-bodies/*.bin with integrity audit.
+                                Named-bucket files and unavailable contents are
+                                explicitly partial. No browser input, new file/
+                                bucket creation or additional URL fetches.
                                 Unknown frame buckets, unsupported methods,
                                 interrupted reads and content limits are partial;
                                 origin-wide indexes remain separate.
