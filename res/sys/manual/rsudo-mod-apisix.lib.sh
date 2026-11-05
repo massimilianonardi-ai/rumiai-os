@@ -131,7 +131,21 @@ PUBLIC FUNCTIONS
         mutation_readiness=not-established, without claiming stopped state.
         A matching master reports runtime_evidence=pidfile-and-master-args,
         process_pid=<pid>, runtime_identity=process-consistent-config-unverified,
-        mutation_readiness=not-established. Invalid/unsafe/mismatching
+        mutation_readiness=not-established. On Linux host-scoped inspection,
+        an additional read-only systemd attribution is printed only when
+        the master's kernel cgroup v2 membership identifies a valid service
+        unit and systemctl independently confirms matching Id, MainPID,
+        ControlGroup and ActiveState=active. The optional records between
+        process_pid and runtime_identity are:
+        service_manager_evidence=systemd-mainpid-and-cgroup
+        service_unit=<systemd-service-unit>
+        If procfs/cgroup v2/systemctl is unavailable or the records do not
+        agree, these fields are omitted rather than claiming service
+        identity. Docker observation never queries a possibly host-mounted
+        service manager. No unit execution arguments or config are printed;
+        even positive unit matching does not establish effective APISIX
+        source/profile, Admin listener or mutation readiness.
+        Invalid/unsafe/mismatching
         evidence fails non-zero with branch-specific diagnostics (status 30-43).
         A PID file and process title are insufficient to prove the running
         config.yaml, custom -c, APISIX_PROFILE or effective Admin listener.
