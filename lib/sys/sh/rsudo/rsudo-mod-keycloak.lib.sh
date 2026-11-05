@@ -111,7 +111,7 @@ rsudo_mod_keycloak_auth()
   esac
 
   server= issuer= client= method= secret_file= token_store= token_file= ca_file=
-  private_key_file= certificate_file=
+  private_key_file= certificate_file= assertion_file=
   auth_mode= username= password_file= token_type_hint= client_jwt_alg=
   while [ "$#" -gt 0 ]
   do
@@ -132,6 +132,7 @@ rsudo_mod_keycloak_auth()
       --client-secret-file) secret_file=$value ;;
       --private-key-file) private_key_file=$value ;;
       --certificate-file) certificate_file=$value ;;
+      --assertion-file) assertion_file=$value ;;
       --username) username=$value ;;
       --password-file) password_file=$value ;;
       --token-store) token_store=$value ;;
@@ -156,9 +157,14 @@ rsudo_mod_keycloak_auth()
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
       esac
       case "$method" in
-        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth) : ;;
+        client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth|federated-jwt) : ;;
         *) log error keycloak auth-client-method-unimplemented; exit 73 ;;
       esac
+      if [ "$method" = federated-jwt ] && [ "$auth_mode" != client-credentials ]
+      then
+        log error keycloak auth-federated-grant-unsupported
+        exit 73
+      fi
       [ -n "$issuer" ] && [ -n "$client" ] || {
         log error keycloak auth-missing-client-or-issuer
         exit 64
@@ -254,7 +260,22 @@ rsudo_mod_keycloak_auth()
 
   # The authenticator determines which credentials are valid. A selected
   # algorithm is never retried or silently changed on server rejection.
+  [ "$method" = federated-jwt ] || [ -z "$assertion_file" ] || {
+    log error keycloak auth-unselected-assertion-file
+    exit 64
+  }
   case "$method" in
+    federated-jwt)
+      [ -z "$secret_file" ] && [ -z "$client_jwt_alg" ] &&
+        [ -z "$private_key_file" ] && [ -z "$certificate_file" ] || {
+        log error keycloak auth-federated-credentials-incompatible
+        exit 64
+      }
+      [ -n "$assertion_file" ] || {
+        log error keycloak auth-federated-assertion-file-missing
+        exit 70
+      }
+      ;;
     client-secret-jwt)
       [ -z "$private_key_file" ] && [ -z "$certificate_file" ] || {
         log error keycloak auth-client-jwt-credential-mismatch
@@ -311,7 +332,7 @@ rsudo_mod_keycloak_auth()
       ;;
   esac
 
-  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file" "$private_key_file" "$certificate_file"
+  for selected in "$secret_file" "$token_store" "$token_file" "$ca_file" "$password_file" "$private_key_file" "$certificate_file" "$assertion_file"
   do
     [ -z "$selected" ] && continue
     case "$selected" in
@@ -342,7 +363,7 @@ rsudo_mod_keycloak_auth()
   rsudo -- sh -s -- "$action" "$server" "$issuer" "$client" "$method" \
     "$secret_file" "$token_store" "$token_file" "$ca_file" \
     "$auth_mode" "$username" "$password_file" "$token_type_hint" \
-    "$client_jwt_alg" "$private_key_file" "$certificate_file" <<'KEYCLOAK_AUTH_REMOTE'
+    "$client_jwt_alg" "$private_key_file" "$certificate_file" "$assertion_file" <<'KEYCLOAK_AUTH_REMOTE'
 action=$1
 server=$2
 issuer=$3
@@ -359,6 +380,7 @@ token_type_hint=${13}
 client_jwt_alg=${14}
 private_key_file=${15}
 certificate_file=${16}
+assertion_file=${17}
 
 umask 077
 auth_error()
@@ -503,7 +525,13 @@ then
   # access token remains in a protected file and no provider claims are echoed.
 fi
 
-if [ "$method" = private-key-jwt ] || [ "$method" = tls-client-auth ]
+if [ "$method" = federated-jwt ]
+then
+  private_file "$assertion_file" || {
+    auth_error federated-assertion-file-unavailable-or-insecure
+    exit 70
+  }
+elif [ "$method" = private-key-jwt ] || [ "$method" = tls-client-auth ]
 then
   private_file "$private_key_file" || {
     auth_error private-key-file-unavailable-or-insecure
@@ -645,7 +673,8 @@ then
 fi
 
 # Read a client secret only for secret-authenticating clients.
-if [ "$method" != private-key-jwt ] && [ "$method" != tls-client-auth ]
+if [ "$method" != private-key-jwt ] && [ "$method" != tls-client-auth ] &&
+  [ "$method" != federated-jwt ]
 then
   # One newline-terminated graphic secret: do not lose NUL/control bytes.
   [ "$(wc -l < "$secret_file")" -eq 1 ] 2>/dev/null || {
@@ -797,6 +826,25 @@ then
   fi
 fi
 case "$method" in
+  federated-jwt)
+    # The assertion comes from an independently configured external issuer;
+    # never generate it from the Keycloak client identity, and never pass
+    # assertion bytes as source, argv, stdout or diagnostics. Accept one
+    # compact JWS and at most one final line feed from the protected file.
+    jq -R -s -j 'if test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\n?$")
+      then sub("\n$"; "") else error("invalid compact assertion") end' \
+      "$assertion_file" > "$tmp/client-assertion" 2>/dev/null || {
+      auth_error federated-assertion-format-invalid
+      exit 70
+    }
+    [ -s "$tmp/client-assertion" ] || {
+      auth_error federated-assertion-empty
+      exit 70
+    }
+    set -- "$@" --data-urlencode "client_id=$client" \
+      --data-urlencode 'client_assertion_type=urn:ietf:params:oauth:client-assertion-type:jwt-bearer' \
+      --data-urlencode "client_assertion@$tmp/client-assertion"
+    ;;
   tls-client-auth)
     # Mutual-TLS certificate has already been checked against its private
     # key. The selected server independently validates the chain and the
@@ -1147,6 +1195,21 @@ jq -e '(.access_token | type == "string" and length > 0) and
   auth_error token-response-invalid
   exit 86
 }
+
+if [ "$method" = federated-jwt ]
+then
+  # Verify the selected client really received the resulting bearer.
+  # Only Keycloak's verified HTTPS response is decoded, never printed.
+  jq -e --arg expected "$client" '
+    .access_token | split(".") |
+    if length == 3
+    then .[1] | gsub("-"; "+") | gsub("_"; "/") |
+      @base64d | fromjson | .azp == $expected
+    else false end' "$tmp/response" >/dev/null 2>&1 || {
+    auth_error federated-token-client-binding-mismatch
+    exit 67
+  }
+fi
 
 if [ "$action" = refresh ]
 then
