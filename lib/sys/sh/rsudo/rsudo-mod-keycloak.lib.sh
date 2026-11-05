@@ -1225,7 +1225,7 @@ KEYCLOAK_AUTH_REMOTE
 # Only an explicitly selected realm GET is reachable; response body is secret.
 _rsudo_mod_keycloak_admin_transport_probe()
 (
-  server= issuer= realm= token_file= ca_file=
+  server= issuer= realm= token_file= ca_file= client_auth= private_key_file= certificate_file=
   while [ "$#" -gt 0 ]
   do
     [ "$#" -ge 2 ] || { log error keycloak admin-probe-option-value; exit 64; }
@@ -1237,6 +1237,9 @@ _rsudo_mod_keycloak_admin_transport_probe()
       --target-realm) realm=$value ;;
       --token-file) token_file=$value ;;
       --ca-file) ca_file=$value ;;
+      --client-auth) client_auth=$value ;;
+      --private-key-file) private_key_file=$value ;;
+      --certificate-file) certificate_file=$value ;;
       *) log error keycloak admin-probe-unsupported-option option "$key"; exit 64 ;;
     esac
   done
@@ -1244,6 +1247,24 @@ _rsudo_mod_keycloak_admin_transport_probe()
     log error keycloak admin-probe-missing-selection
     exit 64
   }
+  case "$client_auth" in
+    '')
+      [ -z "$private_key_file" ] && [ -z "$certificate_file" ] || {
+        log error keycloak admin-probe-client-certificate-unselected
+        exit 64
+      }
+      ;;
+    tls-client-auth)
+      [ -n "$private_key_file" ] && [ -n "$certificate_file" ] || {
+        log error keycloak admin-probe-client-certificate-incomplete
+        exit 70
+      }
+      ;;
+    *)
+      log error keycloak admin-probe-client-auth-unsupported method "$client_auth"
+      exit 73
+      ;;
+  esac
   case "$server" in https://?*) : ;;
     *) log error keycloak admin-probe-untrusted-server; exit 65 ;; esac
   case "$server" in
@@ -1253,7 +1274,7 @@ _rsudo_mod_keycloak_admin_transport_probe()
       exit 65 ;;
   esac
   case "$server" in */) server=${server%/} ;; esac
-  for file in "$token_file" "$ca_file"
+  for file in "$token_file" "$ca_file" "$private_key_file" "$certificate_file"
   do
     [ -n "$file" ] || continue
     case "$file" in /*) : ;;
@@ -1261,8 +1282,10 @@ _rsudo_mod_keycloak_admin_transport_probe()
   done
 
   RSUDO_INTERACTIVE=
-  rsudo -- sh -s -- "$server" "$issuer" "$realm" "$token_file" "$ca_file" <<'KEYCLOAK_K04_ADMIN_REMOTE'
+  rsudo -- sh -s -- "$server" "$issuer" "$realm" "$token_file" "$ca_file" \
+    "$client_auth" "$private_key_file" "$certificate_file" <<'KEYCLOAK_K04_ADMIN_REMOTE'
 server=$1 issuer=$2 realm=$3 token_file=$4 ca_file=$5
+client_auth=$6 private_key_file=$7 certificate_file=$8
 umask 077
 admin_error() { printf 'keycloak.admin-probe.%s\n' "$1" >&2; }
 safe_path()
@@ -1305,6 +1328,12 @@ private_token()
 }
 curl_safe()
 {
+  # A certificate-selected fixed GET uses the same remote TLS identity for
+  # issuer discovery and the resource request, without exposing key bytes.
+  if [ "$client_auth" = tls-client-auth ]
+  then
+    set -- --cert "$certificate_file" --key "$private_key_file" "$@"
+  fi
   if [ -n "$ca_file" ]
   then
     curl -q --silent --show-error --noproxy '*' --proxy '' \
@@ -1347,6 +1376,39 @@ tmp=$(mktemp -d "${TMPDIR:-/tmp}/keycloak-admin.XXXXXXXX") || {
 }
 trap 'rm -rf "$tmp"' 0
 trap 'exit 88' 1 2 3 15
+if [ "$client_auth" = tls-client-auth ]
+then
+  private_token "$private_key_file" || {
+    admin_error client-private-key-unavailable-or-insecure
+    exit 70
+  }
+  private_token "$certificate_file" || {
+    admin_error client-certificate-unavailable-or-insecure
+    exit 70
+  }
+  command -v openssl >/dev/null 2>&1 || {
+    admin_error client-openssl-unavailable
+    exit 89
+  }
+  command -v cmp >/dev/null 2>&1 || {
+    admin_error client-compare-unavailable
+    exit 89
+  }
+  openssl x509 -in "$certificate_file" -pubkey -noout \
+    > "$tmp/cert-public" 2>/dev/null || {
+    admin_error client-certificate-invalid
+    exit 70
+  }
+  openssl pkey -in "$private_key_file" -passin pass: -pubout \
+    > "$tmp/key-public" 2>/dev/null || {
+    admin_error client-private-key-unreadable
+    exit 70
+  }
+  cmp -s "$tmp/cert-public" "$tmp/key-public" || {
+    admin_error client-certificate-key-mismatch
+    exit 70
+  }
+fi
 encoded_issuer=$(jq -rn --arg name "$issuer" '$name | @uri') || {
   admin_error issuer-encoding-failed
   exit 67
