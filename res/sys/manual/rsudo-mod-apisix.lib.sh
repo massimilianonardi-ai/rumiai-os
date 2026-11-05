@@ -139,6 +139,19 @@ PUBLIC FUNCTIONS
         process_pid and runtime_identity are:
         service_manager_evidence=systemd-mainpid-and-cgroup
         service_unit=<systemd-service-unit>
+        After a verified host-scoped systemd association, another strictly
+        optional pair may identify a narrow APISIX startup-profile signal:
+        startup_profile_evidence=systemd-and-master-exec-environ
+        startup_profile=<validated-profile-name>
+        This requires exactly one safe APISIX_PROFILE declaration from
+        the associated systemd unit's Environment and exactly one matching
+        APISIX_PROFILE entry in the observed master's initial Linux
+        /proc/<pid>/environ. Other environment entries are never printed.
+        A missing, conflicting, duplicated or inaccessible profile omits
+        both fields. Docker-ID-scoped observation does not read the host
+        service manager. This is corroborated startup-environment evidence,
+        NOT proof of which YAML, loaded configuration snapshot, runtime
+        provider, Admin API listener or credentials are effective.
         On Linux, a separate optional socket-ownership observation is
         emitted only when procfs and awk/readlink can independently match
         a unique LISTEN 127.0.0.1:9180 TCP socket inode from the selected
