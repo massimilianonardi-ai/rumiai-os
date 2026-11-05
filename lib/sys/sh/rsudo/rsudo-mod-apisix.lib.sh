@@ -615,49 +615,6 @@ RSUDO_APISIX_SYSTEMD_PROPERTIES
   fi
 fi
 
-# An independently matched systemd unit can provide narrowly scoped
-# *startup profile declaration* evidence. Match exactly one safe
-# APISIX_PROFILE token from the unit's declared Environment to exactly one
-# matching token in the kernel's initial executable environment for the
-# observed master PID. An on-disk YAML file, effective provider, mutable
-# runtime environment and loaded config snapshot remain UNVERIFIED.
-# Read both sources without emitting other (possibly secret) environment
-# values. Missing, malformed, duplicated or conflicting evidence is omitted.
-startup_profile=
-if [ -n "$service_unit" ] &&
-   [ -r "/proc/$pid/environ" ] &&
-   command -v tr >/dev/null 2>&1 &&
-   command -v awk >/dev/null 2>&1
-then
-  unit_environment=$(LC_ALL=C systemctl --no-pager show \
-    --property=Environment --value -- "$service_unit" 2>/dev/null) ||
-    unit_environment=
-  declared_profile=$(printf '%s\n' "$unit_environment" |
-    LC_ALL=C awk '{
-      for (i=1; i<=NF; i++)
-        if ($i ~ /^APISIX_PROFILE=[a-zA-Z0-9_-]+$/) {
-          count++
-          profile=substr($i, 16)
-        }
-      }
-      END { if (count==1) print profile }
-    ') || declared_profile=
-  unset unit_environment
-  if [ -n "$declared_profile" ]
-  then
-    observed_profile=$(LC_ALL=C tr '\000' '\n' < "/proc/$pid/environ" |
-      LC_ALL=C awk -v expected="APISIX_PROFILE=$declared_profile" '
-        $0==expected { count++ }
-        END { if (count==1) print "matched" }
-      ') || observed_profile=
-    if [ "$observed_profile" = matched ]
-    then
-      startup_profile=$declared_profile
-    fi
-  fi
-  unset declared_profile observed_profile
-fi
-
 # Optional Linux kernel proof for the conventional loopback TCP endpoint.
 # Use the observed master's OWN network namespace and FD table; seeing port
 # 9180 elsewhere in the namespace is NOT evidence that this master owns it.
@@ -692,10 +649,6 @@ printf 'runtime_evidence=pidfile-and-master-args\nprocess_pid=%s\n' "$pid"
 if [ -n "$service_unit" ]
 then
   printf 'service_manager_evidence=systemd-mainpid-and-cgroup\nservice_unit=%s\n' "$service_unit"
-fi
-if [ -n "$startup_profile" ]
-then
-  printf 'startup_profile_evidence=systemd-and-master-exec-environ\nstartup_profile=%s\n' "$startup_profile"
 fi
 if [ -n "$listener_socket" ]
 then
