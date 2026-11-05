@@ -186,8 +186,9 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
     Curl validates server TLS and optional approved CA, disables .curlrc,
     external proxy and redirects, and uses bounded timeouts.
 
-    The client secret is a pre-existing, protected remote single-line file.
-    The secret file and its immediate parent directory must be owned by the
+    For Basic/Post/client-secret-jwt, the client secret is a pre-existing,
+    protected remote single-line file. The secret file and its immediate
+    parent directory must be owned by the
     effective remote sudo identity. Selected remote credential/CA paths must
     be absolute, contain no dot/dotdot or empty segments, and traverse no
     symbolic links. The CA file may be public. The token store is a new
