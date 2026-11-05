@@ -587,6 +587,101 @@ then
   exit 55
 fi
 
+# Best-effort Linux host-namespace master discovery. Only same PID and mount
+# namespace processes qualify; Docker/private service namespaces must not be
+# mistaken for the remote host. This does not authenticate loaded APISIX source.
+# Absence of procfs or readlink preserves the conventional host-only behavior.
+if [ -r /proc/self/cmdline ] &&
+   command -v tr >/dev/null 2>&1 &&
+   command -v readlink >/dev/null 2>&1
+then
+  host_pid_ns=$(readlink /proc/self/ns/pid 2>/dev/null) || {
+    discovery_error host-namespace-unobservable
+    exit 66
+  }
+  host_mnt_ns=$(readlink /proc/self/ns/mnt 2>/dev/null) || {
+    discovery_error host-namespace-unobservable
+    exit 66
+  }
+  host_master_count=0
+  host_master_home=
+  for cmdline in /proc/[0-9]*/cmdline
+  do
+    [ -r "$cmdline" ] || continue
+    process_dir=${cmdline%/cmdline}
+    process_pid_ns=$(readlink "$process_dir/ns/pid" 2>/dev/null) || continue
+    [ "$process_pid_ns" = "$host_pid_ns" ] || continue
+    process_mnt_ns=$(readlink "$process_dir/ns/mnt" 2>/dev/null) || continue
+    [ "$process_mnt_ns" = "$host_mnt_ns" ] || continue
+    title=$(LC_ALL=C tr '\000' ' ' < "$cmdline") || {
+      discovery_error host-process-scan-failed
+      exit 65
+    }
+    case "$title" in
+      'nginx: master process '*|'openresty: master process '*)
+        host_master_count=$((host_master_count + 1))
+        [ "$host_master_count" -eq 1 ] || {
+          discovery_error host-multiple-masters
+          exit 64
+        }
+        set -f
+        set -- $title
+        host_master_home=
+        while [ "$#" -ge 2 ]
+        do
+          if [ "$1" = -p ]
+          then
+            host_master_home=$2
+            break
+          fi
+          shift
+        done
+        [ -n "$host_master_home" ] || {
+          discovery_error host-master-prefix-unresolved
+          exit 61
+        }
+      ;;
+    esac
+  done
+
+  if [ "$host_master_count" -eq 1 ]
+  then
+    case "$host_master_home" in
+      /*) : ;;
+      *) discovery_error host-master-prefix-invalid; exit 61 ;;
+    esac
+    case "$host_master_home" in
+      /|*[!a-zA-Z0-9._/-]*|*/../*|*/./*|*/..|*/.)
+        discovery_error host-master-prefix-invalid
+        exit 61
+      ;;
+    esac
+    while [ "$host_master_home" != / ] &&
+          [ "${host_master_home%/}" != "$host_master_home" ]
+    do
+      host_master_home=${host_master_home%/}
+    done
+    generated=$host_master_home/conf/nginx.conf
+    if [ ! -e "$generated" ] && [ ! -L "$generated" ]
+    then
+      discovery_error host-master-generated-config-missing
+      exit 62
+    fi
+    [ -f "$generated" ] && [ -r "$generated" ] &&
+      [ ! -L "$generated" ] || {
+      discovery_error host-master-generated-config-unsafe
+      exit 63
+    }
+    candidate_count=1
+    if [ "$host_master_home" = /usr/local/apisix ]
+    then
+      selected=host
+    else
+      selected="host $host_master_home"
+    fi
+  fi
+fi
+
 # A present but inaccessible Docker manager prevents claims of uniqueness.
 # Absence of Docker is acceptable for an observed host candidate only.
 if command -v docker >/dev/null 2>&1
@@ -765,6 +860,24 @@ rsudo_mod_apisix_runtime()
         [ "$status" -eq 0 ] || exit "$status"
         scope=host
       ;;
+      'host '*)
+        selected_home=${selected#host }
+        case "$selected_home" in
+          /*) : ;;
+          *) log error apisix runtime-discovery-host-home-invalid; exit 67 ;;
+        esac
+        case "$selected_home" in
+          /|*[!a-zA-Z0-9._/-]*|*/../*|*/./*|*/..|*/.)
+            log error apisix runtime-discovery-host-home-invalid
+            exit 67
+          ;;
+        esac
+        observation=$(_rsudo_mod_apisix_runtime_remote_source |
+          rsudo sh -s -- "$selected_home")
+        status=$?
+        [ "$status" -eq 0 ] || exit "$status"
+        scope=host
+      ;;
       'docker '*)
         selected_detail=${selected#docker }
         container=${selected_detail%% *}
@@ -815,10 +928,12 @@ rsudo_mod_apisix_runtime()
         exit 54
       ;;
     esac
-    if [ "$scope" = docker ] && [ "$selected_home" != /usr/local/apisix ]
+    if [ -n "${selected_home:-}" ] &&
+       [ "$selected_home" != /usr/local/apisix ]
     then
-      printf 'discovery_evidence=unique-process-prefix-candidate\ndiscovered_scope=docker\n'
-      printf 'container_id=%s\ninstallation_root=%s\n' "$container" "$selected_home"
+      printf 'discovery_evidence=unique-process-prefix-candidate\ndiscovered_scope=%s\n' "$scope"
+      [ "$scope" != docker ] || printf 'container_id=%s\n' "$container"
+      printf 'installation_root=%s\n' "$selected_home"
     else
       printf 'discovery_evidence=unique-conventional-candidate\ndiscovered_scope=%s\n' "$scope"
       [ "$scope" != docker ] || printf 'container_id=%s\n' "$container"
