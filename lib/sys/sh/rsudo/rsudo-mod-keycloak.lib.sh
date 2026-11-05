@@ -281,7 +281,7 @@ rsudo_mod_keycloak_auth()
       }
       [ -n "$client_jwt_alg" ] || client_jwt_alg=RS256
       case "$client_jwt_alg" in
-        RS256|RS384|RS512|PS256|PS384|PS512) : ;;
+        RS256|RS384|RS512|PS256|PS384|PS512|ES256|ES384|ES512) : ;;
         *) log error keycloak auth-private-key-alg-unsupported; exit 73 ;;
       esac
       ;;
@@ -831,8 +831,8 @@ K04_CLIENT_JWT_PYTHON
       --data-urlencode "client_assertion@$tmp/client-assertion"
     ;;
   private-key-jwt)
-    # RSA PKCS#1-v1.5 and RSA-PSS only. Key/cert stay on the remote
-    # sudo target. The public certificate must match the RSA signing key.
+    # RSA PKCS#1-v1.5, RSA-PSS and curve-bound ECDSA. Credentials stay on
+    # the remote sudo target; the public certificate must match the key.
     command -v openssl >/dev/null 2>&1 || {
       auth_error private-key-openssl-unavailable
       exit 89
@@ -861,6 +861,31 @@ K04_CLIENT_JWT_PYTHON
       auth_error private-key-certificate-mismatch
       exit 70
     }
+    # OpenSSL can sign with an EC key even when the JOSE header says RS256;
+    # require the actual key family and the exact JWA curve for ECDSA.
+    case "$client_jwt_alg" in
+      ES256) expected_curve=prime256v1 ;;
+      ES384) expected_curve=secp384r1 ;;
+      ES512) expected_curve=secp521r1 ;;
+    esac
+    case "$client_jwt_alg" in
+      ES*)
+        openssl ec -pubin -in "$tmp/cert-public" -text -noout \
+          > "$tmp/ec-public-info" 2>/dev/null &&
+          grep -Fx "ASN1 OID: $expected_curve" "$tmp/ec-public-info" \
+          >/dev/null 2>&1 || {
+          auth_error private-key-curve-incompatible
+          exit 73
+        }
+        ;;
+      *)
+        openssl rsa -pubin -in "$tmp/cert-public" -noout \
+          >/dev/null 2>&1 || {
+          auth_error private-key-rsa-required
+          exit 73
+        }
+        ;;
+    esac
     python3 - "$client" "$expected_issuer" "$client_jwt_alg" \
       > "$tmp/assertion-message" 2>/dev/null <<'K04_PRIVATE_KEY_JWT_PYTHON'
 import base64
@@ -873,8 +898,10 @@ def urlsafe(raw):
     return base64.urlsafe_b64encode(raw).rstrip(b"=").decode("ascii")
 
 client, audience, algorithm = sys.argv[1:]
-if algorithm not in ("RS256", "RS384", "RS512", "PS256", "PS384", "PS512"):
-    raise ValueError("unsupported RSA assertion algorithm")
+if algorithm not in ("RS256", "RS384", "RS512",
+                     "PS256", "PS384", "PS512",
+                     "ES256", "ES384", "ES512"):
+    raise ValueError("unsupported private key assertion algorithm")
 now = int(time.time())
 header = {"alg": algorithm, "typ": "JWT"}
 claims = {
@@ -891,20 +918,20 @@ K04_PRIVATE_KEY_JWT_PYTHON
       exit 90
     }
     case "$client_jwt_alg" in
-      RS256|PS256) rsa_digest=sha256 ;;
-      RS384|PS384) rsa_digest=sha384 ;;
-      RS512|PS512) rsa_digest=sha512 ;;
+      RS256|PS256|ES256) jwt_digest=sha256 ;;
+      RS384|PS384|ES384) jwt_digest=sha384 ;;
+      RS512|PS512|ES512) jwt_digest=sha512 ;;
     esac
     case "$client_jwt_alg" in
       PS*)
         # JWS RSA-PSS requires MGF1 with the selected SHA digest and a
         # salt exactly as long as that digest (-1 in OpenSSL).
-        openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
+        openssl dgst "-$jwt_digest" -sign "$private_key_file" -passin pass: \
           -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
           -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null
         ;;
       *)
-        openssl dgst "-$rsa_digest" -sign "$private_key_file" -passin pass: \
+        openssl dgst "-$jwt_digest" -sign "$private_key_file" -passin pass: \
           -out "$tmp/assertion-signature" "$tmp/assertion-message" 2>/dev/null
         ;;
     esac
@@ -915,13 +942,13 @@ K04_PRIVATE_KEY_JWT_PYTHON
     }
     case "$client_jwt_alg" in
       PS*)
-        openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
+        openssl dgst "-$jwt_digest" -verify "$tmp/cert-public" \
           -sigopt rsa_padding_mode:pss -sigopt rsa_pss_saltlen:-1 \
           -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
           >/dev/null 2>&1
         ;;
       *)
-        openssl dgst "-$rsa_digest" -verify "$tmp/cert-public" \
+        openssl dgst "-$jwt_digest" -verify "$tmp/cert-public" \
           -signature "$tmp/assertion-signature" "$tmp/assertion-message" \
           >/dev/null 2>&1
         ;;
@@ -931,7 +958,7 @@ K04_PRIVATE_KEY_JWT_PYTHON
       auth_error private-key-signature-verification-failed
       exit 90
     }
-    python3 - "$tmp/assertion-message" "$tmp/assertion-signature" \
+    python3 - "$tmp/assertion-message" "$tmp/assertion-signature" "$client_jwt_alg" \
       > "$tmp/client-assertion" 2>/dev/null <<'K04_PRIVATE_KEY_JWT_ENCODE'
 import base64
 import sys
@@ -939,7 +966,53 @@ import sys
 with open(sys.argv[1], "rb") as message:
     signed = message.read().decode("ascii")
 with open(sys.argv[2], "rb") as signature:
-    sig = base64.urlsafe_b64encode(signature.read()).rstrip(b"=").decode("ascii")
+    sig = signature.read()
+
+if sys.argv[3].startswith("ES"):
+    # OpenSSL ECDSA emits DER SEQUENCE(INTEGER r, INTEGER s).
+    # JWS requires fixed-width, unsigned r || s (RFC 7518 section 3.4).
+    size = {"ES256": 32, "ES384": 48, "ES512": 66}[sys.argv[3]]
+
+    def der_length(data, at):
+        first = data[at]
+        at += 1
+        if first < 128:
+            return first, at
+        width = first & 0x7f
+        if width == 0 or width > 2 or at + width > len(data):
+            raise ValueError("invalid DER length")
+        count = int.from_bytes(data[at:at + width], "big")
+        if count < 128 or (width > 1 and data[at] == 0):
+            raise ValueError("nonminimal DER length")
+        return count, at + width
+
+    if not sig or sig[0] != 0x30:
+        raise ValueError("not an ECDSA DER sequence")
+    sequence_size, offset = der_length(sig, 1)
+    if offset + sequence_size != len(sig):
+        raise ValueError("invalid ECDSA sequence size")
+
+    def integer(data, at):
+        if data[at] != 0x02:
+            raise ValueError("missing ECDSA integer")
+        length, at = der_length(data, at + 1)
+        raw = data[at:at + length]
+        if not raw or raw[0] & 0x80:
+            raise ValueError("negative or empty ECDSA integer")
+        if len(raw) > 1 and raw[0] == 0 and not (raw[1] & 0x80):
+            raise ValueError("nonminimal ECDSA integer")
+        number = int.from_bytes(raw, "big")
+        if number == 0 or number >= (1 << (size * 8)):
+            raise ValueError("ECDSA integer outside fixed width")
+        return number.to_bytes(size, "big"), at + length
+
+    r, offset = integer(sig, offset)
+    s, offset = integer(sig, offset)
+    if offset != len(sig):
+        raise ValueError("extra ECDSA signature bytes")
+    sig = r + s
+
+sig = base64.urlsafe_b64encode(sig).rstrip(b"=").decode("ascii")
 sys.stdout.write(signed + "." + sig)
 K04_PRIVATE_KEY_JWT_ENCODE
     [ "$?" -eq 0 ] && [ -s "$tmp/client-assertion" ] || {
