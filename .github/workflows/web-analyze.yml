@@ -23,7 +23,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: a89df2b207d70e9888e9b0459e80939136037e14
+          ref: 022092900d27a70829d2e5a2aa1031828679e8ba
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -48,6 +48,7 @@ jobs:
           git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/web-analyze.test
           sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/command.test
+          sh ./.web-analyze-tests/tests/rumiai-os/web-analyze/oopif.test
       - name: Exercise real verified HTTPS and browser certificate-chain capture
         shell: bash
         run: |
