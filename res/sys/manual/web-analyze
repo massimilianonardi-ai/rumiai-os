@@ -281,6 +281,12 @@ OUTPUT
     as a full body. Each redirect hop is indexed with the next URL; raw
     request/response events remain in the private CDP wire ledger.
     Stream memory is capped at 16 MiB per request and 64 MiB total.
+    Response events without a corresponding request event (for example
+    cached stylesheets observed during CSS inspection) preserve available
+    response metadata as requestProvenance=response-only. CDP body recovery
+    is attempted without inventing missing request provenance, and the
+    integrity audit continues to report that evidence as partial even if
+    the body was saved. summary.json separately counts responseOnly.
     Resource capture remains best effort: redirects, active streams,
     unsupported commands, process swaps and evictions can prevent a
     complete body. Inspect per-request statuses and limits.
