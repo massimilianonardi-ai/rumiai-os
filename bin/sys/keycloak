@@ -31,18 +31,24 @@ Usage:
 Options (before the action):
   --server HTTPS-URL          Keycloak base URL (required)
   --realm REALM               Token issuer realm (required)
-  --client-id ID              Confidential service-account client
+  --client-id ID              Client ID (default admin-cli for password grant)
+  --username USER             Explicit Keycloak Direct Access Grant user
+  --password-file PATH        Local owner-only user password
   --client-secret-file PATH   Local owner-only client secret
   --token-file PATH           Alternative local owner-only bearer token
   --ca-file PATH              Optional explicitly trusted server CA
   --help                      Show help
 
 Environment equivalents: KEYCLOAK_SERVER, KEYCLOAK_REALM,
- KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET_FILE, KEYCLOAK_TOKEN_FILE,
+ KEYCLOAK_CLIENT_ID, KEYCLOAK_USERNAME, KEYCLOAK_PASSWORD_FILE,
+ KEYCLOAK_CLIENT_SECRET_FILE, KEYCLOAK_TOKEN_FILE,
  KEYCLOAK_CA_FILE.
 
 Examples:
   m keycloak admin --server https://sso.example.com --realm master discovery
+  m keycloak admin --server https://sso.example.com --realm master \
+    --username admin --password-file "$HOME/.config/keycloak/admin-password" \
+    get /admin/realms/master
   m keycloak admin --server https://sso.example.com --realm master \
     --client-id automation --client-secret-file "$HOME/.config/keycloak/secret" \
     get /admin/realms/master/users
@@ -112,6 +118,8 @@ keycloak_curl()
 server=${KEYCLOAK_SERVER:-}
 realm=${KEYCLOAK_REALM:-}
 client_id=${KEYCLOAK_CLIENT_ID:-}
+username=${KEYCLOAK_USERNAME:-}
+password_file=${KEYCLOAK_PASSWORD_FILE:-}
 secret_file=${KEYCLOAK_CLIENT_SECRET_FILE:-}
 token_file=${KEYCLOAK_TOKEN_FILE:-}
 ca_file=${KEYCLOAK_CA_FILE:-}
@@ -120,13 +128,15 @@ while [ "$#" -gt 0 ]
 do
   case "$1" in
     --help|-h) keycloak_help; exit 0 ;;
-    --server|--realm|--client-id|--client-secret-file|--token-file|--ca-file)
+    --server|--realm|--client-id|--username|--password-file|--client-secret-file|--token-file|--ca-file)
       [ "$#" -ge 2 ] && [ -n "$2" ] ||
         keycloak_fail 2 "missing value for $1"
       case "$1" in
         --server) server=$2 ;;
         --realm) realm=$2 ;;
         --client-id) client_id=$2 ;;
+        --username) username=$2 ;;
+        --password-file) password_file=$2 ;;
         --client-secret-file) secret_file=$2 ;;
         --token-file) token_file=$2 ;;
         --ca-file) ca_file=$2 ;;
@@ -213,26 +223,48 @@ fi
 
 if [ -n "$token_file" ]
 then
-  [ -z "$client_id" ] && [ -z "$secret_file" ] ||
-    keycloak_fail 2 'token-file cannot be combined with client credentials'
+  [ -z "$client_id" ] && [ -z "$secret_file" ] &&
+    [ -z "$username" ] && [ -z "$password_file" ] ||
+    keycloak_fail 2 'token-file cannot be combined with a grant or other credentials'
   keycloak_private_file "$token_file"
   keycloak_read_one_line "$token_file"
   access=$keycloak_secret
 else
-  [ -n "$client_id" ] && [ -n "$secret_file" ] ||
-    keycloak_fail 2 'client-id and client-secret-file required'
-  keycloak_private_file "$secret_file"
-  keycloak_read_one_line "$secret_file"
-  printf '%s' "$keycloak_secret" > "$workspace/client-secret" ||
-    keycloak_fail 4 'cannot stage private client secret'
-  unset keycloak_secret
-  status=$(keycloak_curl "$workspace/token-response" \
-    --request POST \
-    --data-urlencode grant_type=client_credentials \
-    --data-urlencode "client_id=$client_id" \
-    --data-urlencode "client_secret@$workspace/client-secret" \
-    --url "$server/realms/$realm/protocol/openid-connect/token") ||
-    keycloak_fail 5 'token endpoint transport failed'
+  if [ -n "$username" ] || [ -n "$password_file" ]
+  then
+    [ -n "$username" ] && [ -n "$password_file" ] &&
+      [ -z "$secret_file" ] ||
+      keycloak_fail 2 'username/password-file required; client-secret-file incompatible'
+    [ -n "$client_id" ] || client_id=admin-cli
+    keycloak_private_file "$password_file"
+    keycloak_read_one_line "$password_file"
+    printf '%s' "$keycloak_secret" > "$workspace/user-password" ||
+      keycloak_fail 4 'cannot stage private user password'
+    unset keycloak_secret
+    status=$(keycloak_curl "$workspace/token-response" \
+      --request POST \
+      --data-urlencode grant_type=password \
+      --data-urlencode "client_id=$client_id" \
+      --data-urlencode "username=$username" \
+      --data-urlencode "password@$workspace/user-password" \
+      --url "$server/realms/$realm/protocol/openid-connect/token") ||
+      keycloak_fail 5 'token endpoint transport failed'
+  else
+    [ -n "$client_id" ] && [ -n "$secret_file" ] ||
+      keycloak_fail 2 'client-id and client-secret-file required'
+    keycloak_private_file "$secret_file"
+    keycloak_read_one_line "$secret_file"
+    printf '%s' "$keycloak_secret" > "$workspace/client-secret" ||
+      keycloak_fail 4 'cannot stage private client secret'
+    unset keycloak_secret
+    status=$(keycloak_curl "$workspace/token-response" \
+      --request POST \
+      --data-urlencode grant_type=client_credentials \
+      --data-urlencode "client_id=$client_id" \
+      --data-urlencode "client_secret@$workspace/client-secret" \
+      --url "$server/realms/$realm/protocol/openid-connect/token") ||
+      keycloak_fail 5 'token endpoint transport failed'
+  fi
   case "$status" in 200) : ;;
     *) keycloak_fail 6 "token acquisition rejected (HTTP $status)" ;;
   esac
