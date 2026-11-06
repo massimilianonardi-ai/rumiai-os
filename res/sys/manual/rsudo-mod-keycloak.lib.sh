@@ -68,6 +68,37 @@ K04 IMPLEMENTED AUTHENTICATION AND SESSION SUBSET
         --token-store ABSOLUTE-REMOTE-NEW-FILE
         [--ca-file ABSOLUTE-REMOTE-CA-PATH]
 
+    rsudo [rsudo-options] keycloak auth acquire
+        --server HTTPS-BASE-URL --issuer-realm REALM --auth-mode jwt-bearer
+        --client-id ID --client-auth client-secret-basic|client-secret-post|client-secret-jwt|private-key-jwt|tls-client-auth
+        --assertion-file ABSOLUTE-REMOTE-JWT-PATH
+        --token-store ABSOLUTE-REMOTE-NEW-FILE
+        [--client-secret-file ABSOLUTE-REMOTE-SECRET-PATH]
+        [--private-key-file ABSOLUTE-REMOTE-KEY-PATH --certificate-file ABSOLUTE-REMOTE-CERT-PATH]
+        [--client-jwt-alg SELECTED-SUPPORTED-ALGORITHM]
+        [--ca-file ABSOLUTE-REMOTE-CA-PATH]
+
+    The jwt-bearer grant is RFC 7523 JWT Authorization Grant, not the
+    federated-jwt client authenticator or a direct external admin bearer.
+    A trusted issuer/identity provider and linked local user, plus the
+    confidential client's explicit grant permission, must already exist in
+    Keycloak. The selected remote sudo identity reads exactly one compact
+    signed assertion from its protected file. The assertion is passed in
+    the OAuth assertion form field; the independently selected client
+    authenticator uses its own distinct secret or private key/certificate.
+    The same assertion file cannot authenticate a federated-jwt client
+    at the same time. Only the server verifies external signature, issuer,
+    subject, audience, expiry, linked user and replay policy. An accepted
+    grant issues a token for the linked local user, not implicit Admin REST
+    roles. It does not issue a refresh token; refresh is not attempted.
+    No assertion, client secret, key or token value is emitted on stdout,
+    inserted into shell source or embedded in ordinary command arguments.
+    The returned nonsecret result reports the literal RFC 7523 grant URI.
+    Wrong credentials, missing/insecure/malformed assertions, replay,
+    untrusted issuers and disallowed client/IdP selections fail closed.
+    Do not enable permissive client-controlled IdP/audience allowlists:
+    their actual Keycloak policy is separate from local input validation.
+
     The password flow requires an explicitly configured Direct Access Grant
     on the confidential Keycloak client. User password and client secret must
     be separate protected remote single-line files ending in one newline.
