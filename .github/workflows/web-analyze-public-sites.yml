@@ -18,7 +18,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 43e198a6c9321f7a075f69232ef2adabf1d479c8
+          ref: 1e9e47f622bb28d5bbc2aa487fc538507b34cb16
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
@@ -27,7 +27,7 @@ jobs:
         shell: bash
         env:
           RUMIAI_TEST_PUBLIC_SITES: '1'
-          RUMIAI_PUBLIC_SITES_TEST_REVISION: '43e198a6c9321f7a075f69232ef2adabf1d479c8'
+          RUMIAI_PUBLIC_SITES_TEST_REVISION: '1e9e47f622bb28d5bbc2aa487fc538507b34cb16'
           RUMIAI_PUBLIC_SITE_REPORT_DIR: ${{ runner.temp }}/web-analyze-sanitized
         run: |
           set -eu
@@ -70,7 +70,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           repository: massimilianonardi-ai/rumiai-tests
-          ref: 43e198a6c9321f7a075f69232ef2adabf1d479c8
+          ref: 1e9e47f622bb28d5bbc2aa487fc538507b34cb16
           path: .web-analyze-tests
       - uses: actions/setup-node@v4
         with:
