@@ -10,12 +10,23 @@ keycloak_fail()
   exit "$1"
 }
 
+# The keycloak package already has its server launcher in bin/ext/keycloak.
+# Preserve start-dev and all upstream options; administration is explicit.
+if [ "${1-}" != admin ]
+then
+  [ -n "${m_BIN_EXT_DIR:-}" ] && [ -x "$m_BIN_EXT_DIR/keycloak" ] ||
+    keycloak_fail 9 'server package command unavailable (use keycloak admin --help for administration)'
+  exec "$m_BIN_EXT_DIR/keycloak" "$@"
+  keycloak_fail 9 'server package command could not be executed'
+fi
+shift
+
 keycloak_help()
 {
   cat <<'HELP'
 Usage:
-  keycloak [options] discovery
-  keycloak [options] get|post|put|delete /admin/PATH [--data-file JSON-FILE]
+  keycloak admin [options] discovery
+  keycloak admin [options] get|post|put|delete /admin/PATH [--data-file JSON-FILE]
 
 Options (before the action):
   --server HTTPS-URL          Keycloak base URL (required)
@@ -31,11 +42,11 @@ Environment equivalents: KEYCLOAK_SERVER, KEYCLOAK_REALM,
  KEYCLOAK_CA_FILE.
 
 Examples:
-  m keycloak --server https://sso.example.com --realm master discovery
-  m keycloak --server https://sso.example.com --realm master \
+  m keycloak admin --server https://sso.example.com --realm master discovery
+  m keycloak admin --server https://sso.example.com --realm master \
     --client-id automation --client-secret-file "$HOME/.config/keycloak/secret" \
     get /admin/realms/master/users
-  m keycloak --server https://sso.example.com --realm master \
+  m keycloak admin --server https://sso.example.com --realm master \
     --client-id automation --client-secret-file "$HOME/.config/keycloak/secret" \
     post /admin/realms/master/users --data-file ./new-user.json
 HELP
