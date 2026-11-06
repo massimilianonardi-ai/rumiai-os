@@ -1594,13 +1594,13 @@ _rsudo_mod_keycloak_kcadm_remote()
   }
 
   _kc_override=
-  if [ -n "\${KEYCLOAK_KCADM_PATH-}" ]
+  if [ -n "${KEYCLOAK_KCADM_PATH-}" ]
   then
     _kc_override=$(quote "$KEYCLOAK_KCADM_PATH") || exit 2
   fi
 
   _kc_password=
-  if [ "$_kc_action" = run ] && [ "\${KC_CLI_PASSWORD+x}" = x ]
+  if [ "$_kc_action" = run ] && [ "${KC_CLI_PASSWORD+x}" = x ]
   then
     _kc_password=$(quote "$KC_CLI_PASSWORD") || {
       log error keycloak kcadm-password-quote-failed
@@ -1628,7 +1628,7 @@ _kc_valid()
 
 _kc_config()
 {
-  case "\${HOME-}" in /*) [ -d "$HOME" ] || return 1 ;; *) return 1 ;; esac
+  case "${HOME-}" in /*) [ -d "$HOME" ] || return 1 ;; *) return 1 ;; esac
   printf '%s/.rsudo-keycloak-kcadm-path\n' "$HOME"
 }
 
@@ -1649,10 +1649,10 @@ _kc_emit()
 
 _kc_list()
 {
-  _kc_emit "\${KEYCLOAK_KCADM_PATH-}"
+  _kc_emit "${KEYCLOAK_KCADM_PATH-}"
   _kc_found=$(_kc_saved 2>/dev/null) && _kc_emit "$_kc_found"
   _kc_found=$(command -v kcadm.sh 2>/dev/null) && _kc_emit "$_kc_found"
-  if [ -n "\${KEYCLOAK_HOME-}" ]; then _kc_emit "$KEYCLOAK_HOME/bin/kcadm.sh"; fi
+  if [ -n "${KEYCLOAK_HOME-}" ]; then _kc_emit "$KEYCLOAK_HOME/bin/kcadm.sh"; fi
   for _kc_prefix in /opt/keycloak /usr/local/keycloak /srv/keycloak /m/keycloak
   do
     _kc_emit "$_kc_prefix/bin/kcadm.sh"
@@ -1681,7 +1681,7 @@ _kc_list()
           _kc_emit "$_kc_candidate"
         done
     done
-    if [ "\${1-}" = full ]
+    if [ "${1-}" = full ]
     then
       find / -type f -name kcadm.sh -print 2>/dev/null |
         while IFS= read -r _kc_candidate
@@ -1727,7 +1727,7 @@ _kc_set()
 
 _kc_run()
 {
-  KEYCLOAK_KCADM_PATH=\${KEYCLOAK_KCADM_PATH-}
+  KEYCLOAK_KCADM_PATH=${KEYCLOAK_KCADM_PATH-}
   if [ -z "$KEYCLOAK_KCADM_PATH" ]
   then
     KEYCLOAK_KCADM_PATH=$(_kc_saved) || {
@@ -1739,7 +1739,7 @@ _kc_run()
     _kc_error "configured kcadm.sh is no longer executable"
     return 32
   }
-  if [ "\${KC_CLI_PASSWORD+x}" = x ]
+  if [ "${KC_CLI_PASSWORD+x}" = x ]
   then
     KC_CLI_PASSWORD="$KC_CLI_PASSWORD" "$KEYCLOAK_KCADM_PATH" "$@"
   else
@@ -1763,7 +1763,7 @@ RSUDO_KCADM_REMOTE
     if [ -n "$_kc_override" ]; then
       printf 'KEYCLOAK_KCADM_PATH=%s\n' "$_kc_override" || exit 1
     fi
-    if [ "$_kc_action" = run ] && [ "\${KC_CLI_PASSWORD+x}" = x ]; then
+    if [ "$_kc_action" = run ] && [ "${KC_CLI_PASSWORD+x}" = x ]; then
       printf 'KC_CLI_PASSWORD=%s\n' "$_kc_password" || exit 1
     fi
     printf 'set -- %s\n_kc_dispatch "$@"\n' "$_kc_arguments" || exit 1
@@ -1772,7 +1772,7 @@ RSUDO_KCADM_REMOTE
     log error keycloak kcadm-source-generation-failed
     exit 4
   }
-  _kc_source=\${_kc_source%x}
+  _kc_source=${_kc_source%x}
 
   # No operands: rsudo runs sh -s with the source on stdin and cannot
   # include the source or password in the SSH/sudo process argument list.
@@ -1835,7 +1835,7 @@ rsudo_mod_keycloak_discovery()
       case "$_kc_number" in
         ''|*[!0-9]*) log error keycloak kcadm-discovery-invalid-selection; exit 8 ;;
       esac
-      _kc_path=$(printf '%s\n' "$_kc_options" | sed -n "\${_kc_number}p")
+      _kc_path=$(printf '%s\n' "$_kc_options" | sed -n "${_kc_number}p")
       [ -n "$_kc_path" ] || {
         log error keycloak kcadm-discovery-out-of-range
         exit 9
