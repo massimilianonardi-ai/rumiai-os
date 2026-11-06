@@ -1,19 +1,25 @@
 NAME
-    keycloak - direct Keycloak administration through OIDC and HTTPS Admin REST
+    keycloak - existing Keycloak server command plus direct HTTPS administration
 
 SYNOPSIS
-    keycloak [--server HTTPS-URL] [--realm ISSUER-REALM]
+    keycloak admin [--server HTTPS-URL] [--realm ISSUER-REALM]
              [--client-id ID --client-secret-file LOCAL-FILE |
               --token-file LOCAL-FILE]
              [--ca-file LOCAL-PEM] discovery
-    keycloak [same options] get|post|put|delete /admin/RESOURCE
+    keycloak admin [same options] get|post|put|delete /admin/RESOURCE
              [--data-file JSON-FILE]
 
 DESCRIPTION
+    Without the 'admin' subcommand, keycloak delegates all operands unchanged
+    to the existing Keycloak package command under bin/ext/keycloak. This
+    preserves commands such as keycloak start-dev, build and show-config,
+    including the package launcher's environment/state behavior. If the server
+    package is not installed, non-admin forms return status 9.
+
     keycloak is an independent POSIX shell command in the technical m runtime.
     It calls Keycloak directly using curl, without rsudo, SSH, sudo, Chromium
     or a remote m installation. From an uninitialized shell use
-    m keycloak [options] ....
+    m keycloak admin [options] ....
 
     Each authenticated invocation obtains a fresh service-account token
     using the selected confidential Keycloak client_credentials grant and
@@ -93,15 +99,16 @@ EXIT STATUS
     6  OIDC discovery/token endpoint refused or malformed token response.
     7  Admin REST transport/response reading failure.
     8  Admin REST returned non-2xx status.
+    9  Existing Keycloak server package launcher unavailable.
 
 EXAMPLES
-    m keycloak --server https://sso.example.org --realm master discovery
+    m keycloak admin --server https://sso.example.org --realm master discovery
 
-    m keycloak --server https://sso.example.org --realm master \
+    m keycloak admin --server https://sso.example.org --realm master \
       --client-id ops --client-secret-file "$HOME/.config/keycloak/secret" \
       get /admin/realms/master/users?max=5
 
-    m keycloak --server https://sso.example.org --realm master \
+    m keycloak admin --server https://sso.example.org --realm master \
       --client-id ops --client-secret-file "$HOME/.config/keycloak/secret" \
       post /admin/realms/master/users --data-file ./new-user.json
 
