@@ -470,3 +470,61 @@ K04 PRIVATE ADMIN REST BEARER TRANSPORT PROBE
     Admin REST request is exposed. Other K04 authentication and sender-
     constrained token modes remain pending. Do not use this probe as an
     unsupported backdoor for arbitrary administration.
+
+
+OFFICIAL KCADM.SH REMOTE PROXY (IMPLEMENTED)
+
+    rsudo [rsudo-options] keycloak discovery [--path ABSOLUTE-REMOTE-PATH]
+        [--interactive] [--find]
+
+    rsudo [rsudo-options] keycloak kcadm KCADM-ARGUMENTS...
+
+    rsudo_mod_keycloak_discovery and rsudo_mod_keycloak_kcadm are the public
+    shell functions for these operations. Existing legacy HTTP and K04 auth
+    functions remain separate, with their existing arguments unchanged.
+
+    discovery --path verifies an executable regular file on the remote sudo
+    target and persists its absolute path under that effective user's HOME.
+    Without --path, discovery considers the selected environment path,
+    an earlier persisted selection, kcadm.sh on the target PATH, KEYCLOAK_HOME,
+    common Keycloak installation directories, a Keycloak Java process argument
+    -Dkc.home.dir=... if visible, and recursive find of common roots.
+    --find additionally enables a potentially expensive filesystem-wide search.
+    Invalid candidates are ignored. A single candidate is selected
+    automatically. Multiple candidates require --interactive (numbered choice
+    on the operator's local /dev/tty) or an explicit --path. No candidate is
+    a failure. A path supplied explicitly must be absolute and executable.
+
+    The selected path is stored in $HOME/.rsudo-keycloak-kcadm-path on the
+    remote selected sudo account, with restrictive creation umask and atomic
+    replacement. HOME must identify an existing absolute directory. Discovery
+    does not and cannot export a variable into later SSH/sudo sessions.
+    kcadm loads the selection into KEYCLOAK_KCADM_PATH on each invocation,
+    validates that it is still executable, and rejects missing/invalid selection.
+    An already selected local KEYCLOAK_KCADM_PATH overrides the stored path
+    when the rsudo function is invoked, with independent remote validation.
+
+    KC_CLI_PASSWORD may be supplied in the caller's environment. The proxy
+    safely quotes its value into the existing rsudo non-interactive sh -s stdin
+    source and assigns it only to the kcadm.sh execution environment. Neither
+    a password command option, service-account client secret, remote persistent
+    password file nor source of the upstream kcadm.sh launcher is introduced.
+    The secret does not appear in command-line arguments or rsudo's command
+    diagnostic fields. Do not enable shell tracing of credential-bearing
+    invocations. The password is present in the Java process environment and
+    may be visible to suitably privileged process observers.
+
+    kcadm.sh is called as an external executable, with all proxy operands
+    quoted without shell re-interpretation, and its exit status is propagated.
+    Admin credentials and their refresh/session files remain managed by the
+    official Keycloak CLI. For interactive password prompts, the normal
+    alternative is a direct terminal-based kcadm.sh session; this password
+    environment proxy deliberately forces non-interactive rsudo transmission.
+
+    IMPORTANT: rsudo's sh -s source input occupies remote standard input.
+    The proxy preserves arguments and stdout/stderr/status, but cannot
+    independently forward caller-supplied stdin as kcadm.sh data. Use named
+    remote files with kcadm's supported arguments for operations that require
+    file payloads. This interface does not bypass the target realm's
+    permission/authentication policies or implicitly enable Direct Access
+    Grants.
