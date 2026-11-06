@@ -66,12 +66,6 @@ keycloak_read_one_line()
     keycloak_fail 4 'credential file empty'
   [ -n "$line" ] || keycloak_fail 4 'credential file empty'
   # A second record, even without its terminating LF, is forbidden.
-  second=
-  if { IFS= read -r second || [ -n "$second" ]; } < "$1"
-  then
-    # Skip the first record first; the separate read below performs that.
-    :
-  fi
   {
     IFS= read -r first || [ -n "$first" ] ||
       keycloak_fail 4 'credential file malformed'
@@ -148,7 +142,7 @@ case "$action" in
       *) keycloak_fail 2 'only Keycloak /admin/ resource paths are accepted' ;;
     esac
     case "$api_path" in
-      *'//' *|*'/../'*|*'/./'*|*'\'*|*"$(printf '\r')"*|*'
+      *'//'*|*'/../'*|*'/./'*|*'\'*|*"$(printf '\r')"*|*'
 '*)
         keycloak_fail 2 'unsafe Admin REST resource path' ;;
     esac
@@ -240,7 +234,7 @@ else
 fi
 
 case "$access" in
-  ''|*[!a-zA-Z0-9._~+/-=]*) keycloak_fail 6 'invalid bearer credential framing' ;;
+  ''|*[!a-zA-Z0-9._~+/=-]*) keycloak_fail 6 'invalid bearer credential framing' ;;
 esac
 printf 'Authorization: Bearer %s\n' "$access" > "$workspace/bearer-header" ||
   keycloak_fail 4 'cannot stage bearer header'
