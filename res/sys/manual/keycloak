@@ -1,0 +1,109 @@
+NAME
+    keycloak - direct Keycloak administration through OIDC and HTTPS Admin REST
+
+SYNOPSIS
+    keycloak [--server HTTPS-URL] [--realm ISSUER-REALM]
+             [--client-id ID --client-secret-file LOCAL-FILE |
+              --token-file LOCAL-FILE]
+             [--ca-file LOCAL-PEM] discovery
+    keycloak [same options] get|post|put|delete /admin/RESOURCE
+             [--data-file JSON-FILE]
+
+DESCRIPTION
+    keycloak is an independent POSIX shell command in the technical m runtime.
+    It calls Keycloak directly using curl, without rsudo, SSH, sudo, Chromium
+    or a remote m installation. From an uninitialized shell use
+    m keycloak [options] ....
+
+    Each authenticated invocation obtains a fresh service-account token
+    using the selected confidential Keycloak client_credentials grant and
+    then performs exactly one requested Admin REST operation. Alternatively
+    --token-file supplies an existing local bearer token. No tokens are
+    persisted by the command or printed as authentication output.
+
+    The selected client must already exist and be configured with service
+    accounts and the appropriate administrative roles. Authentication is
+    not authorization: Keycloak can return HTTP 403 without those roles.
+
+    discovery calls the public OIDC metadata endpoint without credentials.
+    Request paths must start with /admin/. A path beginning with / is relative
+    to the selected Keycloak base URL. Query strings are supported.
+
+    GET/POST/PUT/DELETE are deliberately low-level: callers choose the exact
+    Keycloak Admin REST path; no unknown resource schema or privileged default
+    is inferred. POST and PUT may include JSON using --data-file.
+
+OPTIONS
+    --server HTTPS-URL
+        HTTPS origin plus an optional reverse-proxy base path. Mandatory.
+        HTTP, embedded credentials, query and fragment are rejected.
+    --realm ISSUER-REALM
+        Realm that issues the access token. Does not select the managed
+        resource realm, which appears in the explicit /admin/ path.
+    --client-id ID
+        Explicit confidential Keycloak service account client.
+    --client-secret-file LOCAL-FILE
+        Protected local one-line client secret. Never passed through curl
+        ordinary argument values. No username/password grant is attempted.
+    --token-file LOCAL-FILE
+        Alternative protected local one-line bearer token. Cannot coexist
+        with client-id or client-secret-file. Not silently refreshed.
+    --ca-file LOCAL-PEM
+        Optional approved PEM CA anchor for HTTPS verification.
+    --data-file JSON-FILE
+        Optional POST/PUT JSON request body; data remains file-backed.
+    --help
+        Print usage.
+
+CREDENTIALS AND SECURITY
+    The client secret or bearer-token file must be a regular file, not a
+    symlink, owned by the invoking user, readable and mode 0400, 0500,
+    0600 or 0700. File content must contain one nonempty line, with at most
+    one terminating newline. Secrets, tokens and authorization headers are
+    staged in a private temporary directory with umask 077 and removed
+    at completion. The curl configuration file is ignored (-q).
+
+    HTTPS peer and CA verification remain enabled. The command does not
+    follow redirects or accept non-HTTPS URLs. It does not enable a browser
+    login or manage refresh, logout, token revocation or MFA sessions.
+    Admin REST responses may contain sensitive data; stdout is the explicit
+    user-requested response stream. Errors omit token/secret and response body.
+
+ENVIRONMENT
+    KEYCLOAK_SERVER              Default for --server
+    KEYCLOAK_REALM               Default for --realm
+    KEYCLOAK_CLIENT_ID           Default for --client-id
+    KEYCLOAK_CLIENT_SECRET_FILE  Default for --client-secret-file
+    KEYCLOAK_TOKEN_FILE          Default for --token-file
+    KEYCLOAK_CA_FILE             Default for --ca-file
+
+    Each explicit option overrides its environment default.
+
+DEPENDENCIES
+    POSIX sh, curl, jq, mktemp. Local stat supports Linux (-c) and
+    macOS/BSD (-f) credential ownership/permission inspection.
+
+EXIT STATUS
+    0  Success (response body on stdout, empty for HTTP 204).
+    1  m environment unavailable.
+    2  Invalid invocation or JSON input.
+    3  Missing tool dependency.
+    4  Local credential, CA or private-file failure.
+    5  OIDC discovery or token HTTPS transport failure.
+    6  OIDC discovery/token endpoint refused or malformed token response.
+    7  Admin REST transport/response reading failure.
+    8  Admin REST returned non-2xx status.
+
+EXAMPLES
+    m keycloak --server https://sso.example.org --realm master discovery
+
+    m keycloak --server https://sso.example.org --realm master \
+      --client-id ops --client-secret-file "$HOME/.config/keycloak/secret" \
+      get /admin/realms/master/users?max=5
+
+    m keycloak --server https://sso.example.org --realm master \
+      --client-id ops --client-secret-file "$HOME/.config/keycloak/secret" \
+      post /admin/realms/master/users --data-file ./new-user.json
+
+SEE ALSO
+    manual keycloak

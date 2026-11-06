@@ -1,0 +1,274 @@
+#!/bin/sh
+# Direct Keycloak OIDC/Admin REST command. No rsudo, browser or token cache.
+[ -n "${m_ROOT:-}" ] || { printf '%s\n' 'keycloak: m environment not initialized' >&2; exit 1; }
+umask 077
+set +x
+
+keycloak_fail()
+{
+  printf 'keycloak: %s\n' "$2" >&2
+  exit "$1"
+}
+
+keycloak_help()
+{
+  cat <<'HELP'
+Usage:
+  keycloak [options] discovery
+  keycloak [options] get|post|put|delete /admin/PATH [--data-file JSON-FILE]
+
+Options (before the action):
+  --server HTTPS-URL          Keycloak base URL (required)
+  --realm REALM               Token issuer realm (required)
+  --client-id ID              Confidential service-account client
+  --client-secret-file PATH   Local owner-only client secret
+  --token-file PATH           Alternative local owner-only bearer token
+  --ca-file PATH              Optional explicitly trusted server CA
+  --help                      Show help
+
+Environment equivalents: KEYCLOAK_SERVER, KEYCLOAK_REALM,
+ KEYCLOAK_CLIENT_ID, KEYCLOAK_CLIENT_SECRET_FILE, KEYCLOAK_TOKEN_FILE,
+ KEYCLOAK_CA_FILE.
+
+Examples:
+  m keycloak --server https://sso.example.com --realm master discovery
+  m keycloak --server https://sso.example.com --realm master \
+    --client-id automation --client-secret-file "$HOME/.config/keycloak/secret" \
+    get /admin/realms/master/users
+  m keycloak --server https://sso.example.com --realm master \
+    --client-id automation --client-secret-file "$HOME/.config/keycloak/secret" \
+    post /admin/realms/master/users --data-file ./new-user.json
+HELP
+}
+
+keycloak_private_file()
+{
+  [ -f "$1" ] && [ ! -L "$1" ] && [ -r "$1" ] ||
+    keycloak_fail 4 'credential file absent, unreadable or symlink'
+  mode=$(stat -c %a "$1" 2>/dev/null) ||
+    mode=$(stat -f %Lp "$1" 2>/dev/null) ||
+    keycloak_fail 4 'credential file permissions unavailable'
+  owner=$(stat -c %u "$1" 2>/dev/null) ||
+    owner=$(stat -f %u "$1" 2>/dev/null) ||
+    keycloak_fail 4 'credential file owner unavailable'
+  [ "$owner" = "$(id -u)" ] ||
+    keycloak_fail 4 'credential file must be owned by invoking user'
+  case "$mode" in
+    400|500|600|700|0400|0500|0600|0700) : ;;
+    *) keycloak_fail 4 'credential file must exclude group/other access' ;;
+  esac
+}
+
+keycloak_read_one_line()
+{
+  line=
+  IFS= read -r line < "$1" || [ -n "$line" ] ||
+    keycloak_fail 4 'credential file empty'
+  [ -n "$line" ] || keycloak_fail 4 'credential file empty'
+  # A second record, even without its terminating LF, is forbidden.
+  second=
+  if { IFS= read -r second || [ -n "$second" ]; } < "$1"
+  then
+    # Skip the first record first; the separate read below performs that.
+    :
+  fi
+  {
+    IFS= read -r first || [ -n "$first" ] ||
+      keycloak_fail 4 'credential file malformed'
+    second=
+    if IFS= read -r second || [ -n "$second" ]
+    then
+      keycloak_fail 4 'credential file contains multiple lines'
+    fi
+  } < "$1"
+  case "$line" in
+    *"$(printf '\r')"*) keycloak_fail 4 'credential file contains a carriage return' ;;
+  esac
+  keycloak_secret=$line
+  unset line first second
+}
+
+keycloak_curl()
+{
+  output=$1
+  shift
+  if [ -n "$ca_file" ]
+  then
+    curl -q --silent --show-error --proto '=https' --max-redirs 0 \
+      --connect-timeout 8 --max-time 40 --cacert "$ca_file" \
+      --output "$output" --write-out '%{http_code}' "$@"
+  else
+    curl -q --silent --show-error --proto '=https' --max-redirs 0 \
+      --connect-timeout 8 --max-time 40 \
+      --output "$output" --write-out '%{http_code}' "$@"
+  fi
+}
+
+server=${KEYCLOAK_SERVER:-}
+realm=${KEYCLOAK_REALM:-}
+client_id=${KEYCLOAK_CLIENT_ID:-}
+secret_file=${KEYCLOAK_CLIENT_SECRET_FILE:-}
+token_file=${KEYCLOAK_TOKEN_FILE:-}
+ca_file=${KEYCLOAK_CA_FILE:-}
+
+while [ "$#" -gt 0 ]
+do
+  case "$1" in
+    --help|-h) keycloak_help; exit 0 ;;
+    --server|--realm|--client-id|--client-secret-file|--token-file|--ca-file)
+      [ "$#" -ge 2 ] && [ -n "$2" ] ||
+        keycloak_fail 2 "missing value for $1"
+      case "$1" in
+        --server) server=$2 ;;
+        --realm) realm=$2 ;;
+        --client-id) client_id=$2 ;;
+        --client-secret-file) secret_file=$2 ;;
+        --token-file) token_file=$2 ;;
+        --ca-file) ca_file=$2 ;;
+      esac
+      shift 2 ;;
+    --*) keycloak_fail 2 "unknown option: $1" ;;
+    *) break ;;
+  esac
+done
+
+[ "$#" -gt 0 ] || { keycloak_help >&2; exit 2; }
+action=$1
+shift
+case "$action" in
+  discovery)
+    [ "$#" -eq 0 ] || keycloak_fail 2 'discovery takes no arguments'
+    ;;
+  get|post|put|delete)
+    [ "$#" -ge 1 ] || keycloak_fail 2 'missing Admin REST resource path'
+    api_path=$1
+    shift
+    case "$api_path" in
+      /admin/*) : ;;
+      *) keycloak_fail 2 'only Keycloak /admin/ resource paths are accepted' ;;
+    esac
+    case "$api_path" in
+      *'//' *|*'/../'*|*'/./'*|*'\'*|*"$(printf '\r')"*|*'
+'*)
+        keycloak_fail 2 'unsafe Admin REST resource path' ;;
+    esac
+    data_file=
+    if [ "$#" -gt 0 ]
+    then
+      [ "$#" -eq 2 ] && [ "$1" = '--data-file' ] && [ -n "$2" ] ||
+        keycloak_fail 2 'expected --data-file JSON-FILE'
+      data_file=$2
+      case "$action" in
+        post|put) : ;;
+        *) keycloak_fail 2 '--data-file only applies to post/put' ;;
+      esac
+      [ -f "$data_file" ] && [ -r "$data_file" ] ||
+        keycloak_fail 4 'JSON input file unavailable'
+    fi
+    ;;
+  *) keycloak_fail 2 "unknown action: $action" ;;
+esac
+
+case "$server" in https://?*) : ;; *)
+  keycloak_fail 2 'HTTPS Keycloak base URL required' ;; esac
+case "${server#https://}" in
+  ''|/*|*@*|*'?'*|*'#'*|*'//'*) keycloak_fail 2 'invalid Keycloak base URL' ;;
+esac
+server=${server%/}
+[ -n "$realm" ] || keycloak_fail 2 'issuer realm required'
+case "$realm" in
+  *[!a-zA-Z0-9._-]*) keycloak_fail 2 'invalid issuer realm name' ;;
+esac
+case "$realm" in .|..) keycloak_fail 2 'invalid issuer realm name' ;; esac
+command -v curl >/dev/null 2>&1 && command -v jq >/dev/null 2>&1 &&
+  command -v mktemp >/dev/null 2>&1 ||
+  keycloak_fail 3 'curl, jq and mktemp are required'
+if [ -n "$ca_file" ]
+then
+  [ -f "$ca_file" ] && [ ! -L "$ca_file" ] && [ -r "$ca_file" ] ||
+    keycloak_fail 4 'trusted CA file unavailable'
+fi
+
+workspace=$(mktemp -d "${TMPDIR:-/tmp}/keycloak.XXXXXXXX") ||
+  keycloak_fail 4 'cannot create private temporary directory'
+trap 'rm -rf -- "$workspace"' 0
+trap 'exit 130' INT
+trap 'exit 143' TERM
+trap 'exit 129' HUP
+
+if [ "$action" = discovery ]
+then
+  status=$(keycloak_curl "$workspace/discovery" \
+    --url "$server/realms/$realm/.well-known/openid-configuration") ||
+    keycloak_fail 5 'OIDC discovery transport failed'
+  case "$status" in 200) cat "$workspace/discovery" || keycloak_fail 7 'cannot read OIDC metadata'; exit 0 ;;
+    *) keycloak_fail 6 "OIDC discovery rejected (HTTP $status)" ;;
+  esac
+fi
+
+if [ -n "$token_file" ]
+then
+  [ -z "$client_id" ] && [ -z "$secret_file" ] ||
+    keycloak_fail 2 'token-file cannot be combined with client credentials'
+  keycloak_private_file "$token_file"
+  keycloak_read_one_line "$token_file"
+  access=$keycloak_secret
+else
+  [ -n "$client_id" ] && [ -n "$secret_file" ] ||
+    keycloak_fail 2 'client-id and client-secret-file required'
+  keycloak_private_file "$secret_file"
+  keycloak_read_one_line "$secret_file"
+  printf '%s' "$keycloak_secret" > "$workspace/client-secret" ||
+    keycloak_fail 4 'cannot stage private client secret'
+  unset keycloak_secret
+  status=$(keycloak_curl "$workspace/token-response" \
+    --request POST \
+    --data-urlencode grant_type=client_credentials \
+    --data-urlencode "client_id=$client_id" \
+    --data-urlencode "client_secret@$workspace/client-secret" \
+    --url "$server/realms/$realm/protocol/openid-connect/token") ||
+    keycloak_fail 5 'token endpoint transport failed'
+  case "$status" in 200) : ;;
+    *) keycloak_fail 6 "token acquisition rejected (HTTP $status)" ;;
+  esac
+  jq -e '.token_type | ascii_downcase == "bearer"' \
+    "$workspace/token-response" >/dev/null 2>&1 ||
+    keycloak_fail 6 'unexpected token response type'
+  access=$(jq -er '.access_token | select(type == "string" and length > 0)' \
+    "$workspace/token-response" 2>/dev/null) ||
+    keycloak_fail 6 'token response missing bearer credential'
+fi
+
+case "$access" in
+  ''|*[!a-zA-Z0-9._~+/-=]*) keycloak_fail 6 'invalid bearer credential framing' ;;
+esac
+printf 'Authorization: Bearer %s\n' "$access" > "$workspace/bearer-header" ||
+  keycloak_fail 4 'cannot stage bearer header'
+unset access keycloak_secret
+case "$action" in
+  get) verb=GET ;; post) verb=POST ;; put) verb=PUT ;; delete) verb=DELETE ;;
+esac
+
+if [ -n "$data_file" ]
+then
+  jq -e . "$data_file" >/dev/null 2>&1 ||
+    keycloak_fail 2 'input file is not valid JSON'
+  status=$(keycloak_curl "$workspace/admin-response" \
+    --header "@$workspace/bearer-header" \
+    --header 'Accept: application/json' \
+    --header 'Content-Type: application/json' \
+    --request "$verb" --data-binary "@$data_file" \
+    --url "$server$api_path") ||
+    keycloak_fail 7 'Admin REST transport failed'
+else
+  status=$(keycloak_curl "$workspace/admin-response" \
+    --header "@$workspace/bearer-header" \
+    --header 'Accept: application/json' \
+    --request "$verb" --url "$server$api_path") ||
+    keycloak_fail 7 'Admin REST transport failed'
+fi
+case "$status" in
+  200|201|202|203|204|205|206)
+    cat "$workspace/admin-response" || keycloak_fail 7 'cannot read Admin REST response' ;;
+  *) keycloak_fail 8 "Admin REST rejected (HTTP $status)" ;;
+esac
