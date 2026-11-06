@@ -1578,3 +1578,283 @@ case "$status" in
 esac
 KEYCLOAK_K04_ADMIN_REMOTE
 )
+
+
+# Official remote kcadm.sh adapter. Legacy HTTP administration remains unchanged.
+# Secrets are sent only as non-interactive sh -s source on SSH stdin, never
+# through rsudo --interactive (which encodes source in sh -c argv).
+_rsudo_mod_keycloak_kcadm_remote()
+(
+  set +x
+  _kc_action=$1
+  shift
+  _kc_arguments=$(quote "$_kc_action" "$@") || {
+    log error keycloak kcadm-arguments-quote-failed
+    exit 1
+  }
+
+  _kc_override=
+  if [ -n "\${KEYCLOAK_KCADM_PATH-}" ]
+  then
+    _kc_override=$(quote "$KEYCLOAK_KCADM_PATH") || exit 2
+  fi
+
+  _kc_password=
+  if [ "$_kc_action" = run ] && [ "\${KC_CLI_PASSWORD+x}" = x ]
+  then
+    _kc_password=$(quote "$KC_CLI_PASSWORD") || {
+      log error keycloak kcadm-password-quote-failed
+      exit 3
+    }
+  fi
+
+  _kc_source=$(
+    cat <<'RSUDO_KCADM_REMOTE'
+set +x
+umask 077
+
+_kc_error()
+{
+  printf 'rsudo keycloak: %s\n' "$1" >&2
+}
+
+_kc_valid()
+{
+  case "$1" in /*) : ;; *) return 1 ;; esac
+  case "$1" in *'
+'*) return 1 ;; esac
+  [ -f "$1" ] && [ -x "$1" ]
+}
+
+_kc_config()
+{
+  case "\${HOME-}" in /*) [ -d "$HOME" ] || return 1 ;; *) return 1 ;; esac
+  printf '%s/.rsudo-keycloak-kcadm-path\n' "$HOME"
+}
+
+_kc_saved()
+{
+  _kc_file=$(_kc_config) || return 1
+  [ -f "$_kc_file" ] && [ ! -L "$_kc_file" ] || return 2
+  IFS= read -r _kc_value < "$_kc_file" || [ -n "$_kc_value" ] || return 3
+  _kc_valid "$_kc_value" || return 4
+  printf '%s\n' "$_kc_value"
+}
+
+_kc_emit()
+{
+  if _kc_valid "$1"; then printf '%s\n' "$1"; fi
+  return 0
+}
+
+_kc_list()
+{
+  _kc_emit "\${KEYCLOAK_KCADM_PATH-}"
+  _kc_found=$(_kc_saved 2>/dev/null) && _kc_emit "$_kc_found"
+  _kc_found=$(command -v kcadm.sh 2>/dev/null) && _kc_emit "$_kc_found"
+  if [ -n "\${KEYCLOAK_HOME-}" ]; then _kc_emit "$KEYCLOAK_HOME/bin/kcadm.sh"; fi
+  for _kc_prefix in /opt/keycloak /usr/local/keycloak /srv/keycloak /m/keycloak
+  do
+    _kc_emit "$_kc_prefix/bin/kcadm.sh"
+  done
+
+  if command -v ps >/dev/null 2>&1 && command -v awk >/dev/null 2>&1
+  then
+    ps -eo args= 2>/dev/null |
+      awk '{for (i=1; i<=NF; i++) if (index($i,"-Dkc.home.dir=")==1) {
+        sub(/^-Dkc.home.dir=/,"",$i); print $i "/bin/kcadm.sh"
+      }}' |
+      while IFS= read -r _kc_candidate
+      do
+        _kc_emit "$_kc_candidate"
+      done
+  fi
+
+  if command -v find >/dev/null 2>&1
+  then
+    for _kc_root in /opt /usr/local /srv /m
+    do
+      [ -d "$_kc_root" ] || continue
+      find "$_kc_root" -type f -name kcadm.sh -print 2>/dev/null |
+        while IFS= read -r _kc_candidate
+        do
+          _kc_emit "$_kc_candidate"
+        done
+    done
+    if [ "\${1-}" = full ]
+    then
+      find / -type f -name kcadm.sh -print 2>/dev/null |
+        while IFS= read -r _kc_candidate
+        do
+          _kc_emit "$_kc_candidate"
+        done
+    fi
+  fi
+}
+
+_kc_set()
+{
+  _kc_valid "$1" || {
+    _kc_error "selected path is not an absolute executable regular file"
+    return 21
+  }
+  _kc_file=$(_kc_config) || {
+    _kc_error "effective remote sudo HOME unavailable"
+    return 22
+  }
+  [ ! -L "$_kc_file" ] || {
+    _kc_error "configuration path is a symlink"
+    return 23
+  }
+  _kc_temp=$(mktemp "$_kc_file.XXXXXXXX") || {
+    _kc_error "unable to create protected configuration file"
+    return 24
+  }
+  if ! printf '%s\n' "$1" > "$_kc_temp"
+  then
+    rm -f "$_kc_temp"
+    _kc_error "unable to write configuration file"
+    return 25
+  fi
+  if ! mv -f "$_kc_temp" "$_kc_file"
+  then
+    rm -f "$_kc_temp"
+    _kc_error "unable to persist configuration file"
+    return 26
+  fi
+  printf '%s\n' "$1"
+}
+
+_kc_run()
+{
+  KEYCLOAK_KCADM_PATH=\${KEYCLOAK_KCADM_PATH-}
+  if [ -z "$KEYCLOAK_KCADM_PATH" ]
+  then
+    KEYCLOAK_KCADM_PATH=$(_kc_saved) || {
+      _kc_error "no valid kcadm.sh selected; run rsudo keycloak discovery"
+      return 31
+    }
+  fi
+  _kc_valid "$KEYCLOAK_KCADM_PATH" || {
+    _kc_error "configured kcadm.sh is no longer executable"
+    return 32
+  }
+  if [ "\${KC_CLI_PASSWORD+x}" = x ]
+  then
+    KC_CLI_PASSWORD="$KC_CLI_PASSWORD" "$KEYCLOAK_KCADM_PATH" "$@"
+  else
+    "$KEYCLOAK_KCADM_PATH" "$@"
+  fi
+}
+
+_kc_dispatch()
+{
+  _kc_operation=$1
+  shift
+  case "$_kc_operation" in
+    list) _kc_list "$1" | LC_ALL=C sort -u ;;
+    set) _kc_set "$1" ;;
+    run) _kc_run "$@" ;;
+    *) _kc_error "unexpected internal operation"; return 41 ;;
+  esac
+}
+RSUDO_KCADM_REMOTE
+
+    if [ -n "$_kc_override" ]; then
+      printf 'KEYCLOAK_KCADM_PATH=%s\n' "$_kc_override" || exit 1
+    fi
+    if [ "$_kc_action" = run ] && [ "\${KC_CLI_PASSWORD+x}" = x ]; then
+      printf 'KC_CLI_PASSWORD=%s\n' "$_kc_password" || exit 1
+    fi
+    printf 'set -- %s\n_kc_dispatch "$@"\n' "$_kc_arguments" || exit 1
+    printf x
+  ) || {
+    log error keycloak kcadm-source-generation-failed
+    exit 4
+  }
+  _kc_source=\${_kc_source%x}
+
+  # No operands: rsudo runs sh -s with the source on stdin and cannot
+  # include the source or password in the SSH/sudo process argument list.
+  printf '%s\n' "$_kc_source" | RSUDO_INTERACTIVE= rsudo
+)
+
+rsudo_mod_keycloak_discovery()
+(
+  set +x
+  _kc_path=
+  _kc_interactive=false
+  _kc_depth=quick
+  while [ "$#" -gt 0 ]
+  do
+    case "$1" in
+      --path)
+        [ "$#" -ge 2 ] && [ -n "$2" ] || {
+          log error keycloak kcadm-discovery-missing-path
+          exit 1
+        }
+        _kc_path=$2
+        shift 2 ;;
+      --interactive) _kc_interactive=true; shift ;;
+      --find) _kc_depth=full; shift ;;
+      *) log error keycloak kcadm-discovery-unknown-option option "$1"; exit 2 ;;
+    esac
+  done
+
+  if [ -n "$_kc_path" ]
+  then
+    _rsudo_mod_keycloak_kcadm_remote set "$_kc_path"
+    exit "$?"
+  fi
+
+  _kc_options=$(_rsudo_mod_keycloak_kcadm_remote list "$_kc_depth") || {
+    log error keycloak kcadm-discovery-list-failed
+    exit 3
+  }
+  [ -n "$_kc_options" ] || {
+    log error keycloak kcadm-discovery-no-executable
+    exit 4
+  }
+
+  case "$_kc_options" in
+    *'
+'*)
+      if [ "$_kc_interactive" != true ]
+      then
+        printf 'rsudo keycloak: multiple executables; use --path or --interactive:\n%s\n' "$_kc_options" >&2
+        exit 5
+      fi
+      [ -r /dev/tty ] && [ -w /dev/tty ] || {
+        log error keycloak kcadm-discovery-no-local-tty
+        exit 6
+      }
+      printf '%s\n' "$_kc_options" |
+        awk '{printf "%d. %s\n", NR, $0}' > /dev/tty
+      printf 'Select kcadm.sh number: ' > /dev/tty
+      IFS= read -r _kc_number < /dev/tty || exit 7
+      case "$_kc_number" in
+        ''|*[!0-9]*) log error keycloak kcadm-discovery-invalid-selection; exit 8 ;;
+      esac
+      _kc_path=$(printf '%s\n' "$_kc_options" | sed -n "\${_kc_number}p")
+      [ -n "$_kc_path" ] || {
+        log error keycloak kcadm-discovery-out-of-range
+        exit 9
+      }
+      ;;
+    *) _kc_path=$_kc_options ;;
+  esac
+
+  _rsudo_mod_keycloak_kcadm_remote set "$_kc_path"
+)
+
+# Forward all argv and exit status from the official kcadm.sh. Source
+# injection consumes stdin; arbitrary caller stdin is not forwarded.
+rsudo_mod_keycloak_kcadm()
+(
+  set +x
+  [ "$#" -gt 0 ] || {
+    log error keycloak kcadm-missing-command
+    exit 1
+  }
+  _rsudo_mod_keycloak_kcadm_remote run "$@"
+)
