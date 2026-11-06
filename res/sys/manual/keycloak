@@ -4,6 +4,7 @@ NAME
 SYNOPSIS
     keycloak admin [--server HTTPS-URL] [--realm ISSUER-REALM]
              [--client-id ID --client-secret-file LOCAL-FILE |
+              --username USER --password-file LOCAL-FILE [--client-id ID] |
               --token-file LOCAL-FILE]
              [--ca-file LOCAL-PEM] discovery
     keycloak admin [same options] get|post|put|delete /admin/RESOURCE
@@ -21,11 +22,19 @@ DESCRIPTION
     or a remote m installation. From an uninitialized shell use
     m keycloak admin [options] ....
 
-    Each authenticated invocation obtains a fresh service-account token
-    using the selected confidential Keycloak client_credentials grant and
-    then performs exactly one requested Admin REST operation. Alternatively
-    --token-file supplies an existing local bearer token. No tokens are
-    persisted by the command or printed as authentication output.
+    Each authenticated invocation obtains a fresh token and performs exactly
+    one Admin REST operation. Three explicit credential sources are supported:
+    (1) service-account client_credentials with a configured confidential
+    client, (2) user password Direct Access Grant with a protected password
+    file and selected client (default admin-cli), or (3) a pre-existing
+    bearer token file. No tokens are persisted by the command or printed
+    as authentication output. There is no implicit grant fallback.
+
+    The user password grant is a compatibility path only when the selected
+    Keycloak client permits Direct Access Grants. It cannot implement MFA,
+    WebAuthn, conditional browser login or an external identity-provider
+    redirect; in such environments use a valid existing bearer-token file
+    or a specifically configured service account.
 
     The selected client must already exist and be configured with service
     accounts and the appropriate administrative roles. Authentication is
@@ -47,7 +56,13 @@ OPTIONS
         Realm that issues the access token. Does not select the managed
         resource realm, which appears in the explicit /admin/ path.
     --client-id ID
-        Explicit confidential Keycloak service account client.
+        Explicit confidential service-account client, or selected Direct
+        Access Grant client (default admin-cli only for username/password).
+    --username USER
+        Public username for an explicitly selected Direct Access Grant.
+    --password-file LOCAL-FILE
+        Protected local user password for the selected --username. Not
+        combined with --client-secret-file or --token-file.
     --client-secret-file LOCAL-FILE
         Protected local one-line client secret. Never passed through curl
         ordinary argument values. No username/password grant is attempted.
@@ -62,7 +77,7 @@ OPTIONS
         Print usage.
 
 CREDENTIALS AND SECURITY
-    The client secret or bearer-token file must be a regular file, not a
+    The client secret, user password or bearer-token file must be a regular file, not a
     symlink, owned by the invoking user, readable and mode 0400, 0500,
     0600 or 0700. File content must contain one nonempty line, with at most
     one terminating newline. Secrets, tokens and authorization headers are
@@ -79,6 +94,8 @@ ENVIRONMENT
     KEYCLOAK_SERVER              Default for --server
     KEYCLOAK_REALM               Default for --realm
     KEYCLOAK_CLIENT_ID           Default for --client-id
+    KEYCLOAK_USERNAME            Default for --username
+    KEYCLOAK_PASSWORD_FILE       Default for --password-file
     KEYCLOAK_CLIENT_SECRET_FILE  Default for --client-secret-file
     KEYCLOAK_TOKEN_FILE          Default for --token-file
     KEYCLOAK_CA_FILE             Default for --ca-file
@@ -103,6 +120,10 @@ EXIT STATUS
 
 EXAMPLES
     m keycloak admin --server https://sso.example.org --realm master discovery
+
+    m keycloak admin --server https://sso.example.org --realm master \
+      --username admin --password-file "$HOME/.config/keycloak/admin-password" \
+      get /admin/realms/master
 
     m keycloak admin --server https://sso.example.org --realm master \
       --client-id ops --client-secret-file "$HOME/.config/keycloak/secret" \
