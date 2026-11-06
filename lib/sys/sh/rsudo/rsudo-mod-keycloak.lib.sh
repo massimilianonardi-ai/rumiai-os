@@ -153,7 +153,7 @@ rsudo_mod_keycloak_auth()
         exit 64
       }
       case "$auth_mode" in
-        client-credentials|password) : ;;
+        client-credentials|password|jwt-bearer) : ;;
         *) log error keycloak auth-grant-unimplemented; exit 73 ;;
       esac
       case "$method" in
@@ -164,6 +164,17 @@ rsudo_mod_keycloak_auth()
       then
         log error keycloak auth-federated-grant-unsupported
         exit 73
+      fi
+      if [ "$auth_mode" = jwt-bearer ]
+      then
+        [ "$method" != federated-jwt ] || {
+          log error keycloak auth-jwt-grant-client-method-incompatible
+          exit 73
+        }
+        [ -n "$assertion_file" ] || {
+          log error keycloak auth-jwt-grant-assertion-file-missing
+          exit 70
+        }
       fi
       [ -n "$issuer" ] && [ -n "$client" ] || {
         log error keycloak auth-missing-client-or-issuer
@@ -185,7 +196,7 @@ rsudo_mod_keycloak_auth()
         }
       else
         [ -z "$username" ] && [ -z "$password_file" ] || {
-          log error keycloak auth-client-credentials-with-user-parameters
+          log error keycloak auth-nonpassword-grant-with-user-parameters
           exit 64
         }
       fi
@@ -260,7 +271,8 @@ rsudo_mod_keycloak_auth()
 
   # The authenticator determines which credentials are valid. A selected
   # algorithm is never retried or silently changed on server rejection.
-  [ "$method" = federated-jwt ] || [ -z "$assertion_file" ] || {
+  [ "$method" = federated-jwt ] || [ "$auth_mode" = jwt-bearer ] ||
+    [ -z "$assertion_file" ] || {
     log error keycloak auth-unselected-assertion-file
     exit 64
   }
@@ -525,6 +537,13 @@ then
   # access token remains in a protected file and no provider claims are echoed.
 fi
 
+if [ "$auth_mode" = jwt-bearer ]
+then
+  private_file "$assertion_file" || {
+    auth_error jwt-grant-assertion-file-unavailable-or-insecure
+    exit 70
+  }
+fi
 if [ "$method" = federated-jwt ]
 then
   private_file "$assertion_file" || {
@@ -778,6 +797,7 @@ then
   case "$auth_mode" in
     client-credentials) grant_type=client_credentials ;;
     password) grant_type=password ;;
+    jwt-bearer) grant_type=urn:ietf:params:oauth:grant-type:jwt-bearer ;;
     *) auth_error grant-internal-selection-invalid; exit 90 ;;
   esac
 fi
@@ -823,6 +843,21 @@ then
   then
     set -- "$@" --data-urlencode "username=$username" \
       --data-urlencode "password@$tmp/password-data"
+  elif [ "$auth_mode" = jwt-bearer ]
+  then
+    # Grant assertion remains separate from selected client authentication.
+    # Its bytes never appear in argv, shell source, stdout or diagnostics.
+    jq -R -s -j 'if test("^[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\.[A-Za-z0-9_-]+\\n?$")
+      then sub("\n$"; "") else error("invalid compact assertion") end' \
+      "$assertion_file" > "$tmp/grant-assertion" 2>/dev/null || {
+      auth_error jwt-grant-assertion-format-invalid
+      exit 70
+    }
+    [ -s "$tmp/grant-assertion" ] || {
+      auth_error jwt-grant-assertion-empty
+      exit 70
+    }
+    set -- "$@" --data-urlencode "assertion@$tmp/grant-assertion"
   fi
 fi
 case "$method" in
@@ -1197,7 +1232,14 @@ jq -e '(.access_token | type == "string" and length > 0) and
   exit 86
 }
 
-if [ "$method" = federated-jwt ]
+if [ "$auth_mode" = jwt-bearer ]
+then
+  jq -e '(has("refresh_token") | not)' "$tmp/response" >/dev/null 2>&1 || {
+    auth_error jwt-grant-unexpected-refresh-token
+    exit 86
+  }
+fi
+if [ "$method" = federated-jwt ] || [ "$auth_mode" = jwt-bearer ]
 then
   # Verify the selected client really received the resulting bearer.
   # Only Keycloak's verified HTTPS response is decoded, never printed.
@@ -1207,7 +1249,7 @@ then
     then .[1] | gsub("-"; "+") | gsub("_"; "/") |
       @base64d | fromjson | .azp == $expected
     else false end' "$tmp/response" >/dev/null 2>&1 || {
-    auth_error federated-token-client-binding-mismatch
+    auth_error token-client-binding-mismatch
     exit 67
   }
 fi
