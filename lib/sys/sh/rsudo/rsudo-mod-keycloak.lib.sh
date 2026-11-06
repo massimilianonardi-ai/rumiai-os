@@ -1608,7 +1608,7 @@ _rsudo_mod_keycloak_kcadm_remote()
     }
   fi
 
-  _kc_source=$(
+  {
     cat <<'RSUDO_KCADM_REMOTE'
 set +x
 umask 077
@@ -1620,15 +1620,23 @@ _kc_error()
 
 _kc_valid()
 {
-  case "$1" in /*) : ;; *) return 1 ;; esac
-  case "$1" in *'
-'*) return 1 ;; esac
+  case "$1" in
+    /*) : ;;
+    *) return 1 ;;
+  esac
+  case "$1" in
+    *'
+'*) return 1 ;;
+  esac
   [ -f "$1" ] && [ -x "$1" ]
 }
 
 _kc_config()
 {
-  case "${HOME-}" in /*) [ -d "$HOME" ] || return 1 ;; *) return 1 ;; esac
+  case "${HOME-}" in
+    /*) [ -d "$HOME" ] || return 1 ;;
+    *) return 1 ;;
+  esac
   printf '%s/.rsudo-keycloak-kcadm-path\n' "$HOME"
 }
 
@@ -1767,16 +1775,7 @@ RSUDO_KCADM_REMOTE
       printf 'KC_CLI_PASSWORD=%s\n' "$_kc_password" || exit 1
     fi
     printf 'set -- %s\n_kc_dispatch "$@"\n' "$_kc_arguments" || exit 1
-    printf x
-  ) || {
-    log error keycloak kcadm-source-generation-failed
-    exit 4
-  }
-  _kc_source=${_kc_source%x}
-
-  # No operands: rsudo runs sh -s with the source on stdin and cannot
-  # include the source or password in the SSH/sudo process argument list.
-  printf '%s\n' "$_kc_source" | RSUDO_INTERACTIVE= rsudo
+  } | RSUDO_INTERACTIVE= rsudo
 )
 
 rsudo_mod_keycloak_discovery()
