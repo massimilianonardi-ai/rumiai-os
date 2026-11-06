@@ -196,7 +196,12 @@ rsudo_mod_keycloak_auth()
         }
       else
         [ -z "$username" ] && [ -z "$password_file" ] || {
-          log error keycloak auth-nonpassword-grant-with-user-parameters
+          if [ "$auth_mode" = jwt-bearer ]
+          then
+            log error keycloak auth-jwt-grant-with-user-parameters
+          else
+            log error keycloak auth-client-credentials-with-user-parameters
+          fi
           exit 64
         }
       fi
@@ -1249,7 +1254,12 @@ then
     then .[1] | gsub("-"; "+") | gsub("_"; "/") |
       @base64d | fromjson | .azp == $expected
     else false end' "$tmp/response" >/dev/null 2>&1 || {
-    auth_error token-client-binding-mismatch
+    if [ "$method" = federated-jwt ]
+    then
+      auth_error federated-token-client-binding-mismatch
+    else
+      auth_error jwt-grant-token-client-binding-mismatch
+    fi
     exit 67
   }
 fi
