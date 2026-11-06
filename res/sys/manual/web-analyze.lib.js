@@ -282,6 +282,13 @@ EVIDENCE
     Missing request method, initiator or timestamp are never invented.
     A recovered body is saved but request provenance remains partial;
     unavailable bytes retain an explicit body-unavailable outcome.
+    A response-only cached stylesheet is classified as a warning, rather than
+    a missing-CSS outcome, only when CSS.getStyleSheetText identifies a regular
+    non-inline stylesheet in the same frame and its SHA-256 matches a previously
+    archived stylesheet response from the same CDP session and URL. The original
+    response-only row remains body-unavailable in resources.jsonl, while
+    evidence-integrity.json and NETWORK.md identify it as a CSS replay warning.
+    URL/cache/type matches without the content hash proof remain partial.
     summary.json resourceCapture.responseOnly counts these observations,
     separately from observed requestWillBeSent events. Two
     identical bodies may share a content-addressed file. CDP can expose

@@ -4,6 +4,7 @@
 // Bounded, passive reconnaissance. Raw evidence is intentionally private.
 const fs = require('node:fs');
 const path = require('node:path');
+const crypto = require('node:crypto');
 
 const LIMIT = {steps: 28, controls: 1200, html: 2_000_000, text: 200_000,
   quietMs: 1500, pendingQuietMs: 4500, initialSettleMs: 15000,
@@ -22,6 +23,12 @@ function save(file, data)
 {
   fs.writeFileSync(file, Buffer.isBuffer(data) || typeof data === 'string' ? data : JSON.stringify(data, null, 2) + '\n',
     {flag: 'wx', mode: 0o600});
+}
+
+function resourceKeySha256(row)
+{
+  return crypto.createHash('sha256')
+    .update(String(row.session) + '\0' + String(row.requestId)).digest('hex');
 }
 
 function runDirectory(root)
@@ -378,6 +385,13 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   const scripts = readJsonl(path.join(directory, 'scripts.jsonl'));
   const requests = resources.filter(row => row.url);
   const saved = resources.filter(row => row.status === 'saved');
+  const cssReplayResources = new Set((integrity?.warnings || [])
+    .filter(row => row.identity === 'css-cache-replay-content-already-archived')
+    .flatMap(row => row.resourceKeySha256 || []));
+  const cssReplayWarnings = integrity?.coverage?.network?.cssCacheReplayContentAlreadyArchived ?? 0;
+  const unresolvedResourceOutcomes = resources.filter(row =>
+    row.status !== 'saved' &&
+    !cssReplayResources.has(resourceKeySha256(row))).length;
   const controls = new Map();
   const components = new Set();
   const pages = new Set();
@@ -421,6 +435,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- [Document observer status](rest/dom-history-contexts.json) and [pre-scroll mutation history](rest/dom-mutations-at-rest.jsonl)',
     `- Rest evidence: ${rest?.status || 'unavailable'}; artifacts: ${rest?.artifacts?.length ?? 0}`,
     `- Post-capture integrity: ${integrity?.status || 'unavailable'}; verified files: ${integrity?.counts?.verifiedFiles ?? 0}; discrepancies: ${integrity?.counts?.discrepancies ?? 0}`,
+    `- Confirmed cached CSS response replays: ${cssReplayWarnings}; warning only because identical stylesheet content is already archived.`,
     '- [Evidence integrity and per-domain outcomes](evidence-integrity.json)',
     '- [Initial resting DOM](states/dom-rest-initial.html) and [final resting DOM](states/dom-rest-final.html)',
     '  (each has a matching JSON file with settlement evidence; verify status before assuming completeness).',
@@ -486,7 +501,10 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
   const sources = new Map();
   for (const resource of resources)
   {
-    const source = resource.source || resource.status || 'unknown';
+    const source = cssReplayResources.has(
+      resourceKeySha256(resource)) ?
+      'warning:css-cache-replay-content-already-archived' :
+      resource.source || resource.status || 'unknown';
     sources.set(source, (sources.get(source) || 0) + 1);
   }
   const networkConfig = summary.resourceCapture?.networkConfiguration || [];
@@ -508,8 +526,10 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '## Resource types', '', table([...kinds], ['Type', 'Observed outcomes']),
     '## Request outcomes (up to 350; full catalog: resources.jsonl)', '',
     table(requests.slice(0, 350).map(r => [r.resourceType, displayMethod(r.method), r.httpStatus,
-      r.status, displayOrigin(r.url), r.file || '']), ['Type', 'Method', 'HTTP', 'Capture', 'Origin', 'Saved artifact']),
-    `Indexed resource outcomes: ${resources.length}; saved bodies: ${saved.length}; unresolved: ${resources.length - saved.length}.`, ''
+      cssReplayResources.has(resourceKeySha256(r)) ?
+        'warning: CSS replay; content already archived' : r.status,
+      displayOrigin(r.url), r.file || '']), ['Type', 'Method', 'HTTP', 'Capture', 'Origin', 'Saved artifact']),
+    `Indexed resource outcomes: ${resources.length}; saved bodies: ${saved.length}; confirmed CSS replay warnings: ${cssReplayWarnings}; other unresolved outcomes: ${unresolvedResourceOutcomes}.`, ''
   ];
   save(path.join(directory, 'NETWORK.md'), network.join('\n') + '\n');
 
@@ -581,7 +601,7 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     '- Callback-time DOM snapshots are not atomic history of every synchronous intermediate value;',
     '  elements attached and removed within one turn can be observable, but pre-attachment',
     '  mutations, earlier closed roots and detached/opaque frames may remain unobserved.',
-    `- Response bodies unavailable/redirected/unfinished: ${resources.length - saved.length}.`,
+    `- Response records without their own archived body: ${resources.length - saved.length}; ${cssReplayWarnings} are confirmed cached CSS replay warnings, with identical CSS content already archived; ${unresolvedResourceOutcomes} other outcomes remain unresolved.`,
     `- Partial stream artifacts: ${summary.resourceCapture?.partialStreams ?? 0}.`,
     `- CDP response buffer configuration outcomes: ${JSON.stringify((summary.resourceCapture?.networkConfiguration || []).map(x => ({enabled:x.enabled, durable:x.durable})))}.`,
     '- Streaming is bounded to 16 MiB per active request and 64 MiB across streams;',
@@ -607,7 +627,9 @@ function documentReports(directory, url, states, summary, warnings, interrupted,
     `- Browser-specific CDP schema retrieval: ${capabilities?.protocol?.status || 'unavailable'}.`,
     '- No source map resolution, unexecuted JavaScript extraction, or reconstruction of hidden React state.',
     '- Page content and React internals can change with authentication, locale, A/B tests or timing.',
-    '', '## Warnings', '', `- Count: ${warnings.length}; private details remain in capture diagnostics.`, ''
+    '', '## Warnings', '',
+    `- Confirmed cached CSS response replays with matching archived content: ${cssReplayWarnings}. These do not count as missing CSS content.`,
+    `- Runtime warning messages: ${warnings.length}; includes the confirmed CSS replay warning above when present.`, ''
   ];
   save(path.join(directory, 'LIMITATIONS.md'), limits.join('\n') + '\n');
 }
@@ -671,6 +693,14 @@ async function main(args)
   try
   {
     integrity = auditWebAnalyzeEvidence(directory, {write:true, interrupted});
+    for (const warning of integrity.warnings || [])
+    {
+      if (warning.identity !== 'css-cache-replay-content-already-archived')
+        continue;
+      const message = `${warning.count} cached CSS response replay(s) have identical content already archived; marked warning`;
+      warnings.push(message);
+      process.stderr.write(`web-analyze: warning: ${message}\n`);
+    }
     if (integrity.status !== 'saved')
       warnings.push('Evidence integrity/coverage status: ' + integrity.status +
         '; inspect evidence-integrity.json');

@@ -49,11 +49,11 @@ PUBLIC FUNCTIONS
         hash agreement proves only agreement with its saved index. Some
         browser events can be missing before debugger attachment. A captured
         REST manifest may still have partial network, DOM or storage coverage.
-        A saved response-only body still has incomplete request provenance
-        when Network.requestWillBeSent was not observed; the network
-        domain is marked partial rather than silently treating it as fully
-        attributed. Integrity status is not a universal page-reconstruction
-        certificate.
+        A response-only network event remains incomplete provenance when
+        Network.requestWillBeSent was not observed. Confirmed cached CSS
+        replays with a matching archived stylesheet hash are recorded as
+        warnings; other response-only rows keep the network domain partial.
+        Integrity status is not a universal page-reconstruction certificate.
 
 OUTPUT
     evidence-integrity.json     Post-finalization verified index/file ledger

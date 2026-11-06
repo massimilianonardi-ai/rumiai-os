@@ -285,8 +285,14 @@ OUTPUT
     cached stylesheets observed during CSS inspection) preserve available
     response metadata as requestProvenance=response-only. CDP body recovery
     is attempted without inventing missing request provenance, and the
-    integrity audit continues to report that evidence as partial even if
-    the body was saved. summary.json separately counts responseOnly.
+    A cached response-only stylesheet is warning-only when its regular
+    non-inline CSS source has the same SHA-256 as an earlier saved stylesheet
+    response from the same session and frame. NETWORK.md labels that row as a
+    confirmed CSS replay warning, and evidence-integrity.json records the
+    warning count. The individual CDP response still remains body-unavailable;
+    URL/cache matches without identical saved CSS content remain partial.
+    This classification does not make incomplete evidence a command failure.
+    summary.json separately counts responseOnly.
     Resource capture remains best effort: redirects, active streams,
     unsupported commands, process swaps and evictions can prevent a
     complete body. Inspect per-request statuses and limits.
