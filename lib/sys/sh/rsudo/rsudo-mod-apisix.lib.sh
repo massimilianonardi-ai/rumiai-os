@@ -1326,7 +1326,7 @@ probe_admin_listener()
     *)
       if command -v ip >/dev/null 2>&1 &&
          ip -o -4 address show 2>/dev/null |
-           awk -v wanted="$bind_ip" '$4 ~ ("^" wanted "/") {found=1} END {exit !found}'
+           awk -v wanted="$bind_ip" '{address=$4; sub(/\/.*/, "", address); if (address == wanted) found=1} END {exit !found}'
       then
         probe_ip=$bind_ip
       else
