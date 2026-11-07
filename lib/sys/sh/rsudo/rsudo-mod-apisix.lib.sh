@@ -1223,6 +1223,135 @@ printf '%s\n' "$ps_snapshot" | awk '
   }
 '
 
+# systemd is optional. Unit names and states are evidence only; descriptions
+# are inspected for matching but never copied to discovery output.
+if command -v systemctl >/dev/null 2>&1
+then
+  systemd_units=$(systemctl list-units --all --type=service --no-legend \
+    --no-pager --plain 2>/dev/null)
+  systemd_status=$?
+  if [ "$systemd_status" -eq 0 ]
+  then
+    printf '%s\n' "$systemd_units" | awk '
+      tolower($0) ~ /apisix/ && NF >= 4 {
+        state=$3
+        if (state !~ /^(active|inactive|failed|activating|deactivating)$/)
+          state="unknown"
+        printf "service\thost\t%s\t%s\tsystemd-loaded-unit\n", state, $1
+      }
+    '
+  else
+    printf 'service-manager\thost\tunavailable\tsystemd\tunit-list-failed\n'
+  fi
+  systemd_files=$(systemctl list-unit-files --type=service --no-legend \
+    --no-pager 2>/dev/null)
+  systemd_files_status=$?
+  if [ "$systemd_files_status" -eq 0 ]
+  then
+    printf '%s\n' "$systemd_files" | awk '
+      tolower($1) ~ /apisix/ && NF >= 2 {
+        printf "service\thost\t%s\t%s\tsystemd-unit-file\n", $2, $1
+      }
+    '
+  else
+    printf 'service-manager\thost\tpartial\tsystemd\tunit-file-list-failed\n'
+  fi
+fi
+
+# Extract only numeric ports nested beneath the YAML admin_listen mapping.
+# This deliberately avoids generic "port:" matches (for example etcd).
+admin_listen_ports()
+{
+  awk '
+    function indent(s, t) {
+      t=s
+      sub(/[^ ].*$/, "", t)
+      return length(t)
+    }
+    function emit() {
+      if (ip ~ /^[0-9.]+$/ && port ~ /^[0-9]+$/)
+        print ip "|" port
+      ip=""
+      port=""
+    }
+    /^[[:space:]]*#/ { next }
+    {
+      line=$0
+      if (line ~ /^[[:space:]]*admin_listen:[[:space:]]*$/) {
+        if (active) emit()
+        active=1
+        base=indent(line)
+        ip=""
+        port=""
+        next
+      }
+      if (active) {
+        level=indent(line)
+        if (level <= base) {
+          emit()
+          active=0
+        } else {
+          item=line
+          sub(/^[[:space:]]*/, "", item)
+          if (item ~ /^ip:[[:space:]]*[0-9.]+([[:space:]#]|$)/) {
+            sub(/^ip:[[:space:]]*/, "", item)
+            sub(/[[:space:]#].*$/, "", item)
+            ip=item
+          }
+          if (item ~ /^port:[[:space:]]*[0-9]+([[:space:]#]|$)/) {
+            sub(/^port:[[:space:]]*/, "", item)
+            sub(/[[:space:]#].*$/, "", item)
+            port=item
+          }
+          next
+        }
+      }
+    }
+    END { if (active) emit() }
+  ' "$1" 2>/dev/null
+}
+
+probe_admin_listener()
+{
+  config_file=$1
+  bind_ip=$2
+  port=$3
+  case "$port" in ''|*[!0123456789]*) return ;; esac
+  [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || return
+  probe_ip=
+  evidence=config-admin-listen
+  case "$bind_ip" in
+    127.*) probe_ip=$bind_ip ;;
+    0.0.0.0) probe_ip=127.0.0.1; evidence=config-admin-listen-wildcard-bind ;;
+    *)
+      if command -v ip >/dev/null 2>&1 &&
+         ip -o -4 address show 2>/dev/null |
+           awk -v wanted="$bind_ip" '$4 ~ ("^" wanted "/") {found=1} END {exit !found}'
+      then
+        probe_ip=$bind_ip
+      else
+        printf 'listener\thost\tconfigured-unprobed\t%s:%s\tconfig-admin-listen-nonlocal:%s\n' \
+          "$bind_ip" "$port" "$config_file"
+        return
+      fi
+    ;;
+  esac
+  if command -v nc >/dev/null 2>&1
+  then
+    if nc -z -w 1 "$probe_ip" "$port" >/dev/null 2>&1
+    then
+      printf 'listener\thost\topen\t%s:%s\t%s-nc:%s\n' \
+        "$probe_ip" "$port" "$evidence" "$config_file"
+    else
+      printf 'listener\thost\tnot-open\t%s:%s\t%s-nc:%s\n' \
+        "$probe_ip" "$port" "$evidence" "$config_file"
+    fi
+  else
+    printf 'listener\thost\tprobe-unavailable\t%s:%s\t%s-nc-missing:%s\n' \
+      "$probe_ip" "$port" "$evidence" "$config_file"
+  fi
+}
+
 # Best-effort filesystem scan; separate container discovery is a later phase.
 find "$scan_root" \
   \( -type d \( -path /proc -o -path /sys -o -path /dev \
@@ -1261,6 +1390,16 @@ do
     evidence=find-and-ps-prefix
   fi
   printf 'config\thost\t%s\t%s\t%s\n' "$state" "$file" "$evidence"
+  case "$file" in *.yaml)
+    admin_endpoints=$(admin_listen_ports "$file")
+    while IFS='|' read -r bind_ip admin_port
+    do
+      [ -n "$bind_ip" ] && [ -n "$admin_port" ] || continue
+      probe_admin_listener "$file" "$bind_ip" "$admin_port"
+    done <<RSUDO_APISIX_ADMIN_ENDPOINTS
+$admin_endpoints
+RSUDO_APISIX_ADMIN_ENDPOINTS
+  ;; esac
 done
 
 # Container managers are optional. Inventory all known states, including
