@@ -2,10 +2,12 @@ NAME
     rsudo-mod-apisix.lib.sh - transitional rsudo apisix administration API
 
 DESCRIPTION
-    This module currently forwards its former public operations to the preserved legacy implementation. The forwarding is temporary; the new backend architecture is under development.
-    Most operations still use the legacy API. A new read-only configured-mode
-    discovery operation is available, but resource routing and standalone
-    mutation are not yet implemented.
+    This module retains compatibility forwarding for old operation-specific
+    function names. The generic list/get entrypoints now use an explicit,
+    read-only traditional REST adapter; create/update/delete/apply/request
+    fail as unimplemented and never fall back to legacy. Host discovery and
+    operator context inspection are read-only. Standalone resource routing
+    and mutation are not yet implemented.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
     Do not provide untrusted shell-sensitive values to legacy operations.
@@ -17,12 +19,37 @@ DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix discovery [absolute-remote-scan-root]
     rsudo apisix context
+    rsudo apisix list routes|services|upstreams
+    rsudo apisix get routes|services|upstreams resource-id
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
     rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_list resource
+        List routes, services or upstreams through the explicitly selected
+        traditional-admin REST adapter. Requires RSUDO_APISIX_SCOPE=host,
+        RSUDO_APISIX_DEPLOYMENT=traditional-admin,
+        RSUDO_APISIX_ADMIN_URL (an http(s) origin without a path) and
+        RSUDO_APISIX_HEADER_FILE (an absolute path on the remote target).
+        The remote header file must be a regular, readable, non-symlink file
+        with mode 0600 and exactly one newline-terminated X-API-KEY header.
+        Curl verifies HTTPS using its configured trust and does not follow
+        redirects or use proxy settings. The raw successful JSON response is
+        written to stdout. Other adapters and resources fail explicitly.
+
+    rsudo_mod_apisix_get resource resource-id
+        Read one routes, services or upstreams item through the same selected
+        traditional-admin REST adapter and credential requirements as list.
+        Resource IDs are currently restricted to URI-safe ASCII letters,
+        digits, dot, underscore, tilde and hyphen. Successful output is raw
+        server JSON; HTTP failures are nonzero and their bodies are not sent
+        to stdout. Invalid argument shape is 1, unsupported resource 2,
+        unsupported adapter 3, unsupported scope 4 and invalid Admin URL or
+        authority 5; remote validation
+        has distinct statuses 84-92. Curl HTTP failures retain curl status 22.
+
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment
         selection; it performs no discovery, connection, authentication or
@@ -48,8 +75,7 @@ PUBLIC FUNCTIONS
         container ID length 7, missing data path 8, Admin URL 9,
         credential-header path 10, embedded field delimiters 11.
         The mapping is only a first adapter selector. Generic modern
-        list/get/create/update/delete remain unimplemented and are NOT
-        provided by invoking context.
+        context itself performs no list/get/create/update/delete operation.
 
     rsudo_mod_apisix_discovery [absolute-remote-scan-root]
         Read-only best-effort host inventory. The scan root defaults to / and
@@ -92,8 +118,8 @@ PUBLIC FUNCTIONS
         The resource name selects an endpoint; the operation does NOT
         establish the active APISIX backend or assert that a response from
         another service belongs to the selected APISIX instance.
-        Explicit backend verification and normal low-operand list/get
-        convenience remain under development. Do not expose this interface
+        Explicit backend verification and low-operand routing for other
+        adapters remain under development. Do not expose this interface
         to untrusted values or treat a successful GET as write readiness.
         Invalid arguments, credential paths/permissions/format, unsupported
         resource, port and curl availability have distinct status 44-51.
@@ -250,11 +276,11 @@ PUBLIC FUNCTIONS
     rsudo_mod_apisix_key — extract a configured Admin API key from a legacy fixed path
     rsudo_mod_apisix_keyset variable_name — assign the extracted key to the named shell variable
     rsudo_mod_apisix_api resource_path [HTTP_method] [JSON_body] — perform legacy Admin API request
-    rsudo_mod_apisix_get resource_path — legacy GET request
+    rsudo_mod_apisix_get resource resource-id — selected REST GET
     rsudo_mod_apisix_put resource_path JSON_body — legacy PUT request
     rsudo_mod_apisix_post resource_path JSON_body — legacy POST request
     rsudo_mod_apisix_del resource_path — legacy DELETE request
-    rsudo_mod_apisix_delete resource_kind id — dispatch deletion
+    rsudo_mod_apisix_delete resource_kind id — status 1 until a safe backend is implemented; no legacy fallback
     rsudo_mod_apisix_delete_service id — delete service
     rsudo_mod_apisix_delete_route id — delete route
     rsudo_mod_apisix_delete_stream_route id — delete stream route
@@ -267,7 +293,7 @@ PUBLIC FUNCTIONS
     rsudo_mod_apisix_delete_plugin_config id — delete plugin config
     rsudo_mod_apisix_delete_secret id — delete secret
     rsudo_mod_apisix_delete_proto id — delete protobuf definition
-    rsudo_mod_apisix_create resource_kind ... — dispatch resource creation
+    rsudo_mod_apisix_create resource_kind ... — status 1 until a safe backend is implemented; no legacy fallback
     rsudo_mod_apisix_create_generic collection id JSON_fragment — generic legacy creation
     rsudo_mod_apisix_create_upstream id JSON_fragment — create upstream
     rsudo_mod_apisix_create_upstream_simple id scheme address:port — build a one-node upstream
