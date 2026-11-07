@@ -93,8 +93,10 @@ PUBLIC FUNCTIONS
         numeric ports nested beneath admin_listen are considered. A TCP probe
         is attempted with nc only for loopback/wildcard binds or an address
         confirmed local by ip; remote bind addresses are reported without
-        probing. Results are open/not-open/unavailable evidence, not APISIX
-        identity. JSON admin-listener parsing is not implemented. It skips
+        probing. For container YAML, the same targeted probe runs inside
+        that container's network namespace; its result is scoped by manager
+        and full ID. Results are open/not-open/unavailable evidence, not
+        APISIX identity. JSON admin-listener parsing is not implemented. It skips
         /proc, /sys, /dev, /run and common container storage on an unrestricted
         root scan. These are process/configuration *candidates*, not proof of
         runtime identity, loaded source or write readiness.
@@ -107,8 +109,8 @@ PUBLIC FUNCTIONS
         qualified by that ID. Failed manager listings and incomplete probes
         produce uncertainty rows. This is best-effort: a stopped container
         whose image and name do not identify APISIX cannot be classified from
-        its filesystem, and mounts, service-manager units and listener ports
-        are not correlated yet. JSON output and guaranteed exhaustive
+        its filesystem, and mount sources or service-to-process ownership
+        are not correlated. JSON output and guaranteed exhaustive
         detection are NOT implemented. Discovery
         never chooses an instance or modifies the user's environment.
         Local argument count 1, relative root 2; in the remote scan,
