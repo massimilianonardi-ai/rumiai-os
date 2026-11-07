@@ -2049,6 +2049,175 @@ cat "$data_file"
 RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
 
+# Publish one complete JSON document to the explicitly selected standalone
+# JSON file. The temporary directory is a sibling so the final rename remains
+# on the same filesystem; the remote lock coordinates this module's writers.
+_rsudo_mod_apisix_json_file_apply_remote_source()
+{
+  cat <<'RSUDO_APISIX_JSON_FILE_APPLY_REMOTE'
+data_file=$1
+case "$data_file" in /*) : ;; *) printf '%s\n' apisix.json-file-apply.invalid-data-path >&2; exit 80 ;; esac
+[ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
+  printf '%s\n' apisix.json-file-apply.source-unavailable >&2
+  exit 81
+}
+lock_dir=$data_file.rsudo-lock
+if ! (umask 077; mkdir "$lock_dir") 2>/dev/null
+then
+  printf '%s\n' apisix.json-file-apply.lock-unavailable >&2
+  exit 82
+fi
+temp_dir=
+attempt=0
+while [ "$attempt" -lt 10 ]
+do
+  candidate=$data_file.rsudo-apply-$$-$attempt
+  if (umask 077; mkdir "$candidate") 2>/dev/null
+  then temp_dir=$candidate; break
+  fi
+  attempt=$((attempt + 1))
+done
+if [ -z "$temp_dir" ]
+then
+  rmdir "$lock_dir" 2>/dev/null || :
+  printf '%s\n' apisix.json-file-apply-temp-unavailable >&2
+  exit 83
+fi
+body_file=$temp_dir/input.json
+baseline_file=$temp_dir/baseline.json
+staged_file=$temp_dir/published.json
+cleanup_json_apply()
+{
+  rm -f "$body_file" "$baseline_file" "$staged_file"
+  rmdir "$temp_dir" 2>/dev/null || :
+  rmdir "$lock_dir" 2>/dev/null || :
+}
+trap 'cleanup_json_apply' 0
+trap 'exit 129' 1
+trap 'exit 130' 2
+trap 'exit 131' 3
+trap 'exit 143' 15
+[ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
+  printf '%s\n' apisix.json-file-apply.source-changed >&2
+  exit 81
+}
+initial_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
+  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  exit 84
+}
+cat > "$body_file" || { printf '%s\n' apisix.json-file-apply.body-stage-failed >&2; exit 85; }
+[ -s "$body_file" ] || { printf '%s\n' apisix.json-file-apply.empty-document >&2; exit 86; }
+cp -p "$data_file" "$baseline_file" || {
+  printf '%s\n' apisix.json-file-apply.baseline-copy-failed >&2
+  exit 87
+}
+snapshot_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
+  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  exit 84
+}
+cmp -s "$baseline_file" "$data_file"
+snapshot_cmp_status=$?
+case "$snapshot_cmp_status" in
+  0) : ;;
+  1)
+    printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+    exit 88
+  ;;
+  *)
+    printf '%s\n' apisix.json-file-apply.comparison-unavailable >&2
+    exit 90
+  ;;
+esac
+[ "$snapshot_metadata" = "$initial_metadata" ] || {
+  printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+  exit 88
+}
+cp -p "$baseline_file" "$staged_file" || {
+  printf '%s\n' apisix.json-file-apply.staged-metadata-copy-failed >&2
+  exit 89
+}
+cat "$body_file" > "$staged_file" || {
+  printf '%s\n' apisix.json-file-apply.document-stage-failed >&2
+  exit 86
+}
+current_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
+  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  exit 84
+}
+cmp -s "$baseline_file" "$data_file"
+current_cmp_status=$?
+case "$current_cmp_status" in
+  0) : ;;
+  1)
+    printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+    exit 88
+  ;;
+  *)
+    printf '%s\n' apisix.json-file-apply.comparison-unavailable >&2
+    exit 90
+  ;;
+esac
+[ "$current_metadata" = "$initial_metadata" ] || {
+  printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+  exit 88
+}
+mv -f "$staged_file" "$data_file" || {
+  printf '%s\n' apisix.json-file-apply.publish-failed >&2
+  exit 91
+}
+RSUDO_APISIX_JSON_FILE_APPLY_REMOTE
+}
+
+_rsudo_mod_apisix_json_file_apply()
+(
+  [ "$#" -eq 0 ] || { log error apisix json-file-apply-invalid-arguments count "$#"; exit 1; }
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix json-file-apply-invalid-context status "$context_status"
+    exit 2
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = file-json ] || { log error apisix json-file-apply-adapter-unsupported adapter "$adapter"; exit 3; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  case "$data_file" in /*) : ;; *) log error apisix json-file-apply-invalid-data-path; exit 4 ;; esac
+  case "$scope" in
+    host|docker|podman) : ;;
+    *) log error apisix json-file-apply-unsupported-scope scope "$scope"; exit 5 ;;
+  esac
+  container=${RSUDO_APISIX_CONTAINER_ID-}
+  command -v json >/dev/null 2>&1 || { log error apisix json-file-apply-json-unavailable; exit 6; }
+  umask 077
+  temp_base=${TMPDIR:-/tmp}
+  case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+  attempt=0
+  temp_dir=
+  while [ "$attempt" -lt 10 ]
+  do
+    candidate=$temp_base/rsudo-apisix-apply-$$-$attempt
+    if (umask 077; mkdir "$candidate") 2>/dev/null
+    then temp_dir=$candidate; break
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$temp_dir" ] || { log error apisix json-file-apply-temp-unavailable; exit 7; }
+  document=$temp_dir/document.json
+  trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
+  cat > "$document" || { log error apisix json-file-apply-input-read-failed; exit 8; }
+  json --check "$document" >/dev/null 2>&1 || { log error apisix json-file-apply-invalid-json; exit 9; }
+  remote_source=$(_rsudo_mod_apisix_json_file_apply_remote_source) || {
+    log error apisix json-file-apply-remote-source-failed
+    exit 10
+  }
+  RSUDO_INTERACTIVE=
+  if [ "$scope" = host ]
+  then
+    rsudo sh -c "$remote_source" apisix "$data_file" < "$document"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" < "$document"
+  fi
+)
+
 # Parse the explicitly selected APISIX YAML document with the LuaJIT and
 # lyaml shipped by the selected APISIX installation. Emit only the selected
 # resource records as JSON Lines; never copy the complete YAML document.
@@ -2401,10 +2570,11 @@ _rsudo_mod_apisix_unimplemented_operation()
   exit 1
 )
 
-# CRUD mutations currently use only an explicitly selected host REST adapter.
-# Other backends fail in the router and never fall through to legacy.
+# Resource CRUD currently uses only an explicitly selected host REST adapter.
+# Full-document apply supports file-json; unsupported operations fail
+# explicitly and never fall through to legacy.
 rsudo_mod_apisix_create() { _rsudo_mod_apisix_rest_mutate create "$@"; }
 rsudo_mod_apisix_update() { _rsudo_mod_apisix_rest_mutate update "$@"; }
 rsudo_mod_apisix_delete() { _rsudo_mod_apisix_rest_mutate delete "$@"; }
-rsudo_mod_apisix_apply() { _rsudo_mod_apisix_unimplemented_operation apply; }
+rsudo_mod_apisix_apply() { _rsudo_mod_apisix_json_file_apply "$@"; }
 rsudo_mod_apisix_request() { _rsudo_mod_apisix_rest_request "$@"; }

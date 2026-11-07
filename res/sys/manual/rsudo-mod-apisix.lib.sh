@@ -7,7 +7,8 @@ DESCRIPTION
     explicit traditional REST, standalone API snapshot, standalone JSON-file
     or standalone YAML-file adapter. REST create/update/delete mutations are
     currently host-scoped; unsupported backends fail without legacy fallback.
-    apply remains unimplemented. Generic request is implemented only for the
+    apply publishes a complete JSON document only to an explicitly selected
+    standalone-file-json target. Generic request is implemented only for the
     explicit host traditional REST adapter. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
@@ -26,6 +27,7 @@ DISPATCH
     rsudo apisix create routes|services|upstreams < resource.json
     rsudo apisix update routes|services|upstreams id < resource.json
     rsudo apisix delete routes|services|upstreams id
+    rsudo apisix apply < complete-config.json
     rsudo apisix request relative-admin-path [GET|POST|PUT|DELETE]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
@@ -132,6 +134,39 @@ PUBLIC FUNCTIONS
         use 84-94.
         File, snapshot and other non-REST mutations remain unimplemented and
         never fall back to legacy.
+
+    rsudo_mod_apisix_apply (reads a complete JSON configuration from stdin)
+        Publish one complete standalone JSON configuration only when
+        RSUDO_APISIX_DEPLOYMENT=standalone-file-json and
+        RSUDO_APISIX_DATA_FILE is an absolute selected path. Host, Docker and
+        Podman scopes are supported when explicitly selected; container scope
+        requires the full lowercase 64-hex ID. The selected source must
+        already exist as a readable regular non-symlink file.
+        The caller supplies the whole intended APISIX JSON configuration, not
+        a resource fragment. The local RumiAI json command validates exactly
+        one complete JSON value before the remote operation. The complete
+        bytes are staged in private local and remote temporary locations. On
+        the target, a per-file lock serializes concurrent apply calls through
+        this adapter, a
+        baseline copy detects content/metadata changes while staging, and
+        `mv` atomically publishes a same-directory staged file. `cp -p`
+        preserves source ownership and mode where the target permits it.
+        Success means the file was atomically replaced; it does not prove
+        APISIX accepted the configuration or reloaded it. The operation does
+        not validate APISIX schema, resolve substitutions or establish that
+        the selected file is loaded by a running instance. Other adapters
+        remain unsupported and never fall back to legacy.
+        Local statuses 1-10 cover invalid arguments, invalid operator context,
+        unsupported adapter, data path, scope/container, missing json command,
+        local temp creation, input read, invalid JSON and remote-source
+        creation. Context failure status is wrapped as 2 with its original
+        status in the diagnostic. Remote statuses 80-91 identify invalid path,
+        source unavailable, lock unavailable, remote temp creation, metadata
+        inspection failure, body staging failure, empty document, baseline
+        copy failure, concurrent change, staged metadata copy failure, atomic
+        publish failure and baseline comparison failure. A stale lock left after an uncatchable
+        interruption is not removed automatically; inspect it and confirm no
+        writer is active before removing it.
 
     rsudo_mod_apisix_request relative-admin-path [method]
         Advanced request through the selected host-scoped traditional Admin
