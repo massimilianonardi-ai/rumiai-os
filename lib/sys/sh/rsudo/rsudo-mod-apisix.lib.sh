@@ -1281,3 +1281,101 @@ rsudo_mod_apisix_discovery()
   RSUDO_INTERACTIVE=
   _rsudo_mod_apisix_discovery_host_source | rsudo sh -s -- "$scan_root"
 )
+
+# Operator-selected dispatch identity. No guessing from on-disk files and
+# no legacy fallback. Backends still require implementation and validation.
+_rsudo_mod_apisix_selected_adapter()
+{
+  case "$1" in
+    traditional-admin) printf '%s\n' rest ;;
+    standalone-api) printf '%s\n' snapshot ;;
+    standalone-file-yaml) printf '%s\n' file-yaml ;;
+    standalone-file-json) printf '%s\n' file-json ;;
+    no-admin-data-plane) printf '%s\n' none ;;
+    *) return 80 ;;
+  esac
+}
+
+# Parse the caller's explicit selection without performing discovery, remote
+# probes, credential acquisition or modifications. Never print secret values.
+rsudo_mod_apisix_context()
+(
+  [ "$#" -eq 0 ] || { log error apisix context-invalid-arguments; exit 75; }
+  scope=${RSUDO_APISIX_SCOPE-}
+  deployment=${RSUDO_APISIX_DEPLOYMENT-}
+  home=${RSUDO_APISIX_HOME-}
+  container=${RSUDO_APISIX_CONTAINER_ID-}
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  admin_url=${RSUDO_APISIX_ADMIN_URL-}
+  header_file=${RSUDO_APISIX_HEADER_FILE-}
+  case "$scope" in
+    host|docker|podman) : ;;
+    *) log error apisix context-invalid-scope; exit 76 ;;
+  esac
+  adapter=$(_rsudo_mod_apisix_selected_adapter "$deployment") || {
+    log error apisix context-unsupported-deployment
+    exit 80
+  }
+  if [ -n "$home" ]
+  then
+    case "$home" in
+      /*) : ;;
+      *) log error apisix context-invalid-home; exit 77 ;;
+    esac
+  fi
+  if [ "$scope" = host ]
+  then
+    [ -z "$container" ] || {
+      log error apisix context-container-on-host
+      exit 78
+    }
+  else
+    case "$container" in
+      *[!0123456789abcdef]*) log error apisix context-invalid-container-id; exit 78 ;;
+    esac
+    [ "${#container}" -eq 64 ] || {
+      log error apisix context-invalid-container-id
+      exit 78
+    }
+  fi
+  if [ "$adapter" = file-yaml ] || [ "$adapter" = file-json ]
+  then
+    case "$data_file" in
+      /*) : ;;
+      *) log error apisix context-data-file-required; exit 79 ;;
+    esac
+  fi
+  if [ "$adapter" = rest ] || [ "$adapter" = snapshot ]
+  then
+    case "$admin_url" in
+      http://*|https://*) : ;;
+      *) log error apisix context-admin-url-required; exit 79 ;;
+    esac
+    case "$header_file" in
+      /*) : ;;
+      *) log error apisix context-header-file-required; exit 79 ;;
+    esac
+  fi
+  # Never let a newline or tab in any displayed operator value forge a field.
+  newline='
+'
+  tab=$(printf '\t')
+  for value in "$home" "$data_file" "$admin_url" "$header_file"
+  do
+    case "$value" in
+      *"$newline"*|*"$tab"*) log error apisix context-invalid-field; exit 81 ;;
+    esac
+  done
+  printf 'selection=operator-supplied-unverified\nscope=%s\ndeployment=%s\nadapter=%s\n' \
+    "$scope" "$deployment" "$adapter"
+  [ -z "$home" ] || printf 'installation_root=%s\n' "$home"
+  [ -z "$container" ] || printf 'container_id=%s\n' "$container"
+  [ -z "$data_file" ] || printf 'data_file=%s\n' "$data_file"
+  [ -z "$admin_url" ] || printf 'admin_url=%s\n' "$admin_url"
+  if [ -n "$header_file" ]
+  then
+    printf 'credential_file=configured-not-verified\n'
+  else
+    printf 'credential_file=not-configured\n'
+  fi
+)
