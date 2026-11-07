@@ -1240,6 +1240,38 @@ then
         printf "service\thost\t%s\t%s\tsystemd-loaded-unit\n", state, $1
       }
     '
+    loaded_apisix_units=$(printf '%s\n' "$systemd_units" | awk '
+      tolower($0) ~ /apisix/ && NF >= 4 { print $1 }
+    ')
+    while IFS= read -r unit
+    do
+      [ -n "$unit" ] || continue
+      unit_properties=$(systemctl show --property=Id,MainPID,ControlGroup,ActiveState \
+        -- "$unit" 2>/dev/null) || continue
+      unit_id=$(printf '%s\n' "$unit_properties" | awk -F= '$1=="Id" {print $2}')
+      unit_pid=$(printf '%s\n' "$unit_properties" | awk -F= '$1=="MainPID" {print $2}')
+      unit_group=$(printf '%s\n' "$unit_properties" | awk -F= '$1=="ControlGroup" {print $2}')
+      unit_active=$(printf '%s\n' "$unit_properties" | awk -F= '$1=="ActiveState" {print $2}')
+      [ "$unit_id" = "$unit" ] && [ "$unit_active" = active ] || continue
+      case "$unit_pid" in ''|*[!0123456789]*) continue ;; esac
+      [ "$unit_pid" -gt 0 ] 2>/dev/null || continue
+      printf '%s\n' "$ps_snapshot" | awk -v wanted="$unit_pid" '
+        $1 == wanted && /nginx: master process/ && /apisix/ {found=1}
+        END {exit !found}
+      ' || continue
+      service_evidence=systemd-mainpid-and-ps
+      if [ -r "/proc/$unit_pid/cgroup" ] && [ -n "$unit_group" ]
+      then
+        process_group=$(awk -F: '$1=="0" {print $3; exit}' \
+          "/proc/$unit_pid/cgroup" 2>/dev/null)
+        [ "$process_group" = "$unit_group" ] && \
+          service_evidence=systemd-mainpid-cgroup-and-ps
+      fi
+      printf 'service\thost\tactive-mainpid-match\t%s\t%s-pid-%s\n' \
+        "$unit" "$service_evidence" "$unit_pid"
+    done <<RSUDO_APISIX_LOADED_APISIX_UNITS
+$loaded_apisix_units
+RSUDO_APISIX_LOADED_APISIX_UNITS
   else
     printf 'service-manager\thost\tunavailable\tsystemd\tunit-list-failed\n'
   fi
@@ -1508,6 +1540,31 @@ do
           printf 'container\t%s\t%s\t%s\tmanager-image-name-candidate\n' \
             "$manager_scope" "$container_state" "$container_id"
         fi
+        mount_snapshot=$("$manager" inspect --format \
+          '{{range .Mounts}}{{printf "%s|%s\n" .Source .Destination}}{{end}}' \
+          "$container_id" 2>/dev/null)
+        mount_status=$?
+        if [ "$mount_status" -ne 0 ]
+        then
+          manager_incomplete=1
+          printf 'container\t%s\tprobe-unavailable\t%s\tmanager-mount-inspect-failed\n' \
+            "$manager_scope" "$container_id"
+          continue
+        fi
+        while IFS='|' read -r mount_source mount_destination
+        do
+          [ -n "$mount_source" ] && [ -n "$mount_destination" ] || continue
+          case "$mount_source:$mount_destination" in *[[:space:]|]*) manager_incomplete=1; continue ;; esac
+          case "$mount_source:$mount_destination" in
+            */conf/config.yaml:*|*/conf/config-*.yaml:*|*/conf/apisix.yaml:*|*/conf/apisix.json:*|\
+            *:*apisix/conf|*:*apisix/conf/|*:/conf/config.yaml|*:/conf/config-*.yaml|*:/conf/apisix.yaml|*:/conf/apisix.json)
+              printf 'container\t%s\t%s\t%s:%s\tmanager-inspect-config-mount-candidate\n' \
+                "$manager_scope" "$container_state" "$container_id" "$mount_destination"
+            ;;
+          esac
+        done <<RSUDO_APISIX_STOPPED_MOUNTS
+$mount_snapshot
+RSUDO_APISIX_STOPPED_MOUNTS
         continue
       ;;
     esac
