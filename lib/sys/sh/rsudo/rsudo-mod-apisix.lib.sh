@@ -2049,14 +2049,18 @@ cat "$data_file"
 RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
 
-# Publish one complete JSON document to the explicitly selected standalone
-# JSON file. The temporary directory is a sibling so the final rename remains
-# on the same filesystem; the remote lock coordinates this module's writers.
-_rsudo_mod_apisix_json_file_apply_remote_source()
+# Publish one complete JSON or YAML document to the explicitly selected
+# standalone file. YAML is validated by that installation's LuaJIT/lyaml.
+# The sibling stage keeps the final rename on the same filesystem; the remote
+# lock coordinates this module's writers.
+_rsudo_mod_apisix_file_apply_remote_source()
 {
-  cat <<'RSUDO_APISIX_JSON_FILE_APPLY_REMOTE'
+  cat <<'RSUDO_APISIX_FILE_APPLY_REMOTE'
 data_file=$1
+format=$2
+home=$3
 case "$data_file" in /*) : ;; *) printf '%s\n' apisix.json-file-apply.invalid-data-path >&2; exit 80 ;; esac
+case "$format" in json|yaml) : ;; *) printf '%s\n' apisix.file-apply.invalid-format >&2; exit 92 ;; esac
 [ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
   printf '%s\n' apisix.json-file-apply.source-unavailable >&2
   exit 81
@@ -2083,7 +2087,7 @@ then
   printf '%s\n' apisix.json-file-apply-temp-unavailable >&2
   exit 83
 fi
-body_file=$temp_dir/input.json
+body_file=$temp_dir/input.$format
 baseline_file=$temp_dir/baseline.json
 staged_file=$temp_dir/published.json
 cleanup_json_apply()
@@ -2107,6 +2111,39 @@ initial_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
 }
 cat > "$body_file" || { printf '%s\n' apisix.json-file-apply.body-stage-failed >&2; exit 85; }
 [ -s "$body_file" ] || { printf '%s\n' apisix.json-file-apply.empty-document >&2; exit 86; }
+if [ "$format" = yaml ]; then
+  case "$home" in /*) : ;; *) printf '%s\n' apisix.yaml-file-apply.invalid-home >&2; exit 93 ;; esac
+  last_line=$(tail -n 1 "$body_file" 2>/dev/null) || { printf '%s\n' apisix.yaml-file-apply.marker-read-failed >&2; exit 94; }
+  [ "$last_line" = '#END' ] || { printf '%s\n' apisix.yaml-file-apply.end-marker-required >&2; exit 95; }
+  if [ -x "$home/deps/bin/luajit" ]; then
+    interpreter=$home/deps/bin/luajit
+  elif [ -x /usr/local/openresty/luajit/bin/luajit ]; then
+    interpreter=/usr/local/openresty/luajit/bin/luajit
+  elif command -v luajit >/dev/null 2>&1; then
+    interpreter=$(command -v luajit)
+  else
+    printf '%s\n' apisix.yaml-file-apply.luajit-unavailable >&2
+    exit 96
+  fi
+  LUA_PATH="$home/?.lua;$home/deps/share/lua/5.1/?.lua;$home/deps/share/lua/5.1/?/init.lua;;"
+  LUA_CPATH="$home/deps/lib64/lua/5.1/?.so;$home/deps/lib/lua/5.1/?.so;;"
+  export LUA_PATH LUA_CPATH
+  m_APISIX_APPLY_FILE=$body_file
+  export m_APISIX_APPLY_FILE
+  "$interpreter" -e '
+local ok_yaml, yaml = pcall(require, "lyaml")
+if not ok_yaml then io.stderr:write("apisix.yaml-file-apply.parser-unavailable\n"); os.exit(1) end
+local file = io.open(os.getenv("m_APISIX_APPLY_FILE"), "rb")
+if not file then io.stderr:write("apisix.yaml-file-apply.document-unreadable\n"); os.exit(2) end
+local source = file:read("*a")
+file:close()
+local ok_parse, document = pcall(yaml.load, source)
+if not ok_parse or type(document) ~= "table" then
+  io.stderr:write("apisix.yaml-file-apply.document-invalid\n")
+  os.exit(3)
+end
+' || { printf '%s\n' apisix.yaml-file-apply.document-invalid >&2; exit 97; }
+fi
 cp -p "$data_file" "$baseline_file" || {
   printf '%s\n' apisix.json-file-apply.baseline-copy-failed >&2
   exit 87
@@ -2165,7 +2202,7 @@ mv -f "$staged_file" "$data_file" || {
   printf '%s\n' apisix.json-file-apply.publish-failed >&2
   exit 91
 }
-RSUDO_APISIX_JSON_FILE_APPLY_REMOTE
+RSUDO_APISIX_FILE_APPLY_REMOTE
 }
 
 _rsudo_mod_apisix_json_file_apply()
@@ -2205,16 +2242,45 @@ _rsudo_mod_apisix_json_file_apply()
   trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
   cat > "$document" || { log error apisix json-file-apply-input-read-failed; exit 8; }
   json --check "$document" >/dev/null 2>&1 || { log error apisix json-file-apply-invalid-json; exit 9; }
-  remote_source=$(_rsudo_mod_apisix_json_file_apply_remote_source) || {
+  remote_source=$(_rsudo_mod_apisix_file_apply_remote_source) || {
     log error apisix json-file-apply-remote-source-failed
     exit 10
   }
   RSUDO_INTERACTIVE=
   if [ "$scope" = host ]
   then
-    rsudo sh -c "$remote_source" apisix "$data_file" < "$document"
+    rsudo sh -c "$remote_source" apisix "$data_file" json '' < "$document"
   else
-    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" < "$document"
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" json '' < "$document"
+  fi
+)
+
+_rsudo_mod_apisix_yaml_file_apply()
+(
+  [ "$#" -eq 0 ] || { log error apisix yaml-file-apply-invalid-arguments count "$#"; exit 1; }
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix yaml-file-apply-invalid-context status "$context_status"
+    exit 2
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = file-yaml ] || { log error apisix yaml-file-apply-adapter-unsupported adapter "$adapter"; exit 3; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  home=${RSUDO_APISIX_HOME-}
+  case "$home" in /*) : ;; *) log error apisix yaml-file-apply-invalid-home; exit 4 ;; esac
+  case "$data_file" in /*) : ;; *) log error apisix yaml-file-apply-invalid-data-path; exit 5 ;; esac
+  case "$scope" in host|docker|podman) : ;; *) log error apisix yaml-file-apply-unsupported-scope scope "$scope"; exit 6 ;; esac
+  container=${RSUDO_APISIX_CONTAINER_ID-}
+  remote_source=$(_rsudo_mod_apisix_file_apply_remote_source) || {
+    log error apisix yaml-file-apply-remote-source-failed
+    exit 7
+  }
+  RSUDO_INTERACTIVE=
+  if [ "$scope" = host ]; then
+    rsudo sh -c "$remote_source" apisix "$data_file" yaml "$home"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" yaml "$home"
   fi
 )
 
@@ -2571,10 +2637,23 @@ _rsudo_mod_apisix_unimplemented_operation()
 )
 
 # Resource CRUD currently uses only an explicitly selected host REST adapter.
-# Full-document apply supports file-json; unsupported operations fail
-# explicitly and never fall through to legacy.
+# Full-document apply supports explicit standalone JSON and YAML files;
+# unsupported operations fail explicitly and never fall through to legacy.
 rsudo_mod_apisix_create() { _rsudo_mod_apisix_rest_mutate create "$@"; }
 rsudo_mod_apisix_update() { _rsudo_mod_apisix_rest_mutate update "$@"; }
 rsudo_mod_apisix_delete() { _rsudo_mod_apisix_rest_mutate delete "$@"; }
-rsudo_mod_apisix_apply() { _rsudo_mod_apisix_json_file_apply "$@"; }
+rsudo_mod_apisix_apply()
+(
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix apply-invalid-context status "$context_status"
+    exit 2
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  case "$adapter" in
+    file-json) _rsudo_mod_apisix_json_file_apply "$@" ;;
+    file-yaml) _rsudo_mod_apisix_yaml_file_apply "$@" ;;
+    *) log error apisix apply-adapter-not-implemented adapter "$adapter"; exit 3 ;;
+  esac
+)
 rsudo_mod_apisix_request() { _rsudo_mod_apisix_rest_request "$@"; }

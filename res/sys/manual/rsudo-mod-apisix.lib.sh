@@ -27,7 +27,7 @@ DISPATCH
     rsudo apisix create routes|services|upstreams < resource.json
     rsudo apisix update routes|services|upstreams id < resource.json
     rsudo apisix delete routes|services|upstreams id
-    rsudo apisix apply < complete-config.json
+    rsudo apisix apply < complete-config.json|complete-config.yaml
     rsudo apisix request relative-admin-path [GET|POST|PUT|DELETE]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
@@ -135,38 +135,42 @@ PUBLIC FUNCTIONS
         File, snapshot and other non-REST mutations remain unimplemented and
         never fall back to legacy.
 
-    rsudo_mod_apisix_apply (reads a complete JSON configuration from stdin)
-        Publish one complete standalone JSON configuration only when
-        RSUDO_APISIX_DEPLOYMENT=standalone-file-json and
-        RSUDO_APISIX_DATA_FILE is an absolute selected path. Host, Docker and
-        Podman scopes are supported when explicitly selected; container scope
-        requires the full lowercase 64-hex ID. The selected source must
-        already exist as a readable regular non-symlink file.
-        The caller supplies the whole intended APISIX JSON configuration, not
-        a resource fragment. The local RumiAI json command validates exactly
-        one complete JSON value before the remote operation. The complete
-        bytes are staged in private local and remote temporary locations. On
-        the target, a per-file lock serializes concurrent apply calls through
-        this adapter, a
-        baseline copy detects content/metadata changes while staging, and
-        `mv` atomically publishes a same-directory staged file. `cp -p`
-        preserves source ownership and mode where the target permits it.
+    rsudo_mod_apisix_apply (reads a complete JSON or YAML configuration from stdin)
+        Publish one complete document only to the explicitly selected
+        standalone file adapter. For JSON, select
+        RSUDO_APISIX_DEPLOYMENT=standalone-file-json. The local RumiAI json
+        command validates exactly one complete JSON value before transport.
+        For YAML, select standalone-file-yaml and set absolute
+        RSUDO_APISIX_HOME; the selected installation's LuaJIT/lyaml parses the
+        complete staged document before publication, and the final line must
+        be APISIX's required #END marker. This checks YAML syntax and a table
+        document, not APISIX resource schema. Host, Docker and Podman scopes
+        are supported when explicitly selected; container scope requires the
+        full lowercase 64-hex ID. The selected source must already exist as
+        a readable regular non-symlink file.
+        The caller supplies the whole intended configuration, not a resource
+        fragment. On the target, a per-file lock serializes apply calls
+        through this adapter, a baseline copy detects content/metadata changes
+        while staging, and `mv` atomically publishes a same-directory staged
+        file. `cp -p` preserves source ownership and mode where permitted.
         Success means the file was atomically replaced; it does not prove
-        APISIX accepted the configuration or reloaded it. The operation does
-        not validate APISIX schema, resolve substitutions or establish that
-        the selected file is loaded by a running instance. Other adapters
+        APISIX accepted the schema, resolved substitutions or reloaded it, or
+        that the selected file is loaded by a running instance. Other adapters
         remain unsupported and never fall back to legacy.
-        Local statuses 1-10 cover invalid arguments, invalid operator context,
-        unsupported adapter, data path, scope/container, missing json command,
-        local temp creation, input read, invalid JSON and remote-source
-        creation. Context failure status is wrapped as 2 with its original
-        status in the diagnostic. Remote statuses 80-91 identify invalid path,
-        source unavailable, lock unavailable, remote temp creation, metadata
-        inspection failure, body staging failure, empty document, baseline
-        copy failure, concurrent change, staged metadata copy failure, atomic
-        publish failure and baseline comparison failure. A stale lock left after an uncatchable
-        interruption is not removed automatically; inspect it and confirm no
-        writer is active before removing it.
+        Router status 2 wraps invalid operator context and status 3 reports
+        an unsupported adapter. The JSON adapter uses statuses 1-10 for
+        arguments/context, adapter, path, scope/container, missing json,
+        temporary storage, input read, invalid JSON and remote-source
+        creation. The YAML adapter uses statuses 1-7 for arguments/context,
+        adapter, installation home, data path, scope and remote-source
+        creation. Context failures include their original status in the
+        diagnostic. Remote status 92 reports an
+        invalid publisher format; statuses 80-91 identify
+        shared path/source/lock/staging/metadata/concurrency/publication
+        failures; YAML additionally uses 93-97 for home, marker read, missing
+        #END, parser unavailability or invalid YAML. A stale lock left after
+        an uncatchable interruption is not removed automatically; inspect it
+        and confirm no writer is active before removing it.
 
     rsudo_mod_apisix_request relative-admin-path [method]
         Advanced request through the selected host-scoped traditional Admin
