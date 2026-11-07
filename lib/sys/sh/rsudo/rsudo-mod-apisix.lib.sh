@@ -1554,12 +1554,17 @@ do
         while IFS='|' read -r mount_source mount_destination
         do
           [ -n "$mount_source" ] && [ -n "$mount_destination" ] || continue
-          case "$mount_source:$mount_destination" in *[[:space:]|]*) manager_incomplete=1; continue ;; esac
+          mount_tab=$(printf '\t')
+          mount_newline='
+'
+          case "$mount_source:$mount_destination" in
+            *"$mount_tab"*|*"$mount_newline"*|*'|'*) manager_incomplete=1; continue ;;
+          esac
           case "$mount_source:$mount_destination" in
             */conf/config.yaml:*|*/conf/config-*.yaml:*|*/conf/apisix.yaml:*|*/conf/apisix.json:*|\
             *:*apisix/conf|*:*apisix/conf/|*:/conf/config.yaml|*:/conf/config-*.yaml|*:/conf/apisix.yaml|*:/conf/apisix.json)
-              printf 'container\t%s\t%s\t%s:%s\tmanager-inspect-config-mount-candidate\n' \
-                "$manager_scope" "$container_state" "$container_id" "$mount_destination"
+              printf 'container\t%s\t%s\t%s:%s\tmanager-inspect-config-mount-candidate:source=%s\n' \
+                "$manager_scope" "$container_state" "$container_id" "$mount_destination" "$mount_source"
             ;;
           esac
         done <<RSUDO_APISIX_STOPPED_MOUNTS
