@@ -1241,7 +1241,7 @@ do
 '
   tab=$(printf '\t')
   case "$file" in *"$tab"*|*"$newline"*) continue ;; esac
-  home=\${file%/conf/*}
+  home=${file%/conf/*}
   [ "$home" != "$file" ] || continue
   # Ignore unrelated config.yaml files unless installation evidence exists.
   if [ ! -f "$home/bin/apisix" ] &&
@@ -1273,7 +1273,7 @@ rsudo_mod_apisix_discovery()
     log error apisix discovery-invalid-arguments count "$#"
     exit 71
   }
-  scan_root=\${1:-/}
+  scan_root=${1:-/}
   case "$scan_root" in
     /*) : ;;
     *) log error apisix discovery-invalid-scan-root; exit 72 ;;
