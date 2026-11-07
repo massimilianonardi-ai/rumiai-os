@@ -90,9 +90,18 @@ PUBLIC FUNCTIONS
         /proc, /sys, /dev, /run and common container storage on an unrestricted
         root scan. These are process/configuration *candidates*, not proof of
         runtime identity, loaded source, listening ports or write readiness.
-        An unreadable subtree may be omitted. Docker, Podman, systemd
-        correlation, listener probes, JSON output and guaranteed exhaustive
-        detection are NOT implemented in this first increment. Discovery
+        An unreadable subtree may be omitted. When Docker or Podman is
+        available, discovery lists all containers and probes each running
+        container through a static read-only sh/find program. Matching stopped
+        containers are reported from manager image/name evidence; matching
+        running containers with an unavailable probe remain visible. Rows
+        identify manager scope and full container ID, with config paths
+        qualified by that ID. Failed manager listings and incomplete probes
+        produce uncertainty rows. This is best-effort: a stopped container
+        whose image and name do not identify APISIX cannot be classified from
+        its filesystem, and mounts, service-manager units and listener ports
+        are not correlated yet. JSON output and guaranteed exhaustive
+        detection are NOT implemented. Discovery
         never chooses an instance or modifies the user's environment.
         Local argument count 1, relative root 2; in the remote scan,
         invalid root 1, unavailable root 2, missing find 3. Remote rsudo
