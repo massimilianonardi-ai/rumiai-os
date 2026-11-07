@@ -1,0 +1,749 @@
+#!/usr/bin/env node
+'use strict';
+
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const crypto = require('node:crypto');
+const {spawnSync} = require('node:child_process');
+
+const MAX_HTML_BYTES = 32 * 1024 * 1024;
+const MAX_ASSET_BYTES = 512 * 1024 * 1024;
+const MAX_HELPER_OUTPUT = 256 * 1024 * 1024;
+
+function fail(status, identity, message)
+{
+  const error = new Error(message);
+  error.status = status;
+  error.identity = identity;
+  return error;
+}
+
+function mkdirPrivate(directory)
+{
+  fs.mkdirSync(directory, {mode:0o700});
+  fs.chmodSync(directory, 0o700);
+}
+
+function writePrivate(file, data)
+{
+  fs.writeFileSync(file, data, {flag:'wx', mode:0o600});
+  fs.chmodSync(file, 0o600);
+}
+
+function progress(identity, detail)
+{
+  process.stderr.write(`web-export.${identity}: ${detail}\n`);
+}
+
+function parseUrl(value)
+{
+  let url;
+  try {url = new URL(value);}
+  catch (_) {throw fail(4, 'invalid-url', 'the first operand must be an absolute HTTP(S) URL');}
+  if (!['http:', 'https:'].includes(url.protocol))
+    throw fail(5, 'unsupported-url-scheme', 'only HTTP and HTTPS URLs can be exported');
+  return url;
+}
+
+function savedRows(directory)
+{
+  const file = path.join(directory, 'resources.jsonl');
+  let text;
+  try {text = fs.readFileSync(file, 'utf8');}
+  catch (error) {throw fail(10, 'resource-index-unavailable',
+    'the browser capture did not produce a resource index: ' + error.message);}
+  return text.split(/\r?\n/).filter(Boolean).map((line, index) => {
+    try {return JSON.parse(line);}
+    catch (_) {throw fail(11, 'resource-index-invalid',
+      'the browser resource index contains invalid JSON at row ' + (index + 1));}
+  });
+}
+
+function mimeExtension(mime, kind, body)
+{
+  const value = String(mime || '').split(';', 1)[0].trim().toLowerCase();
+  const known = {
+    'text/css':'.css', 'image/png':'.png', 'image/jpeg':'.jpg',
+    'image/gif':'.gif', 'image/webp':'.webp', 'image/avif':'.avif',
+    'image/svg+xml':'.svg', 'image/x-icon':'.ico', 'image/vnd.microsoft.icon':'.ico',
+    'font/woff':'.woff', 'font/woff2':'.woff2', 'application/font-woff':'.woff',
+    'application/font-woff2':'.woff2', 'application/vnd.ms-fontobject':'.eot',
+    'application/x-font-ttf':'.ttf', 'font/ttf':'.ttf', 'font/otf':'.otf',
+    'text/vtt':'.vtt', 'audio/mpeg':'.mp3', 'audio/ogg':'.ogg', 'audio/wav':'.wav',
+    'video/mp4':'.mp4', 'video/webm':'.webm'
+  };
+  if (known[value]) return known[value];
+  if (kind === 'stylesheet') return '.css';
+  if (kind === 'image')
+  {
+    if (body.subarray(0,8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) return '.png';
+    if (body[0] === 0xff && body[1] === 0xd8 && body[2] === 0xff) return '.jpg';
+    if (body.toString('ascii',0,3) === 'GIF') return '.gif';
+    if (body.toString('ascii',0,4) === 'RIFF' && body.toString('ascii',8,12) === 'WEBP') return '.webp';
+    if (/^\s*(?:<\?xml[^>]*>\s*)?<svg\b/i.test(body.toString('utf8',0,256))) return '.svg';
+  }
+  if (kind === 'font')
+  {
+    if (body.toString('ascii',0,4) === 'wOF2') return '.woff2';
+    if (body.toString('ascii',0,4) === 'wOFF') return '.woff';
+    if (body.toString('ascii',0,4) === 'OTTO') return '.otf';
+    if (body.subarray(0,4).equals(Buffer.from([0,1,0,0]))) return '.ttf';
+  }
+  return '.bin';
+}
+
+function assetKind(row)
+{
+  const mime = String(row.mimeType || '').split(';', 1)[0].trim().toLowerCase();
+  if (mime === 'text/css' || row.resourceType === 'Stylesheet') return 'stylesheet';
+  if (mime.startsWith('image/')) return 'image';
+  if (mime.startsWith('font/') || /font|woff|opentype|truetype/.test(mime)) return 'font';
+  if (mime === 'text/vtt' || row.resourceType === 'TextTrack') return 'media';
+  if (mime.startsWith('audio/') || mime.startsWith('video/')) return 'media';
+  if (['Image','Font','Media'].includes(row.resourceType)) return row.resourceType.toLowerCase();
+  return null;
+}
+
+function collectAssets(runDirectory, targetDirectory)
+{
+  const rows = savedRows(runDirectory);
+  const candidates = new Map();
+  let bytesTotal = 0;
+  let rejectedBodies = 0;
+  const countedBodies = new Set();
+
+  const add = (urlValue, mimeType, resourceType, relativeFile, expectedSha, expectedBytes, origin,
+    httpStatus) => {
+    let url;
+    try {url = new URL(urlValue);} catch (_) {return;}
+    if (!['http:','https:'].includes(url.protocol)) return;
+    url.hash = '';
+    const kind = assetKind({mimeType,resourceType});
+    if (!kind) return;
+    if (Number.isFinite(httpStatus) &&
+        (httpStatus >= 400 || (httpStatus >= 300 && httpStatus < 400 && httpStatus !== 304)))
+    { rejectedBodies++; return; }
+    const source = path.resolve(runDirectory, relativeFile);
+    if (!source.startsWith(path.resolve(runDirectory) + path.sep) || !fs.existsSync(source))
+    { rejectedBodies++; return; }
+    const body = fs.readFileSync(source);
+    if (!body.length && kind !== 'stylesheet')
+    { rejectedBodies++; return; }
+    const hash = crypto.createHash('sha256').update(body).digest('hex');
+    if (hash !== expectedSha || body.length !== expectedBytes)
+    { rejectedBodies++; return; }
+    if (!countedBodies.has(hash))
+    {
+      countedBodies.add(hash);
+      bytesTotal += body.length;
+    }
+    if (bytesTotal > MAX_ASSET_BYTES)
+      throw fail(14, 'asset-size-limit', 'captured visual assets exceed the 512 MiB export limit');
+    const extension = mimeExtension(mimeType,kind,body);
+    const filename = hash + (kind === 'stylesheet' ?
+      '-' + crypto.createHash('sha256').update(url.href).digest('hex').slice(0,12) + '.css' :
+      extension);
+    const previous = candidates.get(url.href) || [];
+    previous.push({filename, hash, mimeType, kind, origin, body});
+    candidates.set(url.href, previous);
+  };
+
+  for (const row of rows)
+  {
+    if (row.status !== 'saved' || !row.file || !row.url) continue;
+    const kind = assetKind(row);
+    if (!kind) continue;
+    add(row.url, row.mimeType, row.resourceType, row.file, row.sha256, row.bytes,
+      'http-body', row.httpStatus);
+  }
+
+  const stylesheetIndex = path.join(runDirectory, 'rest/stylesheets/index.json');
+  if (fs.existsSync(stylesheetIndex))
+  {
+    let sheets;
+    try {sheets = JSON.parse(fs.readFileSync(stylesheetIndex, 'utf8'));}
+    catch (_) {sheets = [];}
+    for (const sheet of sheets)
+    {
+      if (sheet.status !== 'saved' || !sheet.sourceURL || !sheet.file) continue;
+      const url = new URL(sheet.sourceURL);
+      url.hash = '';
+      const existing = candidates.get(url.href) || [];
+      if (existing.some(item => item.origin === 'http-body' && item.hash === sheet.sha256))
+        continue;
+      add(sheet.sourceURL, 'text/css', 'Stylesheet', 'rest/' + sheet.file,
+        sheet.sha256, sheet.bytes, 'cssom-source', sheet.httpStatus);
+    }
+  }
+
+  const output = new Map();
+  let ambiguous = 0;
+  for (const [url, versions] of candidates)
+  {
+    const hashes = new Set(versions.map(item => item.hash));
+    if (hashes.size > 1)
+    {
+      const cssom = versions.filter(item => item.origin === 'cssom-source');
+      const cssomHashes = new Set(cssom.map(item => item.hash));
+      if (cssomHashes.size === 1) output.set(url, cssom[0]);
+      else ambiguous++;
+    }
+    else output.set(url, versions.at(-1));
+  }
+
+  const uniqueItems = new Map([...output.values()].map(item => [item.filename,item]));
+  mkdirPrivate(path.join(targetDirectory, 'assets'));
+  for (const item of uniqueItems.values())
+  {
+    const dest = path.join(targetDirectory, 'assets', item.filename);
+    if (!fs.existsSync(dest)) writePrivate(dest, item.body);
+  }
+  return {map:Object.fromEntries([...output].map(([url,item]) => [url,item.filename])),
+    assets:[...uniqueItems.values()].map(item => ({file:'assets/' + item.filename,
+      sha256:item.hash,bytes:item.body.length,kind:item.kind,source:item.origin})),
+    ambiguous,rejectedBodies,sourceRows:rows.length};
+}
+
+function scrollRestoreSource(positions)
+{
+  return `(() => {
+  const positions = ${JSON.stringify(positions)};
+  const restore = () => {
+    let restored = 0;
+    for (const position of positions) {
+      let node;
+      try {node = document.querySelector(position.selector);}
+      catch (_) {continue;}
+      if (!node) continue;
+      if (node === document.scrollingElement) window.scrollTo(position.left,position.top);
+      else {
+        node.scrollLeft = position.left;
+        node.scrollTop = position.top;
+      }
+      restored++;
+    }
+    document.documentElement.setAttribute('data-web-export-scroll-restored',String(restored));
+  };
+  window.addEventListener('load',() => requestAnimationFrame(restore),{once:true});
+})();\n`;
+}
+
+function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collected,
+  scrollScriptFile)
+{
+  if (Buffer.byteLength(html) > MAX_HTML_BYTES)
+    throw fail(15, 'rendered-html-size-limit', 'rendered HTML exceeds the 32 MiB export limit');
+  const css = collected.assets.filter(item => item.kind === 'stylesheet').map(item => ({
+    file:item.file.slice('assets/'.length), source:item.source, sourceUrl:Object.entries(collected.map)
+      .find(([,filename]) => filename === item.file.slice('assets/'.length))?.[0] || sourceUrl,
+    data:fs.readFileSync(item._stagePath).toString('base64')
+  }));
+  const helperScript = String.raw`(() => {
+    const html = decodeURIComponent(escape(atob('__HTML__')));
+    const source = __SOURCE__;
+    const scrollScriptFile = __SCROLL_SCRIPT__;
+    const map = JSON.parse(decodeURIComponent(escape(atob('__MAP__'))));
+    const sheets = JSON.parse(decodeURIComponent(escape(atob('__SHEETS__'))));
+    const counts = {
+      scriptsRemoved:0, framesRemoved:0, unavailableReferences:0,
+      unavailableCssReferences:0, cssomSourceSheets:0, nonvisualLinksRemoved:0
+    };
+
+    function normalizedUrl(value, base)
+    {
+      const url = new URL(value, base);
+      url.hash = '';
+      return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+    }
+
+    function localReference(value, base, cssFile)
+    {
+      const raw = String(value || '').trim();
+      if (!raw || raw[0] === '#' || /^data:/i.test(raw)) return raw;
+      if (cssFile && /^\.\/[a-f0-9]{64}(?:-[a-f0-9]{12})?\.[a-z0-9]+$/i.test(raw))
+        return raw;
+
+      let url;
+      try {url = new URL(raw, base);}
+      catch (_) {return null;}
+      const fragment = url.hash;
+      let key;
+      try {key = normalizedUrl(url.href, source);}
+      catch (_) {return null;}
+      if (!key) return null;
+      const filename = map[key];
+      if (!filename) return null;
+      return (cssFile ? './' : 'assets/') + filename + fragment;
+    }
+
+    function rewriteSrcset(value, base)
+    {
+      const output = [];
+      let index = 0;
+      while (index < value.length)
+      {
+        while (index < value.length && /[\s,]/.test(value[index])) index++;
+        if (index >= value.length) break;
+        const start = index;
+        while (index < value.length && !/\s/.test(value[index])) index++;
+        let reference = value.slice(start,index);
+        let trailingCommas = 0;
+        while (reference.endsWith(','))
+        {
+          reference = reference.slice(0,-1);
+          trailingCommas++;
+        }
+        let descriptor = '';
+        if (!trailingCommas)
+        {
+          while (index < value.length && /\s/.test(value[index])) index++;
+          const descriptorStart = index;
+          while (index < value.length && value[index] !== ',') index++;
+          descriptor = value.slice(descriptorStart,index).trim();
+        }
+        if (value[index] === ',') index++;
+        if (!reference) continue;
+        const local = localReference(reference,base,false);
+        if (local === null)
+        {
+          counts.unavailableReferences++;
+          continue;
+        }
+        output.push(local + (descriptor ? ' ' + descriptor : ''));
+      }
+      return output.join(', ');
+    }
+
+    const cssUrlPattern = /url\(\s*(?:(['"])(.*?)\1|([^)]*?))\s*\)/gi;
+    const cssImportPattern = /@import\s+(?:url\(\s*)?(?:(['"])(.*?)\1|([^\s;)]+))\s*\)?\s*([^;]*);/gi;
+    const cssImageSetPattern = /((?:-webkit-)?image-set\s*\(((?:[^()]|\([^()]*\))*)\))/gi;
+
+    function rewriteCss(text, base, cssFile)
+    {
+      let output = String(text || '').replace(cssImportPattern,
+        (all, quote, quoted, bare, media) => {
+          const reference = quoted === undefined ? bare : quoted;
+          const local = localReference(reference, base, cssFile);
+          if (!local)
+          {
+            counts.unavailableCssReferences++;
+            return '';
+          }
+          return '@import url("' + local.replace(/"/g, '%22') + '") ' +
+            (media || '') + ';';
+        });
+      output = output.replace(cssUrlPattern, (all, quote, quoted, bare) => {
+        const reference = (quoted === undefined ? bare : quoted).trim();
+        const local = localReference(reference, base, cssFile);
+        if (local === null)
+        {
+          counts.unavailableCssReferences++;
+          return 'url("")';
+        }
+        return 'url("' + local.replace(/"/g, '%22') + '")';
+      });
+      output = output.replace(cssImageSetPattern, (all, whole, content) => {
+        const rewritten = content.replace(/(^|,)(\s*)(['"])(.*?)\3/g,
+          (candidate, separator, whitespace, quote, reference) => {
+            const local = localReference(reference,base,cssFile);
+            if (local === null)
+            {
+              counts.unavailableCssReferences++;
+              return separator + whitespace + 'url("")';
+            }
+            return separator + whitespace + quote + local.replace(/"/g,'%22') + quote;
+          });
+        return whole.slice(0,whole.indexOf('(') + 1) + rewritten + ')';
+      });
+      return output;
+    }
+
+    const sheetOutput = sheets.map(sheet => ({
+      file:sheet.file,
+      source:sheet.source,
+      sourceUrl:sheet.sourceUrl,
+      text:rewriteCss(decodeURIComponent(escape(atob(sheet.data))), sheet.sourceUrl, true)
+    }));
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+
+    for (const node of [...doc.querySelectorAll('script')])
+    {
+      node.remove();
+      counts.scriptsRemoved++;
+    }
+    for (const node of [...doc.querySelectorAll('iframe,frame,object,embed')])
+    {
+      node.remove();
+      counts.framesRemoved++;
+    }
+    for (const node of [...doc.querySelectorAll('base')]) node.remove();
+    for (const node of [...doc.querySelectorAll('meta[http-equiv]')])
+    {
+      const directive = (node.getAttribute('http-equiv') || '').toLowerCase();
+      if (['refresh','content-security-policy','content-security-policy-report-only']
+        .includes(directive)) node.remove();
+    }
+
+    const localLinkTypes = [
+      'stylesheet','icon','apple-touch-icon','mask-icon','preload','modulepreload'
+    ];
+    for (const link of [...doc.querySelectorAll('link')])
+    {
+      const rel = (link.getAttribute('rel') || '').toLowerCase().split(/\s+/);
+      if (rel.some(item => ['preconnect','dns-prefetch','prefetch','prerender'].includes(item)))
+      {
+        link.remove();
+        continue;
+      }
+      const isResource = rel.some(item => localLinkTypes.includes(item));
+      if (!isResource && !rel.includes('canonical'))
+      {
+        link.remove();
+        counts.nonvisualLinksRemoved++;
+        continue;
+      }
+      if (!link.hasAttribute('href')) continue;
+      if (isResource)
+      {
+        const replacement = localReference(link.getAttribute('href'), source, false);
+        if (replacement === null)
+        {
+          link.remove();
+          counts.unavailableReferences++;
+          continue;
+        }
+        link.setAttribute('href', replacement);
+      }
+      else
+      {
+        try
+        {
+          const canonical = new URL(link.getAttribute('href'), source);
+          canonical.username = '';
+          canonical.password = '';
+          link.setAttribute('href', canonical.href);
+        }
+        catch (_) {link.remove();}
+      }
+    }
+
+    for (const node of [...doc.querySelectorAll('*')])
+    {
+      for (const attribute of [...node.attributes])
+      {
+        const name = attribute.name.toLowerCase();
+        if (name.startsWith('on'))
+        {
+          node.removeAttribute(attribute.name);
+          continue;
+        }
+        if (['crossorigin','integrity','referrerpolicy'].includes(name))
+        {
+          node.removeAttribute(attribute.name);
+          continue;
+        }
+        if (['ping','formaction'].includes(name))
+        {
+          node.removeAttribute(attribute.name);
+          continue;
+        }
+        if (name === 'style')
+        {
+          node.setAttribute(attribute.name, rewriteCss(attribute.value, source, false));
+          continue;
+        }
+        if (name === 'srcset')
+        {
+          const candidates = rewriteSrcset(attribute.value,source);
+          if (candidates) node.setAttribute(attribute.name, candidates);
+          else
+          {
+            node.removeAttribute(attribute.name);
+          }
+          continue;
+        }
+        if (['src','poster','data','background','xlink:href'].includes(name))
+        {
+          const replacement = localReference(attribute.value, source, false);
+          if (replacement === null)
+          {
+            node.removeAttribute(attribute.name);
+            counts.unavailableReferences++;
+          }
+          else node.setAttribute(attribute.name, replacement);
+          continue;
+        }
+        if (name !== 'href') continue;
+        if (node.localName === 'link') continue;
+        if (/^\s*javascript:/i.test(attribute.value))
+        {
+          node.removeAttribute(attribute.name);
+          continue;
+        }
+        if (node.localName === 'a' || node.localName === 'area')
+        {
+          if (attribute.value && !attribute.value.startsWith('#'))
+          {
+            try
+            {
+              const destination = new URL(attribute.value, source);
+              destination.username = '';
+              destination.password = '';
+              node.setAttribute(attribute.name, destination.href);
+            }
+            catch (_) {node.removeAttribute(attribute.name);}
+          }
+        }
+        else if (!attribute.value.startsWith('#'))
+        {
+          const replacement = localReference(attribute.value, source, false);
+          if (replacement === null)
+          {
+            node.removeAttribute(attribute.name);
+            counts.unavailableReferences++;
+          }
+          else node.setAttribute(attribute.name, replacement);
+        }
+      }
+
+      if (node.localName === 'style')
+        node.textContent = rewriteCss(node.textContent, source, false);
+      if (node.localName === 'input' &&
+          String(node.getAttribute('type')).toLowerCase() === 'password')
+        node.removeAttribute('value');
+      if (node.localName === 'form')
+      {
+        node.removeAttribute('action');
+        node.removeAttribute('target');
+      }
+    }
+
+    for (const sheet of sheetOutput)
+      if (sheet.source === 'cssom-source' && map[normalizedUrl(sheet.sourceUrl, source)])
+        counts.cssomSourceSheets++;
+
+    if (scrollScriptFile)
+    {
+      const restore = doc.createElement('script');
+      restore.defer = true;
+      restore.src = 'assets/' + scrollScriptFile;
+      doc.head.append(restore);
+    }
+
+    const policy = doc.createElement('meta');
+    policy.httpEquiv = 'Content-Security-Policy';
+    policy.content = "default-src 'none'; img-src file: data:; " +
+      "style-src file: data: 'unsafe-inline'; font-src file: data:; " +
+      "media-src file: data:; script-src file:; connect-src 'none'; " +
+      "frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
+    doc.head.prepend(policy);
+
+    const resultData = {
+      html:'<!doctype html>\n' + doc.documentElement.outerHTML,
+      counts,
+      sheets:sheetOutput
+    };
+    const bytes = new TextEncoder().encode(JSON.stringify(resultData));
+    let binary = '';
+    for (let offset = 0; offset < bytes.length; offset += 0x8000)
+      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
+    const encoded = btoa(binary);
+    document.open();
+    document.write('<!doctype html><html><head><title>web-export-result</title></head><body></body></html>');
+    const result = document.createElement('script');
+    result.id = 'web-export-result';
+    result.type = 'application/octet-stream';
+    result.textContent = encoded;
+    document.body.append(result);
+  })();`;
+  const helper = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; connect-src \'none\'; img-src \'none\'; font-src \'none\'; object-src \'none\'"><script>' +
+    helperScript.replace('__MAP__', Buffer.from(JSON.stringify(collected.map)).toString('base64'))
+      .replace('__SHEETS__', Buffer.from(JSON.stringify(css)).toString('base64'))
+      .replace('__HTML__', Buffer.from(html).toString('base64'))
+      .replace('__SOURCE__', JSON.stringify(sourceUrl).replace(/</g,'\\u003c'))
+      .replace('__SCROLL_SCRIPT__', JSON.stringify(scrollScriptFile)) + '</script>';
+  const helperFile = path.join(tempDirectory, 'transform.html');
+  writePrivate(helperFile, helper);
+  const profile = path.join(tempDirectory, 'transform-profile');
+  mkdirPrivate(profile);
+  const run = spawnSync(chromium, ['--headless=new','--disable-gpu','--disable-background-networking',
+    '--disable-extensions','--disable-sync','--no-first-run','--no-default-browser-check',
+    '--virtual-time-budget=10000','--dump-dom','--user-data-dir=' + profile,
+    'file://' + helperFile], {encoding:'utf8',timeout:120000,maxBuffer:MAX_HELPER_OUTPUT,
+      env:{...process.env}});
+  if (run.error || run.status !== 0)
+    throw fail(16, 'offline-transform-failed', 'Chromium could not transform the captured document' +
+      (run.error ? ': ' + run.error.message : ' (exit ' + run.status + ')'));
+  const match = run.stdout.match(/<script id="web-export-result" type="application\/octet-stream">([A-Za-z0-9+/=]+)<\/script>/);
+  if (!match)
+  {
+    throw fail(17, 'offline-transform-result-missing',
+      'Chromium did not return the transformed document');
+  }
+  let result;
+  try {result = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));}
+  catch (_) {throw fail(18, 'offline-transform-result-invalid',
+    'Chromium returned an invalid transformed document');}
+  return result;
+}
+
+function capture(url, temporary)
+{
+  const script = path.join(__dirname, 'web-analyze');
+  const result = spawnSync(process.execPath, [script, url.href, temporary, '--scroll'], {
+    encoding:'utf8',timeout:600000,maxBuffer:8 * 1024 * 1024,env:{...process.env}
+  });
+  if (result.error || result.status !== 0)
+  {
+    const identity = String(result.stderr || '').match(/(?:^|\n)web-analyze\.([a-z0-9-]+):/i)?.[1];
+    const cause = result.error ? ': ' + result.error.message :
+      ' (exit ' + result.status + (identity ? ', ' + identity : '') + ')';
+    throw fail(8, 'browser-capture-failed', 'web-analyze could not capture the page' +
+      cause);
+  }
+  const match = result.stdout.match(/(?:^|\n)([^\r\n]+\/README\.md)\s*$/);
+  if (!match) throw fail(9, 'browser-capture-path-missing',
+    'web-analyze did not report its completed capture directory');
+  const runDirectory = path.dirname(match[1]);
+  const htmlFile = path.join(runDirectory, 'states', 'dom-rest-final.html');
+  let html;
+  try {html = fs.readFileSync(htmlFile, 'utf8');}
+  catch (error) {throw fail(12, 'rendered-document-unavailable',
+    'the final rendered document was not saved: ' + error.message);}
+  if (!html.trim()) throw fail(13, 'rendered-document-empty',
+    'the browser capture produced an empty rendered document');
+  let scrollMetadataAvailable = false;
+  let scrollPositions = [];
+  let scrollPositionsTruncated = false;
+  const scrollMetadata = path.join(runDirectory,'states','dom-rest-final.json');
+  try
+  {
+    const metadata = JSON.parse(fs.readFileSync(scrollMetadata,'utf8'));
+    if (Array.isArray(metadata.scrollPositions))
+    {
+      scrollMetadataAvailable = true;
+      scrollPositions = metadata.scrollPositions.filter(item =>
+        item && typeof item.selector === 'string' &&
+        /^(?:[a-z][a-z0-9-]*:nth-of-type\(\d+\))(?: > [a-z][a-z0-9-]*:nth-of-type\(\d+\))*$/i.test(item.selector) &&
+        Number.isFinite(item.top) && Number.isFinite(item.left) &&
+        Math.abs(item.top) <= 1_000_000_000 && Math.abs(item.left) <= 1_000_000_000)
+        .slice(0,256).map(item => ({selector:item.selector,top:item.top,left:item.left}));
+      scrollPositionsTruncated = !!metadata.scrollPositionsTruncated;
+    }
+  }
+  catch (_) {}
+  return {runDirectory,html,scrollMetadataAvailable,scrollPositions,scrollPositionsTruncated};
+}
+
+function main(args)
+{
+  if (!process.env.m_ROOT)
+    throw fail(1, 'm-environment-missing', 'invoke through m or initialize m_ROOT first');
+  if (!process.env.m_LIB_DIR)
+    throw fail(2, 'm-library-root-missing', 'the initialized environment does not define m_LIB_DIR');
+  if (args.length !== 2 || args.some(value => !value))
+    throw fail(3, 'invalid-arguments', 'usage: web-export <http(s)-url> <export-directory>');
+  const url = parseUrl(args[0]);
+  const output = path.resolve(args[1]);
+  const parent = path.dirname(output);
+  try {fs.mkdirSync(parent, {recursive:true,mode:0o700});}
+  catch (error) {throw fail(6, 'output-parent-unavailable',
+    'cannot create the export parent directory: ' + error.message);}
+  try {mkdirPrivate(output);}
+  catch (error) {throw fail(7, 'output-directory-unavailable',
+    'export directory must be new and must not already exist: ' + error.message);}
+  const temporary = fs.mkdtempSync(path.join(os.tmpdir(), 'web-export-'));
+  fs.chmodSync(temporary, 0o700);
+  let completed = false;
+  try
+  {
+    progress('capture-started', 'starting the bounded rendered-page capture');
+    const captured = capture(url, path.join(temporary, 'capture'));
+    progress('capture-finished', 'captured rendered HTML and indexed responses');
+    const collected = collectAssets(captured.runDirectory, output);
+    progress('assets-verified', `${collected.assets.length} local assets passed digest and size checks`);
+    const chromium = 'chromium';
+    const scrollScript = captured.scrollPositions.length ?
+      scrollRestoreSource(captured.scrollPositions) : null;
+    const scrollScriptSha = scrollScript ?
+      crypto.createHash('sha256').update(scrollScript).digest('hex') : null;
+    const scrollScriptFile = scrollScript ? 'web-export-scroll-' + scrollScriptSha + '.js' : null;
+    const transformed = transformWithChromium(chromium, temporary,
+      captured.html, url.href, {...collected,assets:collected.assets.map(item => ({...item,
+        _stagePath:path.join(output,item.file)}))},scrollScriptFile);
+    writePrivate(path.join(output, 'index.html'), transformed.html);
+    if (scrollScriptFile)
+      writePrivate(path.join(output,'assets',scrollScriptFile),scrollScript);
+    for (const sheet of transformed.sheets)
+    {
+      const file = path.join(output, 'assets', sheet.file);
+      fs.writeFileSync(file, sheet.text, {mode:0o600});
+      fs.chmodSync(file,0o600);
+    }
+    const transformedAssets = new Map(transformed.sheets.map(sheet => [sheet.file,sheet.text]));
+    const assets = collected.assets.map(item => {
+      const cssText = transformedAssets.get(item.file.slice('assets/'.length));
+      const bytes = cssText === undefined ? item.bytes : Buffer.byteLength(cssText);
+      const sha256 = cssText === undefined ? item.sha256 :
+        crypto.createHash('sha256').update(cssText).digest('hex');
+      return {file:item.file,sha256,bytes,kind:item.kind,source:item.source,
+        ...(cssText === undefined || sha256 === item.sha256 ? {} : {sourceSha256:item.sha256})};
+    });
+    if (scrollScriptFile)
+      assets.push({file:'assets/' + scrollScriptFile,sha256:scrollScriptSha,
+        bytes:Buffer.byteLength(scrollScript),kind:'export-script',source:'web-export'});
+    const htmlBytes = Buffer.byteLength(transformed.html);
+    const manifest = {
+      format:'web-export/1', mode:'standalone-file', scripts:'site-scripts-removed',
+      generatedScripts:scrollScriptFile ? ['scroll-restoration'] : [],
+      source:{origin:url.origin,path:url.pathname},
+      document:{file:'index.html',sha256:crypto.createHash('sha256').update(transformed.html).digest('hex'),
+        bytes:htmlBytes},
+      assets,
+      coverage:{resourceRows:collected.sourceRows,assets:assets.length,
+        capturedAssets:collected.assets.length,
+        ambiguousAssetUrls:collected.ambiguous,unverifiedBodies:collected.rejectedBodies,
+        scriptsRemoved:transformed.counts.scriptsRemoved,
+        framesRemoved:transformed.counts.framesRemoved,
+        unavailableHtmlReferences:transformed.counts.unavailableReferences,
+        unavailableCssReferences:transformed.counts.unavailableCssReferences,
+        nonvisualLinksRemoved:transformed.counts.nonvisualLinksRemoved,
+        stylesheetSourcesFromCssom:transformed.counts.cssomSourceSheets,
+        scrollMetadataAvailable:captured.scrollMetadataAvailable,
+        scrollPositionsCaptured:captured.scrollPositions.length,
+        scrollPositionsTruncated:captured.scrollPositionsTruncated,
+        scrollRestorationScript:!!scrollScriptFile},
+      limitations:['Page scripts are not executed in the export.',
+        'Interactions requiring a remote API, backend or removed frame are unavailable offline.',
+        'Resources without a verified archived body are omitted.']
+    };
+    writePrivate(path.join(output, 'manifest.json'), JSON.stringify(manifest,null,2) + '\n');
+    fs.rmSync(temporary,{recursive:true,force:true});
+    completed = true;
+    progress('export-written', `${output}: ${assets.length} assets, ` +
+      `${transformed.counts.unavailableReferences + transformed.counts.unavailableCssReferences} unavailable references`);
+    process.stdout.write(path.join(output,'index.html') + '\n');
+    return 0;
+  }
+  finally
+  {
+    const cleanupErrors=[];
+    try {fs.rmSync(temporary,{recursive:true,force:true});}
+    catch (error) {cleanupErrors.push('temporary capture: ' + error.message)}
+    if (!completed)
+    {
+      try {fs.rmSync(output,{recursive:true,force:true});}
+      catch (error) {cleanupErrors.push('partial export: ' + error.message)}
+    }
+    if(cleanupErrors.length)throw fail(19,'private-data-cleanup-failed',
+      'could not remove private temporary data at '+temporary+' ('+cleanupErrors.join('; ')+')');
+  }
+}
+
+try {process.exitCode = main(process.argv.slice(2));}
+catch (error)
+{
+  process.stderr.write(`web-export.${error.identity || 'unexpected-failure'}: ${error.message}\n`);
+  process.exitCode = error.status || 20;
+}

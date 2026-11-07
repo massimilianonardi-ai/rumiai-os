@@ -131,7 +131,9 @@ OUTPUT
                        classified partial against installed /json/protocol.
       states/          Per-state rendered HTML/text/controls in JSON, selected PNGs
                        dom-rest-initial.html / dom-rest-final.html (full outerHTML)
-                       dom-rest-{initial,final}.json (settlement evidence)
+                       dom-rest-{initial,final}.json (settlement evidence and
+                       bounded non-zero document/nested scroll offsets with
+                       structural selectors; no page text in these selectors)
       cdp-capabilities.json  Browser version, schema discovery status,
                              supported domains/commands/events
       cdp-protocol.json      Version-specific native Chromium CDP schema;
