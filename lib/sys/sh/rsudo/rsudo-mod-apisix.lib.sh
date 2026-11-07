@@ -1817,8 +1817,8 @@ rsudo_mod_apisix_context()
   fi
 )
 
-# Static remote read transport. Caller values remain positional data; the
-# Admin key is read only by curl from a pre-provisioned protected file.
+# Static remote REST transport. Selectors remain positional data, the Admin
+# key is read by curl from its protected file, and write bodies stay on stdin.
 _rsudo_mod_apisix_rest_transport_remote_source()
 {
   cat <<'RSUDO_APISIX_REST_REMOTE'
@@ -1827,7 +1827,6 @@ header_file=$2
 resource=$3
 resource_id=$4
 method=${5:-GET}
-body_file=${6-}
 
 rest_transport_error()
 {
@@ -1854,11 +1853,6 @@ case "$resource_id" in
   *[!a-zA-Z0-9._~-]*|.|..) rest_transport_error invalid-resource-id; exit 86 ;;
 esac
 case "$method" in GET|POST|PUT|DELETE) : ;; *) rest_transport_error unsupported-method; exit 93 ;; esac
-case "$method:$body_file" in
-  GET:|DELETE:) : ;;
-  POST:/*|PUT:/*) : ;;
-  *) rest_transport_error body-file-required-or-unexpected; exit 94 ;;
-esac
 case "$header_file" in /*) : ;; *) rest_transport_error invalid-header-path; exit 87 ;; esac
 [ -f "$header_file" ] && [ -r "$header_file" ] && [ ! -L "$header_file" ] || {
   rest_transport_error header-unavailable
@@ -1882,35 +1876,23 @@ actual=$(wc -c < "$header_file") || exit 91
 key=${header#X-API-KEY: }
 case "$key" in ''|*[![:graph:]]*) rest_transport_error header-invalid; exit 91 ;; esac
 unset header key mode
-if [ -n "$body_file" ]
-then
-  [ -f "$body_file" ] && [ -r "$body_file" ] && [ ! -L "$body_file" ] || {
-    rest_transport_error body-file-unavailable
-    exit 95
-  }
-  body_mode=$(LC_ALL=C ls -ld "$body_file" 2>/dev/null) || {
-    rest_transport_error body-file-mode-unavailable
-    exit 96
-  }
-  body_mode=${body_mode%% *}
-  [ "$body_mode" = -rw------- ] || { rest_transport_error body-file-mode-insecure; exit 97; }
-fi
 command -v curl >/dev/null 2>&1 || { rest_transport_error curl-unavailable; exit 92; }
 url=$admin_url/apisix/admin/$resource
 [ -z "$resource_id" ] || url=$url/$resource_id
-if [ -n "$body_file" ]
-then
+case "$method" in POST|PUT)
   curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
     --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 \
     --header "@$header_file" --header 'Accept: application/json' \
     --header 'Content-Type: application/json' --request "$method" \
-    --data-binary "@$body_file" --url "$url"
-else
+    --data-binary @- --url "$url"
+;;
+*)
   curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
     --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 \
     --header "@$header_file" --header 'Accept: application/json' \
     --request "$method" --url "$url"
-fi
+;;
+esac
 RSUDO_APISIX_REST_REMOTE
 }
 
@@ -1953,42 +1935,39 @@ _rsudo_mod_apisix_rest_mutate()
   operation=$1
   shift
   case "$operation:$#" in
-    create:2) resource=$1; resource_id=; body_file=$2; method=POST ;;
-    update:3) resource=$1; resource_id=$2; body_file=$3; method=PUT ;;
-    delete:2) resource=$1; resource_id=$2; body_file=; method=DELETE ;;
+    create:1) resource=$1; resource_id=; method=POST ;;
+    update:2) resource=$1; resource_id=$2; method=PUT ;;
+    delete:2) resource=$1; resource_id=$2; method=DELETE ;;
     *) log error apisix rest-mutate-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
   esac
   case "$resource" in routes|services|upstreams) : ;; *) log error apisix rest-mutate-unsupported-resource resource "$resource"; exit 2 ;; esac
   if [ -n "$resource_id" ]; then
     case "$resource_id" in *[!a-zA-Z0-9._-]*|.|..) log error apisix rest-mutate-invalid-resource-id; exit 3 ;; esac
   fi
-  if [ -n "$body_file" ]; then
-    case "$body_file" in /*) : ;; *) log error apisix rest-mutate-invalid-body-path; exit 4 ;; esac
-    newline=$(printf '\n_')
-    newline=${newline%_}
-    tab=$(printf '\t')
-    case "$body_file" in *"$newline"*|*"$tab"*) log error apisix rest-mutate-body-path-delimiter; exit 9 ;; esac
-  fi
-  context=$(rsudo_mod_apisix_context) || exit 10
+  context=$(rsudo_mod_apisix_context) || exit 8
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
-  [ "$adapter" = rest ] || { log error apisix rest-mutate-adapter-unsupported adapter "$adapter"; exit 5; }
+  [ "$adapter" = rest ] || { log error apisix rest-mutate-adapter-unsupported adapter "$adapter"; exit 4; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix rest-mutate-scope-unsupported scope "$scope"; exit 6; }
+  [ "$scope" = host ] || { log error apisix rest-mutate-scope-unsupported scope "$scope"; exit 5; }
   admin_url=${RSUDO_APISIX_ADMIN_URL-}
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   case "$admin_url" in
     http://*|https://*) authority=${admin_url#*://} ;;
-    *) log error apisix rest-mutate-invalid-admin-url; exit 7 ;;
+    *) log error apisix rest-mutate-invalid-admin-url; exit 6 ;;
   esac
   case "$authority" in
     ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
       log error apisix rest-mutate-invalid-admin-authority
-      exit 8
+      exit 7
     ;;
   esac
   RSUDO_INTERACTIVE=
-  _rsudo_mod_apisix_rest_transport_remote_source |
-    rsudo sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id" "$method" "$body_file"
+  remote_source=$(_rsudo_mod_apisix_rest_transport_remote_source) || {
+    log error apisix rest-mutate-remote-source-failed
+    exit 9
+  }
+  rsudo sh -c "$remote_source" apisix \
+    "$admin_url" "$header_file" "$resource" "$resource_id" "$method"
 )
 
 # The operator selects a JSON data file explicitly. Its bytes cross the remote

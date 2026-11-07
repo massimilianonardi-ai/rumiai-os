@@ -22,8 +22,8 @@ DISPATCH
     rsudo apisix context
     rsudo apisix list routes|services|upstreams
     rsudo apisix get routes|services|upstreams resource-id
-    rsudo apisix create routes|services|upstreams absolute-remote-json-file
-    rsudo apisix update routes|services|upstreams id absolute-remote-json-file
+    rsudo apisix create routes|services|upstreams < resource.json
+    rsudo apisix update routes|services|upstreams id < resource.json
     rsudo apisix delete routes|services|upstreams id
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
@@ -105,8 +105,8 @@ PUBLIC FUNCTIONS
         ID and 14 duplicate matching IDs. The remote source must be an
         ordinary readable non-symlink file. No legacy fallback is attempted.
 
-    rsudo_mod_apisix_create resource absolute-remote-json-file
-    rsudo_mod_apisix_update resource id absolute-remote-json-file
+    rsudo_mod_apisix_create resource   (reads JSON request body from stdin)
+    rsudo_mod_apisix_update resource id (reads JSON request body from stdin)
     rsudo_mod_apisix_delete resource id
         Mutate routes, services or upstreams only when
         RSUDO_APISIX_SCOPE=host and RSUDO_APISIX_DEPLOYMENT=traditional-admin
@@ -116,19 +116,18 @@ PUBLIC FUNCTIONS
         in a readable, ordinary non-symlink file with mode 0600). create uses
         POST on the collection; update uses PUT on the resource ID; delete
         uses DELETE on the resource ID. APISIX may assign an ID for POST.
-        Supply the complete intended JSON resource to update; partial PATCH is
-        not implemented.
-        create/update require an absolute remote JSON body file that is
-        readable, ordinary, non-symlink and mode 0600. Its content is passed
-        to curl via --data-binary @file, never placed in command arguments or
-        diagnostics. APISIX validates its JSON/schema. Successful response
+        create/update read the JSON body from stdin and pass it to curl via
+        --data-binary @-, never placing the body in command arguments or
+        diagnostics. No remote body file is required. APISIX validates JSON
+        and schema. Supply the complete intended resource to update; partial
+        PATCH is not implemented. Successful response
         bodies are written to stdout. Delete is not forced: APISIX may reject
         a resource still in use. HTTPS verification remains enabled; proxy
         and redirect use are disabled. HTTP failures retain curl's non-zero
         status, normally 22. Local statuses 1-9 cover invalid arguments,
-        resource, ID, body path, adapter, scope, Admin URL, authority and
-        body-path delimiters; invalid operator context 10. Remote precondition
-        failures use 84-97.
+        resource, ID, adapter, scope, Admin URL, authority, invalid operator
+        context and static remote-source creation. Remote precondition failures
+        use 84-94.
         File, snapshot and other non-REST mutations remain unimplemented and
         never fall back to legacy.
 
