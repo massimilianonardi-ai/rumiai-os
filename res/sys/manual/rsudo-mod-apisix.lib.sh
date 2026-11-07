@@ -3,11 +3,11 @@ NAME
 
 DESCRIPTION
     This module retains compatibility forwarding for old operation-specific
-    function names. The generic list/get entrypoints now use an explicit,
-    read-only traditional REST adapter; create/update/delete/apply/request
-    fail as unimplemented and never fall back to legacy. Host discovery and
-    operator context inspection are read-only. Standalone resource routing
-    and mutation are not yet implemented.
+    function names. The generic list/get entrypoints route internally to the
+    explicit traditional REST adapter or the read-only standalone JSON-file
+    adapter. Other standalone adapters and create/update/delete/apply/request
+    fail explicitly and never fall back to legacy. Host discovery and operator
+    context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
     Do not provide untrusted shell-sensitive values to legacy operations.
@@ -29,26 +29,44 @@ DISPATCH
 PUBLIC FUNCTIONS
     rsudo_mod_apisix_list resource
         List routes, services or upstreams through the explicitly selected
-        traditional-admin REST adapter. Requires RSUDO_APISIX_SCOPE=host,
-        RSUDO_APISIX_DEPLOYMENT=traditional-admin,
+        traditional-admin REST or standalone-file-json adapter. REST requires
+        RSUDO_APISIX_SCOPE=host, RSUDO_APISIX_DEPLOYMENT=traditional-admin,
         RSUDO_APISIX_ADMIN_URL (an http(s) origin without a path) and
         RSUDO_APISIX_HEADER_FILE (an absolute path on the remote target).
         The remote header file must be a regular, readable, non-symlink file
         with mode 0600 and exactly one newline-terminated X-API-KEY header.
         Curl verifies HTTPS using its configured trust and does not follow
         redirects or use proxy settings. The raw successful JSON response is
-        written to stdout. Other adapters and resources fail explicitly.
+        written to stdout. For standalone-file-json, select
+        RSUDO_APISIX_DEPLOYMENT=standalone-file-json and an absolute
+        RSUDO_APISIX_DATA_FILE; host, Docker and Podman scopes are supported
+        when explicitly selected. The remote file must be an ordinary
+        readable non-symlink file. It is streamed through rsudo into a private
+        local temporary directory (umask 077), validated and filtered by the
+        standalone RumiAI json command. Only the selected resource records
+        reach stdout; the temporary document is removed on exit. This read
+        does not resolve APISIX environment substitutions or prove that the
+        selected file is the one loaded by a running process. YAML-file and
+        API-snapshot adapters remain unsupported. Other resources fail.
 
     rsudo_mod_apisix_get resource resource-id
         Read one routes, services or upstreams item through the same selected
-        traditional-admin REST adapter and credential requirements as list.
+        traditional-admin REST or standalone-file-json adapter as list.
         Resource IDs are currently restricted to URI-safe ASCII letters,
         digits, dot, underscore, tilde and hyphen. Successful output is raw
-        server JSON; HTTP failures are nonzero and their bodies are not sent
-        to stdout. Invalid argument shape is 1, unsupported resource 2,
+        server or selected file resource JSON; JSON-file get requires exactly
+        one matching `id`, otherwise it returns not-found or ambiguous status.
+        Invalid argument shape is 1, unsupported resource 2,
         unsupported adapter 3, unsupported scope 4 and invalid Admin URL or
         authority 5; remote validation
         has distinct statuses 84-92. Curl HTTP failures retain curl status 22.
+        The JSON-file adapter uses statuses 1-15: invalid arguments 1,
+        unsupported resource 2, invalid ID 3, unsupported adapter 4, invalid
+        data path 5, invalid container 6, unsupported scope 7, missing local
+        json command 8, temporary storage failure 9, remote read failure 10,
+        malformed JSON 11, resource query failure 12, temporary result write
+        failure 13, missing resource 14 and duplicate matching IDs 15. No
+        implicit adapter or legacy fallback is attempted.
 
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment
