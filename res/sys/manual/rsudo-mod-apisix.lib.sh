@@ -86,10 +86,18 @@ PUBLIC FUNCTIONS
         uses find to discover conf/config.yaml, conf/config-*.yaml,
         conf/apisix.yaml and conf/apisix.json under plausible APISIX roots;
         it also emits candidate nginx master PIDs seen through ps and may
-        correlate a configuration path to a matching process prefix. It skips
+        correlate a configuration path to a matching process prefix. If
+        systemctl is available, loaded APISIX-named units and APISIX-named
+        service unit files are returned with manager state; this is a unit
+        name/state match, not process ownership proof. For YAML files, only
+        numeric ports nested beneath admin_listen are considered. A TCP probe
+        is attempted with nc only for loopback/wildcard binds or an address
+        confirmed local by ip; remote bind addresses are reported without
+        probing. Results are open/not-open/unavailable evidence, not APISIX
+        identity. JSON admin-listener parsing is not implemented. It skips
         /proc, /sys, /dev, /run and common container storage on an unrestricted
         root scan. These are process/configuration *candidates*, not proof of
-        runtime identity, loaded source, listening ports or write readiness.
+        runtime identity, loaded source or write readiness.
         An unreadable subtree may be omitted. When Docker or Podman is
         available, discovery lists all containers and probes each running
         container through a static read-only sh/find program. Matching stopped
