@@ -1914,15 +1914,116 @@ _rsudo_mod_apisix_rest_read()
     rsudo sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id"
 )
 
-rsudo_mod_apisix_list()
+# The operator selects a JSON data file explicitly. Its bytes cross the remote
+# transport only into a private local staging directory, where the standalone
+# RumiAI json utility selects resource records. No remote m/json installation
+# is required, and no file is modified.
+_rsudo_mod_apisix_json_file_read_remote_source()
 {
-  _rsudo_mod_apisix_rest_read list "$@"
+  cat <<'RSUDO_APISIX_JSON_FILE_READ_REMOTE'
+data_file=$1
+case "$data_file" in /*) : ;; *) exit 80 ;; esac
+[ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || exit 81
+cat "$data_file"
+RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
 
-rsudo_mod_apisix_get()
-{
-  _rsudo_mod_apisix_rest_read get "$@"
-}
+_rsudo_mod_apisix_json_file_read()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    list:1) resource=$1; resource_id= ;;
+    get:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix json-file-read-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix json-file-read-unsupported-resource resource "$resource"; exit 2 ;; esac
+  if [ -n "$resource_id" ]; then
+    case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) log error apisix json-file-read-invalid-resource-id; exit 3 ;; esac
+  fi
+
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = file-json ] || { log error apisix json-file-read-adapter-unsupported adapter "$adapter"; exit 4; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  case "$data_file" in /*) : ;; *) log error apisix json-file-read-invalid-data-path; exit 5 ;; esac
+  case "$scope" in host) : ;;
+    docker|podman)
+      container=${RSUDO_APISIX_CONTAINER_ID-}
+      case "$container" in *[!0123456789abcdef]*|'') log error apisix json-file-read-invalid-container-id; exit 6 ;; esac
+      [ "${#container}" -eq 64 ] || { log error apisix json-file-read-invalid-container-id; exit 6; }
+    ;;
+    *) log error apisix json-file-read-unsupported-scope scope "$scope"; exit 7 ;;
+  esac
+  command -v json >/dev/null 2>&1 || { log error apisix json-file-read-json-unavailable; exit 8; }
+
+  umask 077
+  attempt=0
+  temp_dir=
+  temp_base=${TMPDIR:-/tmp}
+  case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+  while [ "$attempt" -lt 10 ]
+  do
+    candidate=$temp_base/rsudo-apisix-json-$$-$attempt
+    if (umask 077; mkdir "$candidate") 2>/dev/null
+    then temp_dir=$candidate; break
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$temp_dir" ] || { log error apisix json-file-read-temp-unavailable; exit 9; }
+  trap 'rm -f "$temp_dir/document.json" "$temp_dir/items.jsonl" "$temp_dir/matches.jsonl"; rmdir "$temp_dir" 2>/dev/null' 0
+  document=$temp_dir/document.json
+  if [ "$scope" = host ]
+  then
+    _rsudo_mod_apisix_json_file_read_remote_source | rsudo sh -s -- "$data_file" > "$document"
+  else
+    _rsudo_mod_apisix_json_file_read_remote_source |
+      rsudo "$scope" exec -i "$container" sh -s -- "$data_file" > "$document"
+  fi
+  remote_status=$?
+  [ "$remote_status" -eq 0 ] || { log error apisix json-file-read-remote-failed status "$remote_status"; exit 10; }
+  json --check "$document" >/dev/null 2>&1 || { log error apisix json-file-read-invalid-json; exit 11; }
+  filter=.$resource'[]'
+  json -c "$filter" "$document" > "$temp_dir/items.jsonl" 2>/dev/null || {
+    log error apisix json-file-read-resource-query-failed resource "$resource"
+    exit 12
+  }
+  if [ -z "$resource_id" ]
+  then
+    cat "$temp_dir/items.jsonl"
+    exit "$?"
+  fi
+  : > "$temp_dir/matches.jsonl" || { log error apisix json-file-read-temp-write-failed; exit 13; }
+  while IFS= read -r item
+  do
+    item_id=$(printf '%s\n' "$item" | json -r '.id?' 2>/dev/null) || {
+      log error apisix json-file-read-resource-query-failed resource "$resource"
+      exit 12
+    }
+    [ "$item_id" = "$resource_id" ] && printf '%s\n' "$item" >> "$temp_dir/matches.jsonl"
+  done < "$temp_dir/items.jsonl"
+  [ -s "$temp_dir/matches.jsonl" ] || { log error apisix json-file-read-resource-not-found resource "$resource"; exit 14; }
+  match_count=$(wc -l < "$temp_dir/matches.jsonl") || { log error apisix json-file-read-temp-write-failed; exit 13; }
+  [ "$match_count" -eq 1 ] 2>/dev/null || { log error apisix json-file-read-resource-ambiguous resource "$resource"; exit 15; }
+  cat "$temp_dir/matches.jsonl"
+)
+
+_rsudo_mod_apisix_read_router()
+(
+  operation=$1
+  shift
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  case "$adapter" in
+    rest) _rsudo_mod_apisix_rest_read "$operation" "$@" ;;
+    file-json) _rsudo_mod_apisix_json_file_read "$operation" "$@" ;;
+    *) log error apisix read-adapter-not-implemented adapter "$adapter"; exit 3 ;;
+  esac
+)
+
+rsudo_mod_apisix_list() { _rsudo_mod_apisix_read_router list "$@"; }
+rsudo_mod_apisix_get() { _rsudo_mod_apisix_read_router get "$@"; }
 
 _rsudo_mod_apisix_unimplemented_operation()
 (
