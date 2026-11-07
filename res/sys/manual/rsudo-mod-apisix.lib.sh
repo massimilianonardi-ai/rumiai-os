@@ -15,12 +15,33 @@ LOADING
 
 DISPATCH
     rsudo apisix <operation> [operands...]
+    rsudo apisix discovery [absolute-remote-scan-root]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
     rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_discovery [absolute-remote-scan-root]
+        Read-only best-effort host inventory. The scan root defaults to / and
+        must be an existing readable absolute directory. Its five-column
+        tab-separated stdout is: kind, scope, state, identifier, evidence.
+        Each candidate configuration is one row; multiple installations or
+        profiles are returned rather than rejected. The initial host phase
+        uses find to discover conf/config.yaml, conf/config-*.yaml,
+        conf/apisix.yaml and conf/apisix.json under plausible APISIX roots;
+        it also emits candidate nginx master PIDs seen through ps and may
+        correlate a configuration path to a matching process prefix. It skips
+        /proc, /sys, /dev, /run and common container storage on an unrestricted
+        root scan. These are process/configuration *candidates*, not proof of
+        runtime identity, loaded source, listening ports or write readiness.
+        An unreadable subtree may be omitted. Docker, Podman, systemd
+        correlation, listener probes, JSON output and guaranteed exhaustive
+        detection are NOT implemented in this first increment. Discovery
+        never chooses an instance or modifies the user's environment.
+        Argument count 71, relative root 72, missing find 73, unavailable
+        scan root 74; remote transport errors propagate independently.
+
     rsudo_mod_apisix_admin_read resource absolute-remote-header-file [remote-port]
         Advanced, read-only Admin API request to remote 127.0.0.1 on the
         selected port (default 9180). Supported resource collections:
