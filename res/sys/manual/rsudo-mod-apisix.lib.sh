@@ -4,8 +4,8 @@ NAME
 DESCRIPTION
     This module retains compatibility forwarding for old operation-specific
     function names. The generic list/get entrypoints route internally to the
-    explicit traditional REST, standalone API snapshot or standalone JSON-file
-    adapter. Other read adapters and create/update/delete/apply/request
+    explicit traditional REST, standalone API snapshot, standalone JSON-file
+    or standalone YAML-file adapter. create/update/delete/apply/request
     fail explicitly and never fall back to legacy. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
@@ -29,7 +29,8 @@ DISPATCH
 PUBLIC FUNCTIONS
     rsudo_mod_apisix_list resource
         List routes, services or upstreams through the explicitly selected
-        traditional-admin REST, standalone API snapshot or standalone-file-json
+        traditional-admin REST, standalone API snapshot, standalone-file-json
+        or standalone-file-yaml
         adapter. REST requires
         RSUDO_APISIX_SCOPE=host, RSUDO_APISIX_DEPLOYMENT=traditional-admin,
         RSUDO_APISIX_ADMIN_URL (an http(s) origin without a path) and
@@ -57,13 +58,20 @@ PUBLIC FUNCTIONS
         standalone RumiAI json command. Only the selected resource records
         reach stdout; the temporary document is removed on exit. This read
         does not resolve APISIX environment substitutions or prove that the
-        selected file is the one loaded by a running process. YAML-file reads
-        remain unsupported. Other resources fail.
+        selected file is the one loaded by a running process. For
+        standalone-file-yaml, also set RSUDO_APISIX_HOME to the absolute
+        selected APISIX installation root. Its LuaJIT, lyaml and cjson.safe
+        parse the remote YAML and serialize only selected records as JSON
+        Lines, which RumiAI json validates locally. The source is never
+        modified; APISIX substitutions and loaded-process identity are not
+        resolved. Other resources fail.
 
     rsudo_mod_apisix_get resource resource-id
         Read one routes, services or upstreams item through the same selected
-        traditional-admin REST, standalone snapshot or standalone-file-json
-        adapter as list.
+        traditional-admin REST, standalone snapshot, standalone-file-json
+        or standalone-file-yaml adapter as list. YAML mode also requires the
+        explicitly selected absolute RSUDO_APISIX_HOME and parses with that
+        installation's LuaJIT/lyaml/cjson.safe.
         Resource IDs are currently restricted to URI-safe ASCII letters,
         digits, dot, underscore, tilde and hyphen. Successful output is raw
         server or selected file resource JSON; JSON-file get requires exactly
@@ -86,6 +94,12 @@ PUBLIC FUNCTIONS
         malformed snapshot JSON is 11, query/result staging failure 12,
         missing ID 13 and duplicate matching IDs 14. Remote curl preserves its
         HTTP/transport status.
+        The YAML-file adapter requires RSUDO_APISIX_HOME and uses statuses
+        1-9 for arguments, resource, ID, adapter, installation home, data
+        path, container, scope and private temporary storage; 10 is remote
+        parser/read failure, 11-12 result staging/JSON validation, 13 missing
+        ID and 14 duplicate matching IDs. The remote source must be an
+        ordinary readable non-symlink file. No legacy fallback is attempted.
 
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment

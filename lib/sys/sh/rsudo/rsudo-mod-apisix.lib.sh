@@ -1928,6 +1928,176 @@ cat "$data_file"
 RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
 
+# Parse the explicitly selected APISIX YAML document with the LuaJIT and
+# lyaml shipped by the selected APISIX installation. Emit only the selected
+# resource records as JSON Lines; never copy the complete YAML document.
+_rsudo_mod_apisix_yaml_file_read_remote_source()
+{
+  cat <<'RSUDO_APISIX_YAML_FILE_READ_REMOTE'
+home=$1
+data_file=$2
+resource=$3
+resource_id=$4
+case "$home" in /*) : ;; *) printf '%s\n' apisix.yaml-file.invalid-home >&2; exit 80 ;; esac
+case "$data_file" in /*) : ;; *) printf '%s\n' apisix.yaml-file.invalid-data-path >&2; exit 81 ;; esac
+[ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
+  printf '%s\n' apisix.yaml-file.source-unavailable >&2
+  exit 82
+}
+case "$resource" in routes|services|upstreams) : ;; *) printf '%s\n' apisix.yaml-file.unsupported-resource >&2; exit 83 ;; esac
+case "$resource_id" in ''|*[!a-zA-Z0-9._~-]*|.|..) [ -z "$resource_id" ] || { printf '%s\n' apisix.yaml-file.invalid-resource-id >&2; exit 84; } ;; esac
+if [ -x "$home/deps/bin/luajit" ]; then
+  interpreter=$home/deps/bin/luajit
+elif [ -x /usr/local/openresty/luajit/bin/luajit ]; then
+  interpreter=/usr/local/openresty/luajit/bin/luajit
+elif command -v luajit >/dev/null 2>&1; then
+  interpreter=$(command -v luajit)
+else
+  printf '%s\n' apisix.yaml-file.luajit-unavailable >&2
+  exit 85
+fi
+LUA_PATH="$home/?.lua;$home/deps/share/lua/5.1/?.lua;$home/deps/share/lua/5.1/?/init.lua;;"
+LUA_CPATH="$home/deps/lib64/lua/5.1/?.so;$home/deps/lib/lua/5.1/?.so;;"
+export LUA_PATH LUA_CPATH
+m_APISIX_DATA_FILE=$data_file
+m_APISIX_RESOURCE=$resource
+m_APISIX_RESOURCE_ID=$resource_id
+export m_APISIX_DATA_FILE m_APISIX_RESOURCE m_APISIX_RESOURCE_ID
+"$interpreter" -e '
+local ok_yaml, yaml = pcall(require, "lyaml")
+local ok_json, json = pcall(require, "cjson.safe")
+if not ok_yaml or not ok_json then
+  io.stderr:write("apisix.yaml-file.parser-unavailable\n")
+  os.exit(13)
+end
+local path = os.getenv("m_APISIX_DATA_FILE")
+local resource = os.getenv("m_APISIX_RESOURCE")
+local resource_id = os.getenv("m_APISIX_RESOURCE_ID")
+if not path or not resource or not resource_id then
+  io.stderr:write("apisix.yaml-file.arguments-unavailable\n")
+  os.exit(14)
+end
+local file = io.open(path, "rb")
+if not file then io.stderr:write("apisix.yaml-file.source-unavailable\n"); os.exit(14) end
+local source = file:read("*a")
+file:close()
+local ok_parse, document = pcall(yaml.load, source)
+if not ok_parse or type(document) ~= "table" then
+  io.stderr:write("apisix.yaml-file.document-invalid\n")
+  os.exit(15)
+end
+local records = document[resource]
+if records == nil then os.exit(0) end
+if type(records) ~= "table" then
+  io.stderr:write("apisix.yaml-file.resource-not-array\n")
+  os.exit(16)
+end
+local count, maximum = 0, 0
+for key in pairs(records) do
+  if type(key) ~= "number" or key < 1 or key % 1 ~= 0 then
+    io.stderr:write("apisix.yaml-file.resource-not-array\n")
+    os.exit(16)
+  end
+  count = count + 1
+  if key > maximum then maximum = key end
+end
+if count ~= maximum then
+  io.stderr:write("apisix.yaml-file.resource-not-array\n")
+  os.exit(16)
+end
+for index = 1, maximum do
+  local record = records[index]
+  if type(record) ~= "table" then
+    io.stderr:write("apisix.yaml-file.record-invalid\n")
+    os.exit(17)
+  end
+  local id = record.id
+  if resource_id == "" or (type(id) == "string" and id == resource_id) then
+    local encoded, encode_error = json.encode(record)
+    if not encoded then
+      io.stderr:write("apisix.yaml-file.record-not-json-compatible\n")
+      os.exit(18)
+    end
+    io.write(encoded, "\n")
+  end
+end
+'
+RSUDO_APISIX_YAML_FILE_READ_REMOTE
+}
+
+_rsudo_mod_apisix_yaml_file_read()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    list:1) resource=$1; resource_id= ;;
+    get:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix yaml-file-read-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix yaml-file-read-unsupported-resource resource "$resource"; exit 2 ;; esac
+  if [ -n "$resource_id" ]; then
+    case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) log error apisix yaml-file-read-invalid-resource-id; exit 3 ;; esac
+  fi
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = file-yaml ] || { log error apisix yaml-file-read-adapter-unsupported adapter "$adapter"; exit 4; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  home=${RSUDO_APISIX_HOME-}
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  case "$home" in /*) : ;; *) log error apisix yaml-file-read-home-required; exit 5 ;; esac
+  case "$data_file" in /*) : ;; *) log error apisix yaml-file-read-invalid-data-path; exit 6 ;; esac
+  case "$scope" in host) : ;;
+    docker|podman)
+      container=${RSUDO_APISIX_CONTAINER_ID-}
+      case "$container" in *[!0123456789abcdef]*|'') log error apisix yaml-file-read-invalid-container-id; exit 7 ;; esac
+      [ "${#container}" -eq 64 ] || { log error apisix yaml-file-read-invalid-container-id; exit 7; }
+    ;;
+    *) log error apisix yaml-file-read-unsupported-scope scope "$scope"; exit 8 ;;
+  esac
+  umask 077
+  attempt=0
+  temp_dir=
+  temp_base=${TMPDIR:-/tmp}
+  case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+  while [ "$attempt" -lt 10 ]
+  do
+    candidate=$temp_base/rsudo-apisix-yaml-$$-$attempt
+    if (umask 077; mkdir "$candidate") 2>/dev/null
+    then temp_dir=$candidate; break
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$temp_dir" ] || { log error apisix yaml-file-read-temp-unavailable; exit 9; }
+  trap 'rm -f "$temp_dir/items.jsonl" "$temp_dir/matches.jsonl"; rmdir "$temp_dir" 2>/dev/null' 0
+  if [ "$scope" = host ]
+  then
+    _rsudo_mod_apisix_yaml_file_read_remote_source | rsudo sh -s -- "$home" "$data_file" "$resource" "$resource_id" > "$temp_dir/items.jsonl"
+  else
+    _rsudo_mod_apisix_yaml_file_read_remote_source |
+      rsudo "$scope" exec -i "$container" sh -s -- "$home" "$data_file" "$resource" "$resource_id" > "$temp_dir/items.jsonl"
+  fi
+  remote_status=$?
+  [ "$remote_status" -eq 0 ] || { log error apisix yaml-file-read-remote-failed status "$remote_status"; exit 10; }
+  : > "$temp_dir/matches.jsonl" || { log error apisix yaml-file-read-temp-write-failed; exit 11; }
+  while IFS= read -r item
+  do
+    [ -n "$item" ] || continue
+    printf '%s\n' "$item" | json --check >/dev/null 2>&1 || { log error apisix yaml-file-read-invalid-json-record; exit 12; }
+    if [ -z "$resource_id" ]; then
+      printf '%s\n' "$item" >> "$temp_dir/matches.jsonl" || { log error apisix yaml-file-read-temp-write-failed; exit 11; }
+    else
+      item_id=$(printf '%s\n' "$item" | json -r '.id?' 2>/dev/null) || { log error apisix yaml-file-read-invalid-json-record; exit 12; }
+      [ "$item_id" = "$resource_id" ] && printf '%s\n' "$item" >> "$temp_dir/matches.jsonl"
+    fi
+  done < "$temp_dir/items.jsonl"
+  [ -s "$temp_dir/matches.jsonl" ] || { [ -z "$resource_id" ] && exit 0; log error apisix yaml-file-read-resource-not-found resource "$resource"; exit 13; }
+  if [ -n "$resource_id" ]; then
+    match_count=$(wc -l < "$temp_dir/matches.jsonl") || { log error apisix yaml-file-read-temp-write-failed; exit 11; }
+    [ "$match_count" -eq 1 ] 2>/dev/null || { log error apisix yaml-file-read-resource-ambiguous resource "$resource"; exit 14; }
+  fi
+  cat "$temp_dir/matches.jsonl"
+)
+
 _rsudo_mod_apisix_snapshot_read()
 (
   operation=$1
@@ -2094,6 +2264,7 @@ _rsudo_mod_apisix_read_router()
   case "$adapter" in
     rest) _rsudo_mod_apisix_rest_read "$operation" "$@" ;;
     snapshot) _rsudo_mod_apisix_snapshot_read "$operation" "$@" ;;
+    file-yaml) _rsudo_mod_apisix_yaml_file_read "$operation" "$@" ;;
     file-json) _rsudo_mod_apisix_json_file_read "$operation" "$@" ;;
     *) log error apisix read-adapter-not-implemented adapter "$adapter"; exit 3 ;;
   esac
