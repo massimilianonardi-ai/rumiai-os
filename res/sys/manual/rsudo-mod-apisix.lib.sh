@@ -5,8 +5,9 @@ DESCRIPTION
     This module retains compatibility forwarding for old operation-specific
     function names. The generic list/get entrypoints route internally to the
     explicit traditional REST, standalone API snapshot, standalone JSON-file
-    or standalone YAML-file adapter. create/update/delete/apply/request
-    fail explicitly and never fall back to legacy. Host discovery and operator
+    or standalone YAML-file adapter. REST create/update/delete mutations are
+    currently host-scoped; unsupported backends fail without legacy fallback.
+    apply/request remain unimplemented. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
@@ -21,6 +22,9 @@ DISPATCH
     rsudo apisix context
     rsudo apisix list routes|services|upstreams
     rsudo apisix get routes|services|upstreams resource-id
+    rsudo apisix create routes|services|upstreams absolute-remote-json-file
+    rsudo apisix update routes|services|upstreams id absolute-remote-json-file
+    rsudo apisix delete routes|services|upstreams id
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
@@ -100,6 +104,33 @@ PUBLIC FUNCTIONS
         parser/read failure, 11-12 result staging/JSON validation, 13 missing
         ID and 14 duplicate matching IDs. The remote source must be an
         ordinary readable non-symlink file. No legacy fallback is attempted.
+
+    rsudo_mod_apisix_create resource absolute-remote-json-file
+    rsudo_mod_apisix_update resource id absolute-remote-json-file
+    rsudo_mod_apisix_delete resource id
+        Mutate routes, services or upstreams only when
+        RSUDO_APISIX_SCOPE=host and RSUDO_APISIX_DEPLOYMENT=traditional-admin
+        are explicitly selected. REST also requires RSUDO_APISIX_ADMIN_URL
+        (an http(s) origin) and RSUDO_APISIX_HEADER_FILE (an absolute remote
+        pathname containing exactly one newline-terminated X-API-KEY header
+        in a readable, ordinary non-symlink file with mode 0600). create uses
+        POST on the collection; update uses PUT on the resource ID; delete
+        uses DELETE on the resource ID. APISIX may assign an ID for POST.
+        Supply the complete intended JSON resource to update; partial PATCH is
+        not implemented.
+        create/update require an absolute remote JSON body file that is
+        readable, ordinary, non-symlink and mode 0600. Its content is passed
+        to curl via --data-binary @file, never placed in command arguments or
+        diagnostics. APISIX validates its JSON/schema. Successful response
+        bodies are written to stdout. Delete is not forced: APISIX may reject
+        a resource still in use. HTTPS verification remains enabled; proxy
+        and redirect use are disabled. HTTP failures retain curl's non-zero
+        status, normally 22. Local statuses 1-9 cover invalid arguments,
+        resource, ID, body path, adapter, scope, Admin URL, authority and
+        body-path delimiters; invalid operator context 10. Remote precondition
+        failures use 84-97.
+        File, snapshot and other non-REST mutations remain unimplemented and
+        never fall back to legacy.
 
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment
