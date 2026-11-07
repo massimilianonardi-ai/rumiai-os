@@ -233,7 +233,7 @@ function scrollRestoreSource(positions)
 }
 
 function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collected,
-  scrollScriptFile)
+  scrollScript, scrollScriptPolicy)
 {
   if (Buffer.byteLength(html) > MAX_HTML_BYTES)
     throw fail(15, 'rendered-html-size-limit', 'rendered HTML exceeds the 32 MiB export limit');
@@ -245,7 +245,8 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
   const helperScript = String.raw`(() => {
     const html = decodeURIComponent(escape(atob('__HTML__')));
     const source = __SOURCE__;
-    const scrollScriptFile = __SCROLL_SCRIPT__;
+    const scrollScript = __SCROLL_SCRIPT__;
+    const scrollScriptPolicy = __SCROLL_SCRIPT_POLICY__;
     const map = JSON.parse(decodeURIComponent(escape(atob('__MAP__'))));
     const sheets = JSON.parse(decodeURIComponent(escape(atob('__SHEETS__'))));
     const counts = {
@@ -526,11 +527,10 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
       if (sheet.source === 'cssom-source' && map[normalizedUrl(sheet.sourceUrl, source)])
         counts.cssomSourceSheets++;
 
-    if (scrollScriptFile)
+    if (scrollScript)
     {
       const restore = doc.createElement('script');
-      restore.defer = true;
-      restore.src = 'assets/' + scrollScriptFile;
+      restore.textContent = scrollScript;
       doc.head.append(restore);
     }
 
@@ -538,7 +538,7 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
     policy.httpEquiv = 'Content-Security-Policy';
     policy.content = "default-src 'none'; img-src file: data:; " +
       "style-src file: data: 'unsafe-inline'; font-src file: data:; " +
-      "media-src file: data:; script-src file:; connect-src 'none'; " +
+      "media-src file: data:; script-src " + scrollScriptPolicy + "; connect-src 'none'; " +
       "frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
     doc.head.prepend(policy);
 
@@ -565,7 +565,8 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
       .replace('__SHEETS__', Buffer.from(JSON.stringify(css)).toString('base64'))
       .replace('__HTML__', Buffer.from(html).toString('base64'))
       .replace('__SOURCE__', JSON.stringify(sourceUrl).replace(/</g,'\\u003c'))
-      .replace('__SCROLL_SCRIPT__', JSON.stringify(scrollScriptFile)) + '</script>';
+      .replace('__SCROLL_SCRIPT__', JSON.stringify(scrollScript))
+      .replace('__SCROLL_SCRIPT_POLICY__', JSON.stringify(scrollScriptPolicy)) + '</script>';
   const helperFile = path.join(tempDirectory, 'transform.html');
   writePrivate(helperFile, helper);
   const profile = path.join(tempDirectory, 'transform-profile');
@@ -669,15 +670,13 @@ function main(args)
     const chromium = 'chromium';
     const scrollScript = captured.scrollPositions.length ?
       scrollRestoreSource(captured.scrollPositions) : null;
-    const scrollScriptSha = scrollScript ?
-      crypto.createHash('sha256').update(scrollScript).digest('hex') : null;
-    const scrollScriptFile = scrollScript ? 'web-export-scroll-' + scrollScriptSha + '.js' : null;
+    const scrollScriptHash = scrollScript ?
+      crypto.createHash('sha256').update(scrollScript).digest('base64') : null;
+    const scrollScriptPolicy = scrollScriptHash ? "'sha256-" + scrollScriptHash + "'" : "'none'";
     const transformed = transformWithChromium(chromium, temporary,
       captured.html, url.href, {...collected,assets:collected.assets.map(item => ({...item,
-        _stagePath:path.join(output,item.file)}))},scrollScriptFile);
+        _stagePath:path.join(output,item.file)}))},scrollScript,scrollScriptPolicy);
     writePrivate(path.join(output, 'index.html'), transformed.html);
-    if (scrollScriptFile)
-      writePrivate(path.join(output,'assets',scrollScriptFile),scrollScript);
     for (const sheet of transformed.sheets)
     {
       const file = path.join(output, 'assets', sheet.file);
@@ -693,13 +692,10 @@ function main(args)
       return {file:item.file,sha256,bytes,kind:item.kind,source:item.source,
         ...(cssText === undefined || sha256 === item.sha256 ? {} : {sourceSha256:item.sha256})};
     });
-    if (scrollScriptFile)
-      assets.push({file:'assets/' + scrollScriptFile,sha256:scrollScriptSha,
-        bytes:Buffer.byteLength(scrollScript),kind:'export-script',source:'web-export'});
     const htmlBytes = Buffer.byteLength(transformed.html);
     const manifest = {
       format:'web-export/1', mode:'standalone-file', scripts:'site-scripts-removed',
-      generatedScripts:scrollScriptFile ? ['scroll-restoration'] : [],
+      generatedScripts:scrollScript ? ['scroll-restoration'] : [],
       source:{origin:url.origin,path:url.pathname},
       document:{file:'index.html',sha256:crypto.createHash('sha256').update(transformed.html).digest('hex'),
         bytes:htmlBytes},
@@ -716,7 +712,7 @@ function main(args)
         scrollMetadataAvailable:captured.scrollMetadataAvailable,
         scrollPositionsCaptured:captured.scrollPositions.length,
         scrollPositionsTruncated:captured.scrollPositionsTruncated,
-        scrollRestorationScript:!!scrollScriptFile},
+        scrollRestorationScript:!!scrollScript},
       limitations:['Page scripts are not executed in the export.',
         'Interactions requiring a remote API, backend or removed frame are unavailable offline.',
         'Resources without a verified archived body are omitted.']

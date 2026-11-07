@@ -24,10 +24,10 @@ DESCRIPTION
     Page scripts, frames, embedded objects, external form submission and
     browser event handlers and hyperlink ping notifications are removed or
     disabled. If the capture contains non-zero document or nested scroll
-    offsets, a content-addressed local helper restores those offsets after
-    load; this exporter-owned helper is the only script in the output and is
-    listed in manifest.json. The restrictive policy allows local file scripts
-    only. The result preserves the rendered DOM, captured scroll position and local visual
+    offsets, a generated inline helper restores those offsets after load. Its
+    SHA-256 content hash is the only script source allowed by the restrictive
+    policy; site scripts remain removed. Helper presence is listed in
+    manifest.json. The result preserves the rendered DOM, captured scroll position and local visual
     resources; it is an offline snapshot, not a running copy of the site's
     application. Actions that depend on a backend, API, login session, script
     or removed frame do not work offline. Normal hyperlinks remain links to
@@ -48,8 +48,7 @@ OUTPUT
     export-directory/
       index.html       Rendered offline page with a no-network content policy
       manifest.json    Asset digests, coverage counts and explicit limitations
-      assets/          Verified local images, fonts, media, rewritten CSS and
-                       an optional generated scroll-restoration helper
+      assets/          Verified local images, fonts, media and rewritten CSS
 
 EXIT STATUS
     0   Export completed. Check manifest.json for omitted resources.
