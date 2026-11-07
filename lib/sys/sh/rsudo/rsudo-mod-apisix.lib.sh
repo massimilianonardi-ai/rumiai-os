@@ -1371,7 +1371,7 @@ rsudo_mod_apisix_context()
   [ -z "$home" ] || printf 'installation_root=%s\n' "$home"
   [ -z "$container" ] || printf 'container_id=%s\n' "$container"
   [ -z "$data_file" ] || printf 'data_file=%s\n' "$data_file"
-  [ -z "$admin_url" ] || printf 'admin_url=%s\n' "$admin_url"
+  [ -z "$admin_url" ] || printf 'admin_url=configured-not-verified\n'
   if [ -n "$header_file" ]
   then
     printf 'credential_file=configured-not-verified\n'
