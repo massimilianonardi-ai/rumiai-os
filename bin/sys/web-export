@@ -225,7 +225,10 @@ function scrollRestoreSource(positions)
     }
     document.documentElement.setAttribute('data-web-export-scroll-restored',String(restored));
   };
-  window.addEventListener('load',() => requestAnimationFrame(restore),{once:true});
+  const schedule = () => requestAnimationFrame(restore);
+  if (document.readyState === 'loading')
+    document.addEventListener('DOMContentLoaded',schedule,{once:true});
+  else schedule();
 })();\n`;
 }
 
