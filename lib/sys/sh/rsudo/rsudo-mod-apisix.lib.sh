@@ -1402,6 +1402,70 @@ RSUDO_APISIX_ADMIN_ENDPOINTS
   ;; esac
 done
 
+# Probe YAML admin_listen ports in the selected container's own network
+# namespace. Both the container ID and path are positional data; the program
+# sent to the container remains static shell source.
+probe_container_admin_listeners()
+(
+  manager=$1
+  container_id=$2
+  config_file=$3
+  case "$config_file" in /*) : ;; *) exit 1 ;; esac
+  case "$config_file" in *[[:space:]\|]*) exit 1 ;; esac
+  "$manager" exec -i "$container_id" sh -s -- "$config_file" 2>/dev/null <<'RSUDO_APISIX_CONTAINER_LISTENER_PROBE'
+config_file=$1
+[ -f "$config_file" ] && [ -r "$config_file" ] && [ ! -L "$config_file" ] || exit 2
+endpoints=$(awk '
+  function indent(s,t) { t=s; sub(/[^ ].*$/, "", t); return length(t) }
+  function emit() { if (ip ~ /^[0-9.]+$/ && port ~ /^[0-9]+$/) print ip "|" port; ip=""; port="" }
+  /^[[:space:]]*#/ { next }
+  {
+    line=$0
+    if (line ~ /^[[:space:]]*admin_listen:[[:space:]]*$/) {
+      if (active) emit()
+      active=1; base=indent(line); ip=""; port=""; next
+    }
+    if (active) {
+      level=indent(line)
+      if (level <= base) { emit(); active=0 }
+      else {
+        item=line; sub(/^[[:space:]]*/, "", item)
+        if (item ~ /^ip:[[:space:]]*[0-9.]+([[:space:]#]|$)/) { sub(/^ip:[[:space:]]*/, "", item); sub(/[[:space:]#].*$/, "", item); ip=item }
+        if (item ~ /^port:[[:space:]]*[0-9]+([[:space:]#]|$)/) { sub(/^port:[[:space:]]*/, "", item); sub(/[[:space:]#].*$/, "", item); port=item }
+        next
+      }
+    }
+  }
+  END { if (active) emit() }
+' "$config_file" 2>/dev/null) || exit 3
+while IFS='|' read -r bind_ip port
+do
+  [ -n "$bind_ip" ] && [ -n "$port" ] || continue
+  case "$port" in ''|*[!0123456789]*) continue ;; esac
+  [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || continue
+  probe_ip=
+  case "$bind_ip" in
+    127.*) probe_ip=$bind_ip ;;
+    0.0.0.0) probe_ip=127.0.0.1 ;;
+    *)
+      if command -v ip >/dev/null 2>&1 && ip -o -4 address show 2>/dev/null |
+         awk -v wanted="$bind_ip" '{address=$4; sub(/\/.*/, "", address); if (address == wanted) found=1} END {exit !found}'
+      then probe_ip=$bind_ip
+      else printf 'configured-unprobed|%s|%s|%s\n' "$bind_ip" "$port" "$bind_ip"; continue
+      fi
+    ;;
+  esac
+  if command -v nc >/dev/null 2>&1
+  then nc -z -w 1 "$probe_ip" "$port" >/dev/null 2>&1 && state=open || state=not-open
+  else state=probe-unavailable
+  fi
+  printf '%s|%s|%s|%s\n' "$state" "$probe_ip" "$port" "$bind_ip"
+done <<RSUDO_APISIX_CONTAINER_LISTENER_ENDPOINTS
+$endpoints
+RSUDO_APISIX_CONTAINER_LISTENER_ENDPOINTS
+RSUDO_APISIX_CONTAINER_LISTENER_PROBE
+)
+
 # Container managers are optional. Inventory all known states, including
 # stopped containers; inspect running containers through a fixed read-only
 # shell program. Container IDs are validated before being used as operands.
@@ -1481,10 +1545,31 @@ RSUDO_APISIX_CONTAINER_FIND
       while IFS= read -r container_file
       do
         case "$container_file" in
-          *[[:space:]]*) manager_incomplete=1; continue ;;
+          *[[:space:]\|]*) manager_incomplete=1; continue ;;
         esac
         printf 'config\t%s\tconfigured-only\t%s:%s\t%s-exec-find\n' \
           "$manager_scope" "$container_id" "$container_file" "$manager_scope"
+        case "$container_file" in *.yaml)
+          listener_results=$(probe_container_admin_listeners \
+            "$manager" "$container_id" "$container_file")
+          listener_status=$?
+          if [ "$listener_status" -ne 0 ]
+          then
+            manager_incomplete=1
+            printf 'listener\t%s\tprobe-unavailable\t%s:%s\t%s-container-probe-failed\n' \
+              "$manager_scope" "$container_id" "$container_file" "$manager_scope"
+          else
+            while IFS='|' read -r probe_state probe_ip admin_port bind_ip
+            do
+              [ -n "$probe_state" ] || continue
+              printf 'listener\t%s\t%s\t%s:%s:%s\t%s-container-admin-listen-bind-%s-config:%s\n' \
+                "$manager_scope" "$probe_state" "$container_id" "$probe_ip" "$admin_port" \
+                "$manager_scope" "$bind_ip" "$container_file"
+            done <<RSUDO_APISIX_CONTAINER_LISTENER_RESULTS
+$listener_results
+RSUDO_APISIX_CONTAINER_LISTENER_RESULTS
+          fi
+        ;; esac
       done <<RSUDO_APISIX_CONTAINER_CONFIGS
 $container_configs
 RSUDO_APISIX_CONTAINER_CONFIGS
