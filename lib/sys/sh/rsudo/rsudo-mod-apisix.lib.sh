@@ -1197,15 +1197,15 @@ _rsudo_mod_apisix_discovery_host_source()
 scan_root=$1
 case "$scan_root" in
   /*) : ;;
-  *) printf '%s\n' 'apisix.discovery.invalid-scan-root' >&2; exit 72 ;;
+  *) printf '%s\n' 'apisix.discovery.invalid-scan-root' >&2; exit 1 ;;
 esac
 [ -d "$scan_root" ] && [ -r "$scan_root" ] || {
   printf '%s\n' 'apisix.discovery.scan-root-unavailable' >&2
-  exit 74
+  exit 2
 }
 command -v find >/dev/null 2>&1 || {
   printf '%s\n' 'apisix.discovery.find-unavailable' >&2
-  exit 73
+  exit 3
 }
 
 # Process observations are optional, and never printed as raw command lines.
@@ -1271,12 +1271,12 @@ rsudo_mod_apisix_discovery()
 (
   [ "$#" -le 1 ] || {
     log error apisix discovery-invalid-arguments count "$#"
-    exit 71
+    exit 1
   }
   scan_root=${1:-/}
   case "$scan_root" in
     /*) : ;;
-    *) log error apisix discovery-invalid-scan-root; exit 72 ;;
+    *) log error apisix discovery-invalid-scan-root; exit 2 ;;
   esac
   RSUDO_INTERACTIVE=
   _rsudo_mod_apisix_discovery_host_source | rsudo sh -s -- "$scan_root"
@@ -1292,7 +1292,7 @@ _rsudo_mod_apisix_selected_adapter()
     standalone-file-yaml) printf '%s\n' file-yaml ;;
     standalone-file-json) printf '%s\n' file-json ;;
     no-admin-data-plane) printf '%s\n' none ;;
-    *) return 80 ;;
+    *) return 1 ;;
   esac
 }
 
@@ -1300,7 +1300,7 @@ _rsudo_mod_apisix_selected_adapter()
 # probes, credential acquisition or modifications. Never print secret values.
 rsudo_mod_apisix_context()
 (
-  [ "$#" -eq 0 ] || { log error apisix context-invalid-arguments; exit 75; }
+  [ "$#" -eq 0 ] || { log error apisix context-invalid-arguments; exit 1; }
   scope=${RSUDO_APISIX_SCOPE-}
   deployment=${RSUDO_APISIX_DEPLOYMENT-}
   home=${RSUDO_APISIX_HOME-}
@@ -1310,50 +1310,50 @@ rsudo_mod_apisix_context()
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   case "$scope" in
     host|docker|podman) : ;;
-    *) log error apisix context-invalid-scope; exit 76 ;;
+    *) log error apisix context-invalid-scope; exit 2 ;;
   esac
   adapter=$(_rsudo_mod_apisix_selected_adapter "$deployment") || {
     log error apisix context-unsupported-deployment
-    exit 80
+    exit 3
   }
   if [ -n "$home" ]
   then
     case "$home" in
       /*) : ;;
-      *) log error apisix context-invalid-home; exit 77 ;;
+      *) log error apisix context-invalid-home; exit 4 ;;
     esac
   fi
   if [ "$scope" = host ]
   then
     [ -z "$container" ] || {
       log error apisix context-container-on-host
-      exit 78
+      exit 5
     }
   else
     case "$container" in
-      *[!0123456789abcdef]*) log error apisix context-invalid-container-id; exit 78 ;;
+      *[!0123456789abcdef]*) log error apisix context-invalid-container-id-characters; exit 6 ;;
     esac
     [ "${#container}" -eq 64 ] || {
-      log error apisix context-invalid-container-id
-      exit 78
+      log error apisix context-invalid-container-id-length
+      exit 7
     }
   fi
   if [ "$adapter" = file-yaml ] || [ "$adapter" = file-json ]
   then
     case "$data_file" in
       /*) : ;;
-      *) log error apisix context-data-file-required; exit 79 ;;
+      *) log error apisix context-data-file-required; exit 8 ;;
     esac
   fi
   if [ "$adapter" = rest ] || [ "$adapter" = snapshot ]
   then
     case "$admin_url" in
       http://*|https://*) : ;;
-      *) log error apisix context-admin-url-required; exit 79 ;;
+      *) log error apisix context-admin-url-required; exit 9 ;;
     esac
     case "$header_file" in
       /*) : ;;
-      *) log error apisix context-header-file-required; exit 79 ;;
+      *) log error apisix context-header-file-required; exit 10 ;;
     esac
   fi
   # Never let a newline or tab in any displayed operator value forge a field.
@@ -1363,7 +1363,7 @@ rsudo_mod_apisix_context()
   for value in "$home" "$data_file" "$admin_url" "$header_file"
   do
     case "$value" in
-      *"$newline"*|*"$tab"*) log error apisix context-invalid-field; exit 81 ;;
+      *"$newline"*|*"$tab"*) log error apisix context-invalid-field; exit 11 ;;
     esac
   done
   printf 'selection=operator-supplied-unverified\nscope=%s\ndeployment=%s\nadapter=%s\n' \
