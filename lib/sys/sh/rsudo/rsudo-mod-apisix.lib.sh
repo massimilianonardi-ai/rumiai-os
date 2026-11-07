@@ -1188,3 +1188,96 @@ curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
   --url "$url"
 RSUDO_APISIX_ADMIN_READ_REMOTE
 )
+
+# Operator-facing, read-only inventory. This first increment covers the host
+# filesystem and process list, without selecting an APISIX instance.
+_rsudo_mod_apisix_discovery_host_source()
+{
+  cat <<'RSUDO_APISIX_DISCOVERY_HOST_REMOTE'
+scan_root=$1
+case "$scan_root" in
+  /*) : ;;
+  *) printf '%s\n' 'apisix.discovery.invalid-scan-root' >&2; exit 72 ;;
+esac
+[ -d "$scan_root" ] && [ -r "$scan_root" ] || {
+  printf '%s\n' 'apisix.discovery.scan-root-unavailable' >&2
+  exit 74
+}
+command -v find >/dev/null 2>&1 || {
+  printf '%s\n' 'apisix.discovery.find-unavailable' >&2
+  exit 73
+}
+
+# Process observations are optional, and never printed as raw command lines.
+ps_snapshot=
+if command -v ps >/dev/null 2>&1
+then
+  ps_snapshot=$(ps -eo pid=,args= 2>/dev/null) || ps_snapshot=
+fi
+printf 'kind\tscope\tstate\tidentifier\tevidence\n'
+printf '%s\n' "$ps_snapshot" | awk '
+  /nginx: master process/ && /apisix/ {
+    pid=$1
+    if (pid ~ /^[0-9]+$/)
+      printf "process\thost\tprocess-candidate\t%s\tps-master-args\n", pid
+  }
+'
+
+# Best-effort filesystem scan; separate container discovery is a later phase.
+find "$scan_root" \
+  \( -type d \( -path /proc -o -path /sys -o -path /dev \
+       -o -path /run -o -path /var/lib/docker \
+       -o -path /var/lib/containers \) -prune \) -o \
+  \( -type f \( -name config.yaml -o -name 'config-*.yaml' \
+       -o -name apisix.yaml -o -name apisix.json \) -print \) \
+  2>/dev/null |
+while IFS= read -r file
+do
+  case "$file" in
+    */conf/config.yaml|*/conf/config-*.yaml|*/conf/apisix.yaml|*/conf/apisix.json) : ;;
+    *) continue ;;
+  esac
+  newline='
+'
+  tab=$(printf '\t')
+  case "$file" in *"$tab"*|*"$newline"*) continue ;; esac
+  home=\${file%/conf/*}
+  [ "$home" != "$file" ] || continue
+  # Ignore unrelated config.yaml files unless installation evidence exists.
+  if [ ! -f "$home/bin/apisix" ] &&
+     [ ! -f "$home/conf/config-default.yaml" ] &&
+     [ ! -f "$home/conf/nginx.conf" ]
+  then
+    case "$home" in */apisix|*/apache-apisix) : ;; *) continue ;; esac
+  fi
+  state=configured-only
+  evidence=find-apisix-config
+  if [ -n "$ps_snapshot" ] &&
+     printf '%s\n' "$ps_snapshot" |
+       grep -F 'nginx: master process' |
+       grep -F -e "$home" >/dev/null 2>&1
+  then
+    state=process-prefix-candidate
+    evidence=find-and-ps-prefix
+  fi
+  printf 'config\thost\t%s\t%s\t%s\n' "$state" "$file" "$evidence"
+done
+RSUDO_APISIX_DISCOVERY_HOST_REMOTE
+}
+
+# First milestone: return multiple candidates, never require uniqueness.
+# A single optional absolute argument limits the remote filesystem scan.
+rsudo_mod_apisix_discovery()
+(
+  [ "$#" -le 1 ] || {
+    log error apisix discovery-invalid-arguments count "$#"
+    exit 71
+  }
+  scan_root=\${1:-/}
+  case "$scan_root" in
+    /*) : ;;
+    *) log error apisix discovery-invalid-scan-root; exit 72 ;;
+  esac
+  RSUDO_INTERACTIVE=
+  _rsudo_mod_apisix_discovery_host_source | rsudo sh -s -- "$scan_root"
+)
