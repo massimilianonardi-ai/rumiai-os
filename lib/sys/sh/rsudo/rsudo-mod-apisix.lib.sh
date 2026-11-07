@@ -1262,6 +1262,105 @@ do
   fi
   printf 'config\thost\t%s\t%s\t%s\n' "$state" "$file" "$evidence"
 done
+
+# Container managers are optional. Inventory all known states, including
+# stopped containers; inspect running containers through a fixed read-only
+# shell program. Container IDs are validated before being used as operands.
+for manager in docker podman
+do
+  command -v "$manager" >/dev/null 2>&1 || continue
+  manager_scope=$manager
+  container_snapshot=$("$manager" ps -a --no-trunc \
+    --format '{{.ID}}|{{.Names}}|{{.State}}|{{.Image}}' 2>/dev/null)
+  manager_status=$?
+  if [ "$manager_status" -ne 0 ]
+  then
+    printf 'manager\t%s\tunavailable\t%s\tcontainer-list-failed\n' \
+      "$manager_scope" "$manager"
+    continue
+  fi
+  manager_incomplete=0
+  while IFS='|' read -r container_id container_name container_state container_image
+  do
+    [ -n "$container_id" ] || continue
+    case "$container_id" in
+      *[!0123456789abcdef]*|'')
+        manager_incomplete=1
+        continue
+      ;;
+    esac
+    [ "${#container_id}" -eq 64 ] || {
+      manager_incomplete=1
+      continue
+    }
+    candidate_hint=0
+    hint=$(printf '%s %s\n' "$container_name" "$container_image" |
+      LC_ALL=C tr '[:upper:]' '[:lower:]' 2>/dev/null)
+    case "$hint" in *apisix*) candidate_hint=1 ;; esac
+    case "$container_state" in
+      running) : ;;
+      *)
+        if [ "$candidate_hint" -eq 1 ]
+        then
+          printf 'container\t%s\t%s\t%s\tmanager-image-name-candidate\n' \
+            "$manager_scope" "$container_state" "$container_id"
+        fi
+        continue
+      ;;
+    esac
+
+    container_configs=$("$manager" exec -i "$container_id" sh -s 2>/dev/null <<'RSUDO_APISIX_CONTAINER_FIND'
+find / \( -path /proc -o -path /sys -o -path /dev -o -path /run \
+    -o -path /var/lib/docker -o -path /var/lib/containers \) -prune -o \
+  -type f \( -name config.yaml -o -name 'config-*.yaml' \
+    -o -name apisix.yaml -o -name apisix.json \) -print 2>/dev/null |
+while IFS= read -r path
+do
+  case "$path" in
+    */conf/config.yaml|*/conf/config-*.yaml|*/conf/apisix.yaml|*/conf/apisix.json)
+      printf '%s\n' "$path"
+    ;;
+  esac
+done
+RSUDO_APISIX_CONTAINER_FIND
+    )
+    container_status=$?
+    if [ "$container_status" -ne 0 ]
+    then
+      manager_incomplete=1
+      if [ "$candidate_hint" -eq 1 ]
+      then
+        printf 'container\t%s\tprobe-unavailable\t%s\tmanager-image-name-candidate\n' \
+          "$manager_scope" "$container_id"
+      fi
+      continue
+    fi
+    if [ -n "$container_configs" ]
+    then
+      printf 'container\t%s\trunning\t%s\tcontainer-config-candidate\n' \
+        "$manager_scope" "$container_id"
+      while IFS= read -r container_file
+      do
+        case "$container_file" in
+          *[[:space:]]*) manager_incomplete=1; continue ;;
+        esac
+        printf 'config\t%s\tconfigured-only\t%s:%s\t%s-exec-find\n' \
+          "$manager_scope" "$container_id" "$container_file" "$manager_scope"
+      done <<RSUDO_APISIX_CONTAINER_CONFIGS
+$container_configs
+RSUDO_APISIX_CONTAINER_CONFIGS
+    elif [ "$candidate_hint" -eq 1 ]
+    then
+      printf 'container\t%s\trunning-unverified\t%s\tmanager-image-name-candidate\n' \
+        "$manager_scope" "$container_id"
+    fi
+  done <<RSUDO_APISIX_CONTAINER_LIST
+$container_snapshot
+RSUDO_APISIX_CONTAINER_LIST
+  [ "$manager_incomplete" -eq 0 ] ||
+    printf 'manager\t%s\tpartial\t%s\tcontainer-probes-incomplete\n' \
+      "$manager_scope" "$manager"
+done
 RSUDO_APISIX_DISCOVERY_HOST_REMOTE
 }
 
