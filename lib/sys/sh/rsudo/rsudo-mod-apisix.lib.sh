@@ -1216,7 +1216,7 @@ then
 fi
 printf 'kind\tscope\tstate\tidentifier\tevidence\n'
 printf '%s\n' "$ps_snapshot" | awk '
-  /nginx: master process/ && /apisix/ {
+  /^[[:space:]]*[0-9]+[[:space:]]+nginx: master process/ && /apisix/ {
     pid=$1
     if (pid ~ /^[0-9]+$/)
       printf "process\thost\tprocess-candidate\t%s\tps-master-args\n", pid
@@ -1254,7 +1254,7 @@ do
   evidence=find-apisix-config
   if [ -n "$ps_snapshot" ] &&
      printf '%s\n' "$ps_snapshot" |
-       grep -F 'nginx: master process' |
+       grep -E '^[[:space:]]*[0-9]+[[:space:]]+nginx: master process' |
        grep -F -e "$home" >/dev/null 2>&1
   then
     state=process-prefix-candidate
