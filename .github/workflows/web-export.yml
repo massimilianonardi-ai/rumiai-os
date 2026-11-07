@@ -40,5 +40,6 @@ jobs:
           EOF
           chmod +x "$RUNNER_TEMP/web-export-bin/chromium"
           export PATH="$RUNNER_TEMP/web-export-bin:$PATH"
+          git remote set-url origin https://github.com/massimilianonardi-ai/rumiai-os.git
           export RUMIAI_TEST_RUMIAI_OS_ROOT="$GITHUB_WORKSPACE"
           sh ./.web-export-tests/tests/rumiai-os/web-export/web-export.test
