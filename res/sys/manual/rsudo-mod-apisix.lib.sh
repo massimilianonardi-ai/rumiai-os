@@ -16,12 +16,40 @@ LOADING
 DISPATCH
     rsudo apisix <operation> [operands...]
     rsudo apisix discovery [absolute-remote-scan-root]
+    rsudo apisix context
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
     rsudo apisix admin-read resource absolute-remote-header-file [remote-port]
 
 PUBLIC FUNCTIONS
+    rsudo_mod_apisix_context
+        Read-only, local inspection of the caller's EXPLICIT environment
+        selection; it performs no discovery, connection, authentication or
+        APISIX action. Current required variables:
+          RSUDO_APISIX_SCOPE = host | docker | podman
+          RSUDO_APISIX_DEPLOYMENT = traditional-admin | standalone-api |
+              standalone-file-yaml | standalone-file-json | no-admin-data-plane
+        For Docker/Podman, RSUDO_APISIX_CONTAINER_ID must be a complete
+        lowercase 64-hex container ID; it must be absent for host scope.
+        RSUDO_APISIX_HOME, when present, must be absolute.
+        For file-driven modes, RSUDO_APISIX_DATA_FILE must be absolute.
+        For traditional-admin and standalone-api, both
+        RSUDO_APISIX_ADMIN_URL (http(s) absolute URL) and
+        RSUDO_APISIX_HEADER_FILE (absolute protected remote-header pathname)
+        are required. These are operator declarations, not endpoint or
+        credential provenance proofs. The context returns
+        selection=operator-supplied-unverified, scope, deployment, adapter
+        (rest, snapshot, file-yaml, file-json, none), optional supplied
+        paths/IDs and credential-file configured/not-configured status.
+        It NEVER outputs the credential contents.
+        Invalid arguments 75, scope 76, home 77, container selector 78,
+        missing backend-specific parameters 79, unsupported deployment 80,
+        embedded control delimiters in fields 81.
+        The mapping is only a first adapter selector. Generic modern
+        list/get/create/update/delete remain unimplemented and are NOT
+        provided by invoking context.
+
     rsudo_mod_apisix_discovery [absolute-remote-scan-root]
         Read-only best-effort host inventory. The scan root defaults to / and
         must be an existing readable absolute directory. Its five-column
