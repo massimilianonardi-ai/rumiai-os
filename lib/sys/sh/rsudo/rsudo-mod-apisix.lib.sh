@@ -1343,6 +1343,22 @@ admin_listen_ports()
   ' "$1" 2>/dev/null
 }
 
+# Use the RumiAI json utility when it is installed on the remote target. Never
+# copy configuration contents back across rsudo merely to parse them locally.
+admin_listen_json_ports()
+{
+  command -v json >/dev/null 2>&1 || return 4
+  json --check "$1" >/dev/null 2>&1 || return 5
+  values=$(json -r '.deployment?.admin?.admin_listen?.ip?, .deployment?.admin?.admin_listen?.port?' "$1" 2>/dev/null) || return 5
+  bind_ip=$(printf '%s\n' "$values" | sed -n '1p')
+  port=$(printf '%s\n' "$values" | sed -n '2p')
+  case "$bind_ip:$port" in null:null|:) return 0 ;; esac
+  case "$bind_ip" in ''|*[!0123456789.]*|.*|*..*|*.) return 5 ;; esac
+  case "$port" in ''|*[!0123456789]*) return 5 ;; esac
+  [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || return 5
+  printf '%s|%s\n' "$bind_ip" "$port"
+}
+
 probe_admin_listener()
 {
   config_file=$1
@@ -1422,8 +1438,19 @@ do
     evidence=find-and-ps-prefix
   fi
   printf 'config\thost\t%s\t%s\t%s\n' "$state" "$file" "$evidence"
-  case "$file" in *.yaml)
-    admin_endpoints=$(admin_listen_ports "$file")
+  case "$file" in *.yaml|*.json)
+    case "$file" in
+      *.yaml) admin_endpoints=$(admin_listen_ports "$file") ;;
+      *.json)
+        admin_endpoints=$(admin_listen_json_ports "$file")
+        json_status=$?
+        if [ "$json_status" -eq 4 ]; then
+          printf 'listener\thost\tparser-unavailable\t%s\tjson-command-missing\n' "$file"
+        elif [ "$json_status" -ne 0 ]; then
+          printf 'listener\thost\tparse-failed\t%s\tjson-invalid-or-unsupported\n' "$file"
+        fi
+      ;;
+    esac
     while IFS='|' read -r bind_ip admin_port
     do
       [ -n "$bind_ip" ] && [ -n "$admin_port" ] || continue
@@ -1434,7 +1461,7 @@ RSUDO_APISIX_ADMIN_ENDPOINTS
   ;; esac
 done
 
-# Probe YAML admin_listen ports in the selected container's own network
+# Probe configured admin_listen ports in the selected container's own network
 # namespace. Both the container ID and path are positional data; the program
 # sent to the container remains static shell source.
 probe_container_admin_listeners()
@@ -1447,7 +1474,20 @@ probe_container_admin_listeners()
   "$manager" exec -i "$container_id" sh -s -- "$config_file" 2>/dev/null <<'RSUDO_APISIX_CONTAINER_LISTENER_PROBE'
 config_file=$1
 [ -f "$config_file" ] && [ -r "$config_file" ] && [ ! -L "$config_file" ] || exit 2
-endpoints=$(awk '
+case "$config_file" in
+  *.json)
+    command -v json >/dev/null 2>&1 || { printf '%s\n' 'parser-unavailable|||'; exit 0; }
+    json --check "$config_file" >/dev/null 2>&1 || { printf '%s\n' 'parse-failed|||'; exit 0; }
+    values=$(json -r '.deployment?.admin?.admin_listen?.ip?, .deployment?.admin?.admin_listen?.port?' "$config_file" 2>/dev/null) || { printf '%s\n' 'parse-failed|||'; exit 0; }
+    bind_ip=$(printf '%s\n' "$values" | sed -n '1p')
+    port=$(printf '%s\n' "$values" | sed -n '2p')
+    case "$bind_ip:$port" in null:null|:) exit 0 ;; esac
+    case "$bind_ip" in ''|*[!0123456789.]*|.*|*..*|*.) printf '%s\n' 'parse-failed|||'; exit 0 ;; esac
+    case "$port" in ''|*[!0123456789]*) printf '%s\n' 'parse-failed|||'; exit 0 ;; esac
+    [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || { printf '%s\n' 'parse-failed|||'; exit 0; }
+    endpoints=$(printf '%s|%s\n' "$bind_ip" "$port")
+  ;;
+  *) endpoints=$(awk '
   function indent(s,t) { t=s; sub(/[^ ].*$/, "", t); return length(t) }
   function emit() { if (ip ~ /^[0-9.]+$/ && port ~ /^[0-9]+$/) print ip "|" port; ip=""; port="" }
   /^[[:space:]]*#/ { next }
@@ -1470,8 +1510,14 @@ endpoints=$(awk '
   }
   END { if (active) emit() }
 ' "$config_file" 2>/dev/null) || exit 3
+  ;;
+esac
 while IFS='|' read -r bind_ip port
 do
+  case "$bind_ip" in parser-unavailable|parse-failed)
+    printf '%s|||\n' "$bind_ip"
+    continue
+  ;; esac
   [ -n "$bind_ip" ] && [ -n "$port" ] || continue
   case "$port" in ''|*[!0123456789]*) continue ;; esac
   [ "$port" -ge 1 ] 2>/dev/null && [ "$port" -le 65535 ] 2>/dev/null || continue
@@ -1611,7 +1657,7 @@ RSUDO_APISIX_CONTAINER_FIND
         esac
         printf 'config\t%s\tconfigured-only\t%s:%s\t%s-exec-find\n' \
           "$manager_scope" "$container_id" "$container_file" "$manager_scope"
-        case "$container_file" in *.yaml)
+        case "$container_file" in *.yaml|*.json)
           listener_results=$(probe_container_admin_listeners \
             "$manager" "$container_id" "$container_file")
           listener_status=$?
@@ -1624,6 +1670,12 @@ RSUDO_APISIX_CONTAINER_FIND
             while IFS='|' read -r probe_state probe_ip admin_port bind_ip
             do
               [ -n "$probe_state" ] || continue
+              case "$probe_state" in parser-unavailable|parse-failed)
+                manager_incomplete=1
+                printf 'listener\t%s\t%s\t%s:%s\t%s-json-parser-evidence\n' \
+                  "$manager_scope" "$probe_state" "$container_id" "$container_file" "$manager_scope"
+                continue
+              ;; esac
               printf 'listener\t%s\t%s\t%s:%s:%s\t%s-container-admin-listen-bind-%s-config:%s\n' \
                 "$manager_scope" "$probe_state" "$container_id" "$probe_ip" "$admin_port" \
                 "$manager_scope" "$bind_ip" "$container_file"
