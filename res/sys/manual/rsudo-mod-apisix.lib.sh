@@ -7,7 +7,8 @@ DESCRIPTION
     explicit traditional REST, standalone API snapshot, standalone JSON-file
     or standalone YAML-file adapter. REST create/update/delete mutations are
     currently host-scoped; unsupported backends fail without legacy fallback.
-    apply/request remain unimplemented. Host discovery and operator
+    apply remains unimplemented. Generic request is implemented only for the
+    explicit host traditional REST adapter. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
@@ -25,6 +26,7 @@ DISPATCH
     rsudo apisix create routes|services|upstreams < resource.json
     rsudo apisix update routes|services|upstreams id < resource.json
     rsudo apisix delete routes|services|upstreams id
+    rsudo apisix request relative-admin-path [GET|POST|PUT|DELETE]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
     rsudo apisix runtime [absolute-remote-apisix-home [full-docker-container-id]]
@@ -130,6 +132,21 @@ PUBLIC FUNCTIONS
         use 84-94.
         File, snapshot and other non-REST mutations remain unimplemented and
         never fall back to legacy.
+
+    rsudo_mod_apisix_request relative-admin-path [method]
+        Advanced request through the selected host-scoped traditional Admin
+        REST adapter. The path is relative to /apisix/admin, uses nonempty
+        slash-separated ASCII alphanumeric/dot/underscore/tilde/hyphen
+        segments, and cannot contain dot or dot-dot segments, query strings,
+        fragments, or a leading/trailing slash. Method defaults to GET; only
+        GET, POST, PUT and DELETE are accepted. POST/PUT read a JSON request
+        body from stdin; DELETE and GET send no body. It uses the same
+        protected header file and curl TLS/proxy/redirect controls as typed
+        REST operations. This intentionally exposes other Admin API endpoints
+        selected by the operator; APISIX enforces endpoint permissions and
+        schema. Local statuses 1-9 identify invalid arguments, path, method,
+        adapter, scope, Admin URL, authority, operator context and remote
+        source creation. No non-REST or legacy fallback is attempted.
 
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment

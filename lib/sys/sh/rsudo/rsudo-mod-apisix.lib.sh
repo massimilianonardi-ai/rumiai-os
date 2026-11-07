@@ -1847,7 +1847,19 @@ case "$authority" in
     exit 84
   ;;
 esac
-case "$resource" in routes|services|upstreams|configs) : ;; *) rest_transport_error unsupported-resource; exit 85 ;; esac
+case "$resource" in
+  ''|/*|*/|*//*|*[!a-zA-Z0-9._~/-]*) rest_transport_error invalid-resource-path; exit 85 ;;
+esac
+resource_path_check=$resource
+while [ -n "$resource_path_check" ]
+do
+  resource_path_segment=${resource_path_check%%/*}
+  case "$resource_path_segment" in .|..) rest_transport_error invalid-resource-path; exit 85 ;; esac
+  case "$resource_path_check" in
+    */*) resource_path_check=${resource_path_check#*/} ;;
+    *) resource_path_check= ;;
+  esac
+done
 case "$resource_id" in
   '') : ;;
   *[!a-zA-Z0-9._~-]*|.|..) rest_transport_error invalid-resource-id; exit 86 ;;
@@ -1968,6 +1980,59 @@ _rsudo_mod_apisix_rest_mutate()
   }
   rsudo sh -c "$remote_source" apisix \
     "$admin_url" "$header_file" "$resource" "$resource_id" "$method"
+)
+
+# Advanced Admin API request. The caller chooses a path beneath the fixed
+# /apisix/admin prefix and one supported HTTP method; paths cannot change host,
+# escape the prefix, or inject query/fragment data. POST/PUT bodies use stdin.
+_rsudo_mod_apisix_rest_request()
+(
+  case "$#" in
+    1) resource_path=$1; method=GET ;;
+    2) resource_path=$1; method=$2 ;;
+    *) log error apisix rest-request-invalid-arguments count "$#"; exit 1 ;;
+  esac
+  case "$resource_path" in
+    ''|/*|*/|*//*|*[!a-zA-Z0-9._~/-]*)
+      log error apisix rest-request-invalid-resource-path
+      exit 2
+    ;;
+  esac
+  resource_path_check=$resource_path
+  while [ -n "$resource_path_check" ]
+  do
+    resource_path_segment=${resource_path_check%%/*}
+    case "$resource_path_segment" in .|..) log error apisix rest-request-invalid-resource-path; exit 2 ;; esac
+    case "$resource_path_check" in
+      */*) resource_path_check=${resource_path_check#*/} ;;
+      *) resource_path_check= ;;
+    esac
+  done
+  case "$method" in GET|POST|PUT|DELETE) : ;; *) log error apisix rest-request-unsupported-method method "$method"; exit 3 ;; esac
+  context=$(rsudo_mod_apisix_context) || exit 8
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = rest ] || { log error apisix rest-request-adapter-unsupported adapter "$adapter"; exit 4; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  [ "$scope" = host ] || { log error apisix rest-request-scope-unsupported scope "$scope"; exit 5; }
+  admin_url=${RSUDO_APISIX_ADMIN_URL-}
+  header_file=${RSUDO_APISIX_HEADER_FILE-}
+  case "$admin_url" in
+    http://*|https://*) authority=${admin_url#*://} ;;
+    *) log error apisix rest-request-invalid-admin-url; exit 6 ;;
+  esac
+  case "$authority" in
+    ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
+      log error apisix rest-request-invalid-admin-authority
+      exit 7
+    ;;
+  esac
+  RSUDO_INTERACTIVE=
+  remote_source=$(_rsudo_mod_apisix_rest_transport_remote_source) || {
+    log error apisix rest-request-remote-source-failed
+    exit 9
+  }
+  rsudo sh -c "$remote_source" apisix \
+    "$admin_url" "$header_file" "$resource_path" '' "$method"
 )
 
 # The operator selects a JSON data file explicitly. Its bytes cross the remote
@@ -2342,4 +2407,4 @@ rsudo_mod_apisix_create() { _rsudo_mod_apisix_rest_mutate create "$@"; }
 rsudo_mod_apisix_update() { _rsudo_mod_apisix_rest_mutate update "$@"; }
 rsudo_mod_apisix_delete() { _rsudo_mod_apisix_rest_mutate delete "$@"; }
 rsudo_mod_apisix_apply() { _rsudo_mod_apisix_unimplemented_operation apply; }
-rsudo_mod_apisix_request() { _rsudo_mod_apisix_unimplemented_operation request; }
+rsudo_mod_apisix_request() { _rsudo_mod_apisix_rest_request "$@"; }
