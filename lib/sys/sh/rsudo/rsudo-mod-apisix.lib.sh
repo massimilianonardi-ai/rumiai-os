@@ -1843,7 +1843,7 @@ case "$authority" in
     exit 84
   ;;
 esac
-case "$resource" in routes|services|upstreams) : ;; *) rest_read_error unsupported-resource; exit 85 ;; esac
+case "$resource" in routes|services|upstreams|configs) : ;; *) rest_read_error unsupported-resource; exit 85 ;; esac
 case "$resource_id" in
   '') : ;;
   *[!a-zA-Z0-9._~-]*|.|..) rest_read_error invalid-resource-id; exit 86 ;;
@@ -1927,6 +1927,82 @@ case "$data_file" in /*) : ;; *) exit 80 ;; esac
 cat "$data_file"
 RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
+
+_rsudo_mod_apisix_snapshot_read()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    list:1) resource=$1; resource_id= ;;
+    get:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix snapshot-read-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix snapshot-read-unsupported-resource resource "$resource"; exit 2 ;; esac
+  if [ -n "$resource_id" ]; then
+    case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) log error apisix snapshot-read-invalid-resource-id; exit 3 ;; esac
+  fi
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = snapshot ] || { log error apisix snapshot-read-adapter-unsupported adapter "$adapter"; exit 4; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  [ "$scope" = host ] || { log error apisix snapshot-read-scope-unsupported scope "$scope"; exit 5; }
+  admin_url=${RSUDO_APISIX_ADMIN_URL-}
+  header_file=${RSUDO_APISIX_HEADER_FILE-}
+  case "$admin_url" in
+    http://*|https://*) authority=${admin_url#*://} ;;
+    *) log error apisix snapshot-read-invalid-admin-url; exit 6 ;;
+  esac
+  case "$authority" in
+    ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
+      log error apisix snapshot-read-invalid-admin-authority
+      exit 6
+    ;;
+  esac
+  command -v json >/dev/null 2>&1 || { log error apisix snapshot-read-json-unavailable; exit 8; }
+  umask 077
+  attempt=0
+  temp_dir=
+  temp_base=${TMPDIR:-/tmp}
+  case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+  while [ "$attempt" -lt 10 ]
+  do
+    candidate=$temp_base/rsudo-apisix-snapshot-$$-$attempt
+    if (umask 077; mkdir "$candidate") 2>/dev/null
+    then temp_dir=$candidate; break
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$temp_dir" ] || { log error apisix snapshot-read-temp-unavailable; exit 9; }
+  trap 'rm -f "$temp_dir/snapshot.json" "$temp_dir/items.jsonl" "$temp_dir/matches.jsonl"; rmdir "$temp_dir" 2>/dev/null' 0
+  _rsudo_mod_apisix_rest_read_remote_source |
+    rsudo sh -s -- "$admin_url" "$header_file" configs '' > "$temp_dir/snapshot.json"
+  remote_status=$?
+  [ "$remote_status" -eq 0 ] || { log error apisix snapshot-read-remote-failed status "$remote_status"; exit 10; }
+  json --check "$temp_dir/snapshot.json" >/dev/null 2>&1 || { log error apisix snapshot-read-invalid-json; exit 11; }
+  filter=.$resource'[]'
+  json -c "$filter" "$temp_dir/snapshot.json" > "$temp_dir/items.jsonl" 2>/dev/null || {
+    log error apisix snapshot-read-resource-query-failed resource "$resource"
+    exit 12
+  }
+  if [ -z "$resource_id" ]
+  then
+    cat "$temp_dir/items.jsonl"
+    exit "$?"
+  fi
+  : > "$temp_dir/matches.jsonl" || { log error apisix snapshot-read-temp-write-failed; exit 12; }
+  while IFS= read -r item
+  do
+    item_id=$(printf '%s\n' "$item" | json -r '.id?' 2>/dev/null) || {
+      log error apisix snapshot-read-resource-query-failed resource "$resource"
+      exit 12
+    }
+    [ "$item_id" = "$resource_id" ] && printf '%s\n' "$item" >> "$temp_dir/matches.jsonl"
+  done < "$temp_dir/items.jsonl"
+  [ -s "$temp_dir/matches.jsonl" ] || { log error apisix snapshot-read-resource-not-found resource "$resource"; exit 13; }
+  match_count=$(wc -l < "$temp_dir/matches.jsonl") || { log error apisix snapshot-read-temp-write-failed; exit 12; }
+  [ "$match_count" -eq 1 ] 2>/dev/null || { log error apisix snapshot-read-resource-ambiguous resource "$resource"; exit 14; }
+  cat "$temp_dir/matches.jsonl"
+)
 
 _rsudo_mod_apisix_json_file_read()
 (
@@ -2017,6 +2093,7 @@ _rsudo_mod_apisix_read_router()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   case "$adapter" in
     rest) _rsudo_mod_apisix_rest_read "$operation" "$@" ;;
+    snapshot) _rsudo_mod_apisix_snapshot_read "$operation" "$@" ;;
     file-json) _rsudo_mod_apisix_json_file_read "$operation" "$@" ;;
     *) log error apisix read-adapter-not-implemented adapter "$adapter"; exit 3 ;;
   esac
