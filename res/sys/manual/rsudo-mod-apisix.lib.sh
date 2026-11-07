@@ -87,9 +87,12 @@ PUBLIC FUNCTIONS
         conf/apisix.yaml and conf/apisix.json under plausible APISIX roots;
         it also emits candidate nginx master PIDs seen through ps and may
         correlate a configuration path to a matching process prefix. If
-        systemctl is available, loaded APISIX-named units and APISIX-named
-        service unit files are returned with manager state; this is a unit
-        name/state match, not process ownership proof. For YAML files, only
+        systemctl is available, loaded APISIX-matching units and APISIX-named
+        service unit files are returned with manager state. For an active
+        loaded unit, MainPID is compared with the observed APISIX nginx master
+        PID; matching cgroup evidence is added when readable. This is process
+        correlation only, not proof of loaded APISIX configuration. For YAML
+        files, only
         numeric ports nested beneath admin_listen are considered. A TCP probe
         is attempted with nc only for loopback/wildcard binds or an address
         confirmed local by ip; remote bind addresses are reported without
@@ -102,15 +105,16 @@ PUBLIC FUNCTIONS
         runtime identity, loaded source or write readiness.
         An unreadable subtree may be omitted. When Docker or Podman is
         available, discovery lists all containers and probes each running
-        container through a static read-only sh/find program. Matching stopped
-        containers are reported from manager image/name evidence; matching
+        container through a static read-only sh/find program. Stopped
+        containers are reported from manager image/name evidence or inspected
+        config-mount destinations; environment data is never inspected. Matching
         running containers with an unavailable probe remain visible. Rows
         identify manager scope and full container ID, with config paths
         qualified by that ID. Failed manager listings and incomplete probes
         produce uncertainty rows. This is best-effort: a stopped container
         whose image and name do not identify APISIX cannot be classified from
-        its filesystem, and mount sources or service-to-process ownership
-        are not correlated. JSON output and guaranteed exhaustive
+        its filesystem. Mount sources are not emitted, and service correlation
+        is limited to systemd MainPID/process evidence. JSON output and guaranteed exhaustive
         detection are NOT implemented. Discovery
         never chooses an instance or modifies the user's environment.
         Local argument count 1, relative root 2; in the remote scan,
