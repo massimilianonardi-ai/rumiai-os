@@ -65,6 +65,18 @@ const observeExpression = String.raw`(() => {
     }
     return segments.join(' > ');
   };
+  const identifyScrollContainer = element => {
+    if (!element || element.getRootNode() !== document) return null;
+    const segments = [];
+    for (let node = element; node && node.nodeType === 1; node = node.parentElement) {
+      let nth = 1;
+      for (let sibling = node.previousElementSibling; sibling; sibling = sibling.previousElementSibling)
+        if (sibling.localName === node.localName) nth++;
+      segments.unshift(node.localName + ':nth-of-type(' + nth + ')');
+      if (node === document.documentElement) return segments.join(' > ');
+    }
+    return null;
+  };
   const controls = Array.from(document.querySelectorAll(
     'a,button,input,select,textarea,summary,[role="button"],[role="link"],[role="tab"],[contenteditable="true"],[tabindex]'))
     .slice(0, ${LIMIT.controls}).map(node => ({
@@ -99,6 +111,16 @@ const observeExpression = String.raw`(() => {
     }
   }
   frameworks.reactComponentNames = Array.from(names).sort();
+  const scrollPositions = [];
+  let scrollPositionsTruncated = false;
+  const scrollNodes = [document.scrollingElement, ...Array.from(document.querySelectorAll('*'))];
+  for (const node of scrollNodes) {
+    if (!node || (Math.abs(node.scrollTop) < 1 && Math.abs(node.scrollLeft) < 1)) continue;
+    const selector = identifyScrollContainer(node);
+    if (!selector) continue;
+    if (scrollPositions.length >= 256) {scrollPositionsTruncated = true; break;}
+    scrollPositions.push({selector, top: node.scrollTop, left: node.scrollLeft});
+  }
   return {url: location.href, title: document.title, readyState: document.readyState,
     capturedAt: new Date().toISOString(),
     headings: Array.from(document.querySelectorAll('h1,h2,h3,[role="heading"]')).slice(0, 200)
@@ -107,6 +129,7 @@ const observeExpression = String.raw`(() => {
     text: document.body?.innerText.slice(0, ${LIMIT.text}) || '',
     documentHeight: document.scrollingElement?.scrollHeight || 0,
     viewportHeight: window.innerHeight,
+    scrollPositions, scrollPositionsTruncated,
     truncated: {html: (document.documentElement?.outerHTML.length || 0) > ${LIMIT.html},
       text: (document.body?.innerText.length || 0) > ${LIMIT.text},
       controls: document.querySelectorAll('a,button,input,select,textarea,summary,[role="button"],[role="link"],[role="tab"],[contenteditable="true"],[tabindex]').length > ${LIMIT.controls}}
@@ -228,7 +251,9 @@ async function saveRestDom(session, directory, stage, state, warnings)
     save(path.join(directory, filename), html);
     save(path.join(directory, `dom-rest-${stage}.json`),
       {state: state.step, capturedAt: new Date().toISOString(), url: state.url,
-        settlement: state.settlement, htmlBytes: Buffer.byteLength(html, 'utf8')});
+        settlement: state.settlement, htmlBytes: Buffer.byteLength(html, 'utf8'),
+        scrollPositions: state.scrollPositions || [],
+        scrollPositionsTruncated: !!state.scrollPositionsTruncated});
   }
   catch (error)
   {

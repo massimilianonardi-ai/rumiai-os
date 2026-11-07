@@ -1,0 +1,84 @@
+NAME
+    web-export - create a standalone offline HTML snapshot of a web page
+
+SYNOPSIS
+    web-export <http(s)-url> <export-directory>
+
+DESCRIPTION
+    Captures the rendered page with the web-analyze Chromium/CDP recorder,
+    including its bounded passive scroll sweep, and writes a local export.
+    The export directory must not already exist. Its parent is created when
+    needed. The result can be opened directly as index.html; it does not need
+    a local HTTP server or network access.
+
+    The exporter uses only resource bodies whose archived size and SHA-256
+    match the recorder index. It rewrites captured visual resources to local
+    files under assets/. A stylesheet body unavailable from HTTP may use a
+    saved CSSOM stylesheet source, identified as cssom-source in manifest.json;
+    this is not represented as the original HTTP response body. Non-success
+    HTTP errors/redirects, empty non-stylesheet bodies and digest/size
+    mismatches are rejected. References without a verified local source are
+    removed and counted. Non-HTTP(S) subresource schemes are removed, except
+    for embedded data values and document fragments.
+
+    Page scripts, frames, embedded objects, external form submission and
+    browser event handlers and hyperlink ping notifications are removed or
+    disabled. If the capture contains non-zero document or nested scroll
+    offsets, a generated inline helper restores those offsets after load. Its
+    SHA-256 content hash is the only script source allowed by the restrictive
+    policy; site scripts remain removed. Helper presence is listed in
+    manifest.json. The result preserves the rendered DOM, captured scroll position and local visual
+    resources; it is an offline snapshot, not a running copy of the site's
+    application. Actions that depend on a backend, API, login session, script
+    or removed frame do not work offline. Normal hyperlinks remain links to
+    their original destinations when clicked.
+
+    The source page and captured assets can contain private content. The
+    output directory and temporary capture use restrictive permissions.
+    Temporary raw capture data is removed after conversion.
+
+OPERANDS
+    http(s)-url       Required absolute HTTP or HTTPS URL.
+    export-directory  New destination directory. Existing paths are refused
+                      to avoid replacing user data.
+
+OUTPUT
+    Prints the absolute path to index.html on stdout. Diagnostics go to stderr.
+
+    export-directory/
+      index.html       Rendered offline page with a no-network content policy
+      manifest.json    Asset digests, coverage counts and explicit limitations
+      assets/          Verified local images, fonts, media and rewritten CSS
+
+EXIT STATUS
+    0   Export completed. Check manifest.json for omitted resources.
+    1   m_ROOT is missing.
+    2   m_LIB_DIR is missing.
+    3   Invalid operands.
+    4   Invalid URL.
+    5   Unsupported URL scheme.
+    6   Export parent directory could not be created.
+    7   Export destination could not be created or already exists.
+    8   Browser capture failed.
+    9   Capture directory was not reported.
+    10  Resource index is unavailable.
+    11  Resource index is invalid.
+    12  Rendered DOM is unavailable.
+    13  Rendered DOM is empty.
+    14  Verified visual assets exceed the 512 MiB limit.
+    15  Rendered HTML exceeds the 32 MiB limit.
+    16  Chromium could not perform the offline transformation.
+    17  Chromium returned no transformed page.
+    18  Chromium returned an invalid transformed result.
+    19  Private temporary capture data could not be removed.
+    20  An unexpected export failure occurred.
+
+ENVIRONMENT AND FILES
+    Requires an initialized m environment with Node.js, Chromium and the
+    web-analyze command/library installed. Run as `m web-export ...` from a
+    clean shell.
+
+    Uses a temporary private web-analyze capture and a temporary isolated
+    Chromium profile. Only the export directory is retained. This command
+    does not modify the source page, authenticate, click controls, submit
+    forms or bypass access challenges.
