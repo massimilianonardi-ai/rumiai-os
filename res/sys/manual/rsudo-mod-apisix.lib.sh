@@ -41,7 +41,7 @@ PUBLIC FUNCTIONS
         credential provenance proofs. The context returns
         selection=operator-supplied-unverified, scope, deployment, adapter
         (rest, snapshot, file-yaml, file-json, none), optional supplied
-        paths/IDs and credential-file configured/not-configured status.
+        paths/IDs, plus Admin-URL and credential-file configured/not-configured statuses; the URL itself is not printed.
         It NEVER outputs the credential contents.
         Invalid arguments 75, scope 76, home 77, container selector 78,
         missing backend-specific parameters 79, unsupported deployment 80,
