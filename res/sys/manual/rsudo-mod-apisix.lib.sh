@@ -107,7 +107,8 @@ PUBLIC FUNCTIONS
         available, discovery lists all containers and probes each running
         container through a static read-only sh/find program. Stopped
         containers are reported from manager image/name evidence or inspected
-        config-mount destinations; environment data is never inspected. Matching
+        config-mount source/destination paths; environment data is never
+        inspected. Matching
         running containers with an unavailable probe remain visible. Rows
         identify manager scope and full container ID, with config paths
         qualified by that ID. Failed manager listings and incomplete probes
