@@ -43,9 +43,10 @@ PUBLIC FUNCTIONS
         (rest, snapshot, file-yaml, file-json, none), optional supplied
         paths/IDs, plus Admin-URL and credential-file configured/not-configured statuses; the URL itself is not printed.
         It NEVER outputs the credential contents.
-        Invalid arguments 75, scope 76, home 77, container selector 78,
-        missing backend-specific parameters 79, unsupported deployment 80,
-        embedded control delimiters in fields 81.
+        Invalid arguments 1, scope 2, unsupported deployment 3,
+        home 4, container on host 5, container ID characters 6,
+        container ID length 7, missing data path 8, Admin URL 9,
+        credential-header path 10, embedded field delimiters 11.
         The mapping is only a first adapter selector. Generic modern
         list/get/create/update/delete remain unimplemented and are NOT
         provided by invoking context.
@@ -67,8 +68,9 @@ PUBLIC FUNCTIONS
         correlation, listener probes, JSON output and guaranteed exhaustive
         detection are NOT implemented in this first increment. Discovery
         never chooses an instance or modifies the user's environment.
-        Argument count 71, relative root 72, missing find 73, unavailable
-        scan root 74; remote transport errors propagate independently.
+        Local argument count 1, relative root 2; in the remote scan,
+        invalid root 1, unavailable root 2, missing find 3. Remote rsudo
+        execution status is preserved as a transparent transport result.
 
     rsudo_mod_apisix_admin_read resource absolute-remote-header-file [remote-port]
         Advanced, read-only Admin API request to remote 127.0.0.1 on the
