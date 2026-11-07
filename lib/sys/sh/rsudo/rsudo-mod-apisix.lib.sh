@@ -1379,3 +1379,125 @@ rsudo_mod_apisix_context()
     printf 'credential_file=not-configured\n'
   fi
 )
+
+# Static remote read transport. Caller values remain positional data; the
+# Admin key is read only by curl from a pre-provisioned protected file.
+_rsudo_mod_apisix_rest_read_remote_source()
+{
+  cat <<'RSUDO_APISIX_REST_READ_REMOTE'
+admin_url=$1
+header_file=$2
+resource=$3
+resource_id=$4
+
+rest_read_error()
+{
+  printf 'apisix.rest-read.%s\n' "$1" >&2
+}
+
+case "$admin_url" in
+  http://*|https://*) : ;;
+  *) rest_read_error invalid-admin-url; exit 84 ;;
+esac
+authority=${admin_url#*://}
+case "$authority" in
+  ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
+    rest_read_error invalid-admin-authority
+    exit 84
+  ;;
+esac
+case "$resource" in routes|services|upstreams) : ;; *) rest_read_error unsupported-resource; exit 85 ;; esac
+case "$resource_id" in
+  '') : ;;
+  *[!a-zA-Z0-9._~-]*|.|..) rest_read_error invalid-resource-id; exit 86 ;;
+esac
+case "$header_file" in /*) : ;; *) rest_read_error invalid-header-path; exit 87 ;; esac
+[ -f "$header_file" ] && [ -r "$header_file" ] && [ ! -L "$header_file" ] || {
+  rest_read_error header-unavailable
+  exit 88
+}
+mode=$(LC_ALL=C ls -ld "$header_file" 2>/dev/null) || {
+  rest_read_error header-mode-unavailable
+  exit 89
+}
+mode=${mode%% *}
+case "$mode" in ????------) : ;; *) rest_read_error header-mode-insecure; exit 90 ;; esac
+[ "$(wc -l < "$header_file")" -eq 1 ] 2>/dev/null || {
+  rest_read_error header-invalid
+  exit 91
+}
+IFS= read -r header < "$header_file" || { rest_read_error header-invalid; exit 91; }
+case "$header" in 'X-API-KEY: '?*) : ;; *) rest_read_error header-invalid; exit 91 ;; esac
+expected=$(printf '%s\n' "$header" | wc -c) || exit 91
+actual=$(wc -c < "$header_file") || exit 91
+[ "$expected" -eq "$actual" ] 2>/dev/null || { rest_read_error header-invalid; exit 91; }
+key=${header#X-API-KEY: }
+case "$key" in ''|*[![:graph:]]*) rest_read_error header-invalid; exit 91 ;; esac
+unset header key mode
+command -v curl >/dev/null 2>&1 || { rest_read_error curl-unavailable; exit 92; }
+url=$admin_url/apisix/admin/$resource
+[ -z "$resource_id" ] || url=$url/$resource_id
+curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
+  --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 \
+  --header "@$header_file" --header 'Accept: application/json' --url "$url"
+RSUDO_APISIX_REST_READ_REMOTE
+}
+
+_rsudo_mod_apisix_rest_read()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    list:1) resource=$1; resource_id= ;;
+    get:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix rest-read-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix rest-read-unsupported-resource resource "$resource"; exit 2 ;; esac
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = rest ] || { log error apisix rest-read-adapter-unsupported adapter "$adapter"; exit 3; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  [ "$scope" = host ] || { log error apisix rest-read-scope-unsupported scope "$scope"; exit 4; }
+  admin_url=${RSUDO_APISIX_ADMIN_URL-}
+  header_file=${RSUDO_APISIX_HEADER_FILE-}
+  # rsudo may record command arguments. Validate the URL locally before it is
+  # passed as positional data so credentials can never hide in URL userinfo.
+  case "$admin_url" in
+    http://*|https://*) authority=${admin_url#*://} ;;
+    *) log error apisix rest-read-invalid-admin-url; exit 5 ;;
+  esac
+  case "$authority" in
+    ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
+      log error apisix rest-read-invalid-admin-authority
+      exit 5
+    ;;
+  esac
+  RSUDO_INTERACTIVE=
+  _rsudo_mod_apisix_rest_read_remote_source |
+    rsudo sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id"
+)
+
+rsudo_mod_apisix_list()
+{
+  _rsudo_mod_apisix_rest_read list "$@"
+}
+
+rsudo_mod_apisix_get()
+{
+  _rsudo_mod_apisix_rest_read get "$@"
+}
+
+_rsudo_mod_apisix_unimplemented_operation()
+(
+  operation=$1
+  log error apisix operation-backend-not-implemented operation "$operation"
+  exit 1
+)
+
+# Generic mutating verbs are reserved for the new router. Until a backend is
+# implemented they fail explicitly; they never fall through to legacy.
+rsudo_mod_apisix_create() { _rsudo_mod_apisix_unimplemented_operation create; }
+rsudo_mod_apisix_update() { _rsudo_mod_apisix_unimplemented_operation update; }
+rsudo_mod_apisix_delete() { _rsudo_mod_apisix_unimplemented_operation delete; }
+rsudo_mod_apisix_apply() { _rsudo_mod_apisix_unimplemented_operation apply; }
+rsudo_mod_apisix_request() { _rsudo_mod_apisix_unimplemented_operation request; }
