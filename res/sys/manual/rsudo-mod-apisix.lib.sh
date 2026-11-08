@@ -159,9 +159,11 @@ PUBLIC FUNCTIONS
         APISIX resource schema or prove reload; APISIX may reject the new file
         while retaining its previous configuration. YAML-file resource-level
         mutations remain unsupported and never fall back to legacy.
-        For standalone API snapshots, the same CRUD verbs are host-only and
-        require absolute RSUDO_APISIX_HOME in addition to the Admin URL and
-        protected header file. The selected installation must provide LuaJIT,
+        For standalone API snapshots, the same CRUD verbs support an explicit
+        host target or selected Docker/Podman container ID. In container scope,
+        RSUDO_APISIX_ADMIN_URL, RSUDO_APISIX_HEADER_FILE and absolute
+        RSUDO_APISIX_HOME refer to paths and loopback inside that container.
+        The selected installation must provide LuaJIT,
         cjson.safe with array metatables, curl and OpenSSL. The adapter GETs
         the complete `/apisix/admin/configs` snapshot, edits only the selected
         routes/services/upstreams array, increments that collection's

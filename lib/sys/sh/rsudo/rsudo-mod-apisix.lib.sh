@@ -2336,7 +2336,15 @@ _rsudo_mod_apisix_snapshot_mutate()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = snapshot ] || { log error apisix snapshot-mutate-adapter-unsupported adapter "$adapter"; exit 4; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix snapshot-mutate-scope-unsupported scope "$scope"; exit 5; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
+  case "$scope" in
+    host) : ;;
+    docker|podman)
+      case "$container" in *[!0123456789abcdef]*|'') log error apisix snapshot-mutate-invalid-container-id; exit 5 ;; esac
+      [ "${#container}" -eq 64 ] || { log error apisix snapshot-mutate-invalid-container-id; exit 5; }
+    ;;
+    *) log error apisix snapshot-mutate-scope-unsupported scope "$scope"; exit 5 ;;
+  esac
   home=${RSUDO_APISIX_HOME-}
   case "$home" in /*) : ;; *) log error apisix snapshot-mutate-home-required; exit 6 ;; esac
   wait_ms=${RSUDO_APISIX_WAIT_MS-0}
@@ -2362,11 +2370,19 @@ _rsudo_mod_apisix_snapshot_mutate()
   fi
   remote_source=$(_rsudo_mod_apisix_snapshot_mutate_remote_source) || exit 12
   RSUDO_INTERACTIVE=
-  if [ "$operation" = delete ]; then
-    rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+  if [ "$scope" = host ]; then
+    if [ "$operation" = delete ]; then
+      rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+        "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms"
+    else
+      rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+        "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms" < "$document"
+    fi
+  elif [ "$operation" = delete ]; then
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
       "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms"
   else
-    rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
       "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms" < "$document"
   fi
 )
