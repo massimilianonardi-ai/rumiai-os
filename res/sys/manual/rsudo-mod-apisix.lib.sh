@@ -9,8 +9,9 @@ DESCRIPTION
     host-scoped; standalone-file-json supports these mutations for routes,
     services and upstreams. Other unsupported backends fail without legacy
     fallback.
-    apply publishes a complete JSON or YAML document only to an explicitly
-    selected standalone file target. Generic request is implemented only for the
+    apply publishes a complete JSON/YAML document to an explicitly selected
+    standalone file target, or a complete JSON snapshot to an explicitly selected
+    standalone API endpoint. Generic request is implemented only for the
     explicit host traditional REST adapter. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
@@ -30,6 +31,7 @@ DISPATCH
     rsudo apisix update routes|services|upstreams id < resource.json
     rsudo apisix delete routes|services|upstreams id
     rsudo apisix apply < complete-config.json|complete-config.yaml
+    rsudo apisix apply digest-token < complete-standalone-api-snapshot.json
     rsudo apisix request relative-admin-path [GET|POST|PUT|DELETE]
     rsudo apisix mode [remote-apisix-home [remote-config.yaml]]
     rsudo apisix inspect [remote-apisix-home [remote-config.yaml]]
@@ -56,9 +58,16 @@ PUBLIC FUNCTIONS
         local temporary directory (umask 077), validates it with RumiAI json
         and returns only the requested top-level resource array. `get` returns
         exactly one matching `id`; missing and duplicate IDs fail distinctly.
-        The snapshot is read-only and is not replaced or modified. The API
+        list/get snapshot reads are read-only. `apply digest-token` sends a
+        complete JSON snapshot via PUT /apisix/admin/configs, with the supplied
+        token sent as X-Digest. Set RSUDO_APISIX_WAIT_MS to an integer from 0
+        through 60000; default is 0. The snapshot must contain caller-managed
+        *_conf_version fields. The module does not calculate versions. HTTP
+        202 means accepted but not confirmed applied; a positive wait may return
+        200 after worker confirmation or 202 on timeout. This is not per-resource
+        editing. The API
         response does not certify that this endpoint belongs to a selected
-        process, and the adapter does not implement full-snapshot writes.
+        process.
         For standalone-file-json, select
         RSUDO_APISIX_DEPLOYMENT=standalone-file-json and an absolute
         RSUDO_APISIX_DATA_FILE; host, Docker and Podman scopes are supported
@@ -148,8 +157,8 @@ PUBLIC FUNCTIONS
         numeric values round-trip through APISIX cjson's Lua number model, so
         original number lexemes are not byte-preserved. It does not validate
         APISIX resource schema or prove reload; APISIX may reject the new file
-        while retaining its previous configuration. YAML-file,
-        snapshot and other non-REST mutations remain unsupported and never
+        while retaining its previous configuration. YAML-file and snapshot
+        resource-level mutations remain unsupported and never
         fall back to legacy.
         Router status 2 wraps invalid context and status 3 reports an adapter
         without CRUD support; adapter-specific functions then return their
@@ -163,9 +172,9 @@ PUBLIC FUNCTIONS
         failures 123-125. No resource
         body is placed in a command argument or diagnostic.
 
-    rsudo_mod_apisix_apply (reads a complete JSON or YAML configuration from stdin)
-        Publish one complete document only to the explicitly selected
-        standalone file adapter. For JSON, select
+    rsudo_mod_apisix_apply (reads a complete selected JSON or YAML configuration from stdin; standalone-api requires the X-Digest token operand)
+        Publish one complete document to the explicitly selected standalone
+        file adapter or full API snapshot adapter. For JSON files, select
         RSUDO_APISIX_DEPLOYMENT=standalone-file-json. The local RumiAI json
         command validates exactly one complete JSON value before transport.
         For YAML, select standalone-file-yaml and set absolute
@@ -183,8 +192,8 @@ PUBLIC FUNCTIONS
         file. `cp -p` preserves source ownership and mode where permitted.
         Success means the file was atomically replaced; it does not prove
         APISIX accepted the schema, resolved substitutions or reloaded it, or
-        that the selected file is loaded by a running instance. Other adapters
-        remain unsupported and never fall back to legacy.
+        that the selected file is loaded by a running instance. REST apply is
+        unsupported and never falls back to legacy.
         Router status 2 wraps invalid operator context and status 3 reports
         an unsupported adapter. The JSON adapter uses statuses 1-10 for
         arguments/context, adapter, path, scope/container, missing json,
@@ -200,6 +209,22 @@ PUBLIC FUNCTIONS
         #END, parser unavailability or invalid YAML. A stale lock left after
         an uncatchable interruption is not removed automatically; inspect it
         and confirm no writer is active before removing it.
+        For standalone API mode, select RSUDO_APISIX_DEPLOYMENT=standalone-api,
+        host scope, Admin URL and protected header file. Supply a digest token
+        operand and the complete JSON snapshot on stdin. The caller controls
+        all *_conf_version fields; no automatic version calculation occurs.
+        RSUDO_APISIX_WAIT_MS defaults to 0 and is limited to 60000. HTTP 202
+        means accepted but not confirmed applied; positive wait can return 200
+        after worker confirmation or 202 at timeout. HTTP 202 preserves its
+        response body and returns distinct status 97 (accepted, not confirmed);
+        HTTP 200/204 return zero. Remote status 96 means the private response
+        staging file could not be created; 98 reports response-file or
+        unexpected HTTP status failure. Snapshot statuses
+        1-12 cover arguments, digest, wait, context, adapter, scope, json,
+        temp storage, input, JSON validity, Admin URL and static-source setup;
+        remote transport/precondition statuses are 84-95; 96 is private
+        response staging failure, 97 is accepted but not confirmed, and 98 is
+        response-file or unexpected HTTP status failure.
 
     rsudo_mod_apisix_request relative-admin-path [method]
         Advanced request through the selected host-scoped traditional Admin

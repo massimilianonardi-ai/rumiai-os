@@ -1827,6 +1827,8 @@ header_file=$2
 resource=$3
 resource_id=$4
 method=${5:-GET}
+digest=${6-}
+wait_ms=${7-}
 
 rest_transport_error()
 {
@@ -1865,6 +1867,10 @@ case "$resource_id" in
   *[!a-zA-Z0-9._~-]*|.|..) rest_transport_error invalid-resource-id; exit 86 ;;
 esac
 case "$method" in GET|POST|PUT|DELETE) : ;; *) rest_transport_error unsupported-method; exit 93 ;; esac
+case "$digest" in *[![:graph:]]*) [ -z "$digest" ] || { rest_transport_error invalid-digest; exit 94; } ;; esac
+case "$wait_ms" in ''|*[!0-9]*) [ -z "$wait_ms" ] || { rest_transport_error invalid-wait; exit 95; } ;; esac
+case "$wait_ms" in 0|[1-9]*) : ;; *) [ -z "$wait_ms" ] || { rest_transport_error invalid-wait; exit 95; } ;; esac
+[ -z "$wait_ms" ] || [ "$wait_ms" -le 60000 ] 2>/dev/null || { rest_transport_error invalid-wait; exit 95; }
 case "$header_file" in /*) : ;; *) rest_transport_error invalid-header-path; exit 87 ;; esac
 [ -f "$header_file" ] && [ -r "$header_file" ] && [ ! -L "$header_file" ] || {
   rest_transport_error header-unavailable
@@ -1891,11 +1897,51 @@ unset header key mode
 command -v curl >/dev/null 2>&1 || { rest_transport_error curl-unavailable; exit 92; }
 url=$admin_url/apisix/admin/$resource
 [ -z "$resource_id" ] || url=$url/$resource_id
+if [ -n "$wait_ms" ] && [ "$method" = PUT ] && [ "$resource" = configs ]
+then
+  url=$url?wait=$wait_ms
+fi
+max_time=15
+if [ -n "$wait_ms" ] && [ "$method" = PUT ] && [ "$resource" = configs ]
+then
+  max_time=$((wait_ms / 1000 + 15))
+fi
 case "$method" in POST|PUT)
+  if [ "$method" = PUT ] && [ "$resource" = configs ] && [ -n "$digest" ]
+  then
+    umask 077
+    response_file=/tmp/rsudo-apisix-snapshot-response-$$
+    (set -C; : > "$response_file") 2>/dev/null || {
+      rest_transport_error response-temp-unavailable
+      exit 96
+    }
+    trap 'rm -f "$response_file"' 0
+    if http_status=$(curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
+      --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time "$max_time" \
+      --header "@$header_file" --header 'Accept: application/json' \
+      --header 'Content-Type: application/json' --header "X-Digest: $digest" \
+      --request PUT --data-binary @- --output "$response_file" \
+      --write-out '%{http_code}' --url "$url")
+    then
+      case "$http_status" in
+        200|204) cat "$response_file" || { rest_transport_error response-read-failed; exit 98; } ;;
+        202)
+          cat "$response_file" || { rest_transport_error response-read-failed; exit 98; }
+          exit 97
+        ;;
+        *) rest_transport_error unexpected-http-status; exit 98 ;;
+      esac
+    else
+      curl_status=$?
+      exit "$curl_status"
+    fi
+    exit 0
+  fi
   curl -q --silent --show-error --fail --noproxy '*' --proxy '' \
-    --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 \
+    --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time "$max_time" \
     --header "@$header_file" --header 'Accept: application/json' \
-    --header 'Content-Type: application/json' --request "$method" \
+    --header 'Content-Type: application/json' \
+    ${digest:+--header "X-Digest: $digest"} --request "$method" \
     --data-binary @- --url "$url"
 ;;
 *)
@@ -2033,6 +2079,69 @@ _rsudo_mod_apisix_rest_request()
   }
   rsudo sh -c "$remote_source" apisix \
     "$admin_url" "$header_file" "$resource_path" '' "$method"
+)
+
+# Publish a complete API-driven standalone snapshot. The caller owns resource
+# version fields and X-Digest; this adapter never derives versions from a
+# potentially stale prior read.
+_rsudo_mod_apisix_snapshot_apply()
+(
+  [ "$#" -le 1 ] || { log error apisix snapshot-apply-invalid-arguments; exit 1; }
+  digest=${1-}
+  wait_ms=${RSUDO_APISIX_WAIT_MS-0}
+  case "$digest" in
+    ''|*[![:graph:]]*) log error apisix snapshot-apply-invalid-digest; exit 2 ;;
+  esac
+  case "$wait_ms" in ''|*[!0-9]*) log error apisix snapshot-apply-invalid-wait; exit 3 ;; esac
+  case "$wait_ms" in 0|[1-9]*) : ;; *) log error apisix snapshot-apply-invalid-wait; exit 3 ;; esac
+  [ "$wait_ms" -le 60000 ] 2>/dev/null || { log error apisix snapshot-apply-invalid-wait; exit 3; }
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix snapshot-apply-invalid-context status "$context_status"
+    exit 4
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = snapshot ] || { log error apisix snapshot-apply-adapter-unsupported adapter "$adapter"; exit 5; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  [ "$scope" = host ] || { log error apisix snapshot-apply-scope-unsupported scope "$scope"; exit 6; }
+  command -v json >/dev/null 2>&1 || { log error apisix snapshot-apply-json-unavailable; exit 7; }
+  umask 077
+  temp_base=${TMPDIR:-/tmp}
+  case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+  attempt=0
+  temp_dir=
+  while [ "$attempt" -lt 10 ]
+  do
+    candidate=$temp_base/rsudo-apisix-snapshot-apply-$$-$attempt
+    if (umask 077; mkdir "$candidate") 2>/dev/null
+    then temp_dir=$candidate; break
+    fi
+    attempt=$((attempt + 1))
+  done
+  [ -n "$temp_dir" ] || { log error apisix snapshot-apply-temp-unavailable; exit 8; }
+  document=$temp_dir/configs.json
+  trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
+  cat > "$document" || { log error apisix snapshot-apply-input-read-failed; exit 9; }
+  json --check "$document" >/dev/null 2>&1 || { log error apisix snapshot-apply-invalid-json; exit 10; }
+  admin_url=${RSUDO_APISIX_ADMIN_URL-}
+  header_file=${RSUDO_APISIX_HEADER_FILE-}
+  case "$admin_url" in
+    http://*|https://*) authority=${admin_url#*://} ;;
+    *) log error apisix snapshot-apply-invalid-admin-url; exit 11 ;;
+  esac
+  case "$authority" in
+    ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*)
+      log error apisix snapshot-apply-invalid-admin-authority
+      exit 11
+    ;;
+  esac
+  remote_source=$(_rsudo_mod_apisix_rest_transport_remote_source) || {
+    log error apisix snapshot-apply-remote-source-failed
+    exit 12
+  }
+  RSUDO_INTERACTIVE=
+  rsudo sh -c "$remote_source" apisix \
+    "$admin_url" "$header_file" configs '' PUT "$digest" "$wait_ms" < "$document"
 )
 
 # The operator selects a JSON data file explicitly. Its bytes cross the remote
@@ -2907,6 +3016,7 @@ rsudo_mod_apisix_apply()
   case "$adapter" in
     file-json) _rsudo_mod_apisix_json_file_apply "$@" ;;
     file-yaml) _rsudo_mod_apisix_yaml_file_apply "$@" ;;
+    snapshot) _rsudo_mod_apisix_snapshot_apply "$@" ;;
     *) log error apisix apply-adapter-not-implemented adapter "$adapter"; exit 3 ;;
   esac
 )
