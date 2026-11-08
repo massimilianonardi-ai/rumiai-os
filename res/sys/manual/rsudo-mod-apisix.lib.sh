@@ -6,9 +6,11 @@ DESCRIPTION
     function names. The generic list/get entrypoints route internally to the
     explicit traditional REST, standalone API snapshot, standalone JSON-file
     or standalone YAML-file adapter. REST create/update/delete mutations are
-    currently host-scoped; unsupported backends fail without legacy fallback.
-    apply publishes a complete JSON document only to an explicitly selected
-    standalone-file-json target. Generic request is implemented only for the
+    host-scoped; standalone-file-json supports these mutations for routes,
+    services and upstreams. Other unsupported backends fail without legacy
+    fallback.
+    apply publishes a complete JSON or YAML document only to an explicitly
+    selected standalone file target. Generic request is implemented only for the
     explicit host traditional REST adapter. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
@@ -112,7 +114,7 @@ PUBLIC FUNCTIONS
     rsudo_mod_apisix_create resource   (reads JSON request body from stdin)
     rsudo_mod_apisix_update resource id (reads JSON request body from stdin)
     rsudo_mod_apisix_delete resource id
-        Mutate routes, services or upstreams only when
+        For traditional REST, mutate routes, services or upstreams only when
         RSUDO_APISIX_SCOPE=host and RSUDO_APISIX_DEPLOYMENT=traditional-admin
         are explicitly selected. REST also requires RSUDO_APISIX_ADMIN_URL
         (an http(s) origin) and RSUDO_APISIX_HEADER_FILE (an absolute remote
@@ -128,12 +130,38 @@ PUBLIC FUNCTIONS
         bodies are written to stdout. Delete is not forced: APISIX may reject
         a resource still in use. HTTPS verification remains enabled; proxy
         and redirect use are disabled. HTTP failures retain curl's non-zero
-        status, normally 22. Local statuses 1-9 cover invalid arguments,
+        status, normally 22. Local REST statuses 1-9 cover invalid arguments,
         resource, ID, adapter, scope, Admin URL, authority, invalid operator
         context and static remote-source creation. Remote precondition failures
         use 84-94.
-        File, snapshot and other non-REST mutations remain unimplemented and
-        never fall back to legacy.
+        For standalone JSON files, select
+        RSUDO_APISIX_DEPLOYMENT=standalone-file-json and set absolute
+        RSUDO_APISIX_HOME and RSUDO_APISIX_DATA_FILE. Host, Docker and Podman
+        scopes are supported with explicit container IDs. create reads one
+        complete resource object with a string or numeric `id`; update reads
+        a complete replacement object whose `id` must equal the selected ID;
+        delete takes only the ID. The implementation uses the selected
+        APISIX installation's LuaJIT/cjson.safe, preserves unrelated top-level
+        values and resource arrays, rejects invalid/ambiguous arrays or IDs,
+        and publishes through the same per-file lock and atomic replacement
+        used by `apply`. JSON whitespace and object-key order are normalized;
+        numeric values round-trip through APISIX cjson's Lua number model, so
+        original number lexemes are not byte-preserved. It does not validate
+        APISIX resource schema or prove reload; APISIX may reject the new file
+        while retaining its previous configuration. YAML-file,
+        snapshot and other non-REST mutations remain unsupported and never
+        fall back to legacy.
+        Router status 2 wraps invalid context and status 3 reports an adapter
+        without CRUD support; adapter-specific functions then return their
+        documented local statuses. File-JSON local statuses 1-13 identify
+        argument/resource/ID/context,
+        adapter/path/home/scope, json or temporary-storage availability,
+        input, JSON validation and static remote-source failures. Shared
+        remote publication failures use 80-91; parser/mutation preconditions
+        use 99-102, Lua mutation branches 103-120, YAML mutation status 121,
+        remote staging failure 122 and interpreter execution/unknown-status
+        failures 123-125. No resource
+        body is placed in a command argument or diagnostic.
 
     rsudo_mod_apisix_apply (reads a complete JSON or YAML configuration from stdin)
         Publish one complete document only to the explicitly selected
@@ -165,7 +193,8 @@ PUBLIC FUNCTIONS
         adapter, installation home, data path, scope and remote-source
         creation. Context failures include their original status in the
         diagnostic. Remote status 92 reports an
-        invalid publisher format; statuses 80-91 identify
+        invalid publisher format, status 98 an invalid internal publisher
+        mode; statuses 80-91 identify
         shared path/source/lock/staging/metadata/concurrency/publication
         failures; YAML additionally uses 93-97 for home, marker read, missing
         #END, parser unavailability or invalid YAML. A stale lock left after

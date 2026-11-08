@@ -2049,26 +2049,31 @@ cat "$data_file"
 RSUDO_APISIX_JSON_FILE_READ_REMOTE
 }
 
-# Publish one complete JSON or YAML document to the explicitly selected
-# standalone file. YAML is validated by that installation's LuaJIT/lyaml.
-# The sibling stage keeps the final rename on the same filesystem; the remote
-# lock coordinates this module's writers.
-_rsudo_mod_apisix_file_apply_remote_source()
+# Publish a complete JSON/YAML document or mutate one JSON resource in the
+# explicitly selected standalone file. The sibling stage keeps the final
+# rename on the same filesystem; the remote lock coordinates this module's
+# writers.
+_rsudo_mod_apisix_file_publish_remote_source()
 {
   cat <<'RSUDO_APISIX_FILE_APPLY_REMOTE'
 data_file=$1
 format=$2
 home=$3
-case "$data_file" in /*) : ;; *) printf '%s\n' apisix.json-file-apply.invalid-data-path >&2; exit 80 ;; esac
-case "$format" in json|yaml) : ;; *) printf '%s\n' apisix.file-apply.invalid-format >&2; exit 92 ;; esac
+mode=$4
+operation=$5
+resource=$6
+resource_id=$7
+case "$data_file" in /*) : ;; *) printf '%s\n' apisix.file-publish.invalid-data-path >&2; exit 80 ;; esac
+case "$format" in json|yaml) : ;; *) printf '%s\n' apisix.file-publish.invalid-format >&2; exit 92 ;; esac
+case "$mode" in apply|mutate) : ;; *) printf '%s\n' apisix.file-publish.invalid-mode >&2; exit 98 ;; esac
 [ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
-  printf '%s\n' apisix.json-file-apply.source-unavailable >&2
+  printf '%s\n' apisix.file-publish.source-unavailable >&2
   exit 81
 }
 lock_dir=$data_file.rsudo-lock
 if ! (umask 077; mkdir "$lock_dir") 2>/dev/null
 then
-  printf '%s\n' apisix.json-file-apply.lock-unavailable >&2
+  printf '%s\n' apisix.file-publish.lock-unavailable >&2
   exit 82
 fi
 temp_dir=
@@ -2084,34 +2089,38 @@ done
 if [ -z "$temp_dir" ]
 then
   rmdir "$lock_dir" 2>/dev/null || :
-  printf '%s\n' apisix.json-file-apply-temp-unavailable >&2
+  printf '%s\n' apisix.file-publish.temp-unavailable >&2
   exit 83
 fi
 body_file=$temp_dir/input.$format
 baseline_file=$temp_dir/baseline.json
 staged_file=$temp_dir/published.json
-cleanup_json_apply()
+cleanup_file_publish()
 {
   rm -f "$body_file" "$baseline_file" "$staged_file"
   rmdir "$temp_dir" 2>/dev/null || :
   rmdir "$lock_dir" 2>/dev/null || :
 }
-trap 'cleanup_json_apply' 0
+trap 'cleanup_file_publish' 0
 trap 'exit 129' 1
 trap 'exit 130' 2
 trap 'exit 131' 3
 trap 'exit 143' 15
 [ -f "$data_file" ] && [ -r "$data_file" ] && [ ! -L "$data_file" ] || {
-  printf '%s\n' apisix.json-file-apply.source-changed >&2
+  printf '%s\n' apisix.file-publish.source-changed >&2
   exit 81
 }
 initial_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
-  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  printf '%s\n' apisix.file-publish.metadata-unavailable >&2
   exit 84
 }
-cat > "$body_file" || { printf '%s\n' apisix.json-file-apply.body-stage-failed >&2; exit 85; }
-[ -s "$body_file" ] || { printf '%s\n' apisix.json-file-apply.empty-document >&2; exit 86; }
-if [ "$format" = yaml ]; then
+if [ "$mode:$operation" = mutate:delete ]; then
+  : > "$body_file" || { printf '%s\n' apisix.json-file-mutate.body-stage-failed >&2; exit 122; }
+else
+  cat > "$body_file" || { printf '%s\n' apisix.file-publish.body-stage-failed >&2; exit 85; }
+  [ -s "$body_file" ] || { printf '%s\n' apisix.file-publish.empty-document >&2; exit 86; }
+fi
+if [ "$mode" = apply ] && [ "$format" = yaml ]; then
   case "$home" in /*) : ;; *) printf '%s\n' apisix.yaml-file-apply.invalid-home >&2; exit 93 ;; esac
   last_line=$(tail -n 1 "$body_file" 2>/dev/null) || { printf '%s\n' apisix.yaml-file-apply.marker-read-failed >&2; exit 94; }
   [ "$last_line" = '#END' ] || { printf '%s\n' apisix.yaml-file-apply.end-marker-required >&2; exit 95; }
@@ -2145,11 +2154,11 @@ end
 ' || { printf '%s\n' apisix.yaml-file-apply.document-invalid >&2; exit 97; }
 fi
 cp -p "$data_file" "$baseline_file" || {
-  printf '%s\n' apisix.json-file-apply.baseline-copy-failed >&2
+  printf '%s\n' apisix.file-publish.baseline-copy-failed >&2
   exit 87
 }
 snapshot_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
-  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  printf '%s\n' apisix.file-publish.metadata-unavailable >&2
   exit 84
 }
 cmp -s "$baseline_file" "$data_file"
@@ -2157,28 +2166,190 @@ snapshot_cmp_status=$?
 case "$snapshot_cmp_status" in
   0) : ;;
   1)
-    printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+    printf '%s\n' apisix.file-publish.concurrent-change >&2
     exit 88
   ;;
   *)
-    printf '%s\n' apisix.json-file-apply.comparison-unavailable >&2
+    printf '%s\n' apisix.file-publish.comparison-unavailable >&2
     exit 90
   ;;
 esac
 [ "$snapshot_metadata" = "$initial_metadata" ] || {
-  printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+  printf '%s\n' apisix.file-publish.concurrent-change >&2
   exit 88
 }
 cp -p "$baseline_file" "$staged_file" || {
-  printf '%s\n' apisix.json-file-apply.staged-metadata-copy-failed >&2
+  printf '%s\n' apisix.file-publish.staged-metadata-copy-failed >&2
   exit 89
 }
-cat "$body_file" > "$staged_file" || {
-  printf '%s\n' apisix.json-file-apply.document-stage-failed >&2
-  exit 86
-}
+if [ "$mode" = apply ]; then
+  cat "$body_file" > "$staged_file" || {
+    printf '%s\n' apisix.file-publish.document-stage-failed >&2
+    exit 86
+  }
+elif [ "$format" = json ]; then
+  case "$home" in /*) : ;; *) printf '%s\n' apisix.json-file-mutate.invalid-home >&2; exit 99 ;; esac
+  case "$operation" in create|update|delete) : ;; *) printf '%s\n' apisix.json-file-mutate.invalid-operation >&2; exit 100 ;; esac
+  case "$resource" in routes|services|upstreams) : ;; *) printf '%s\n' apisix.json-file-mutate.invalid-resource >&2; exit 101 ;; esac
+  if [ -x "$home/deps/bin/luajit" ]; then
+    interpreter=$home/deps/bin/luajit
+  elif [ -x /usr/local/openresty/luajit/bin/luajit ]; then
+    interpreter=/usr/local/openresty/luajit/bin/luajit
+  elif command -v luajit >/dev/null 2>&1; then
+    interpreter=$(command -v luajit)
+  else
+    printf '%s\n' apisix.json-file-mutate.luajit-unavailable >&2
+    exit 102
+  fi
+  LUA_PATH="$home/?.lua;$home/deps/share/lua/5.1/?.lua;$home/deps/share/lua/5.1/?/init.lua;;"
+  LUA_CPATH="$home/deps/lib64/lua/5.1/?.so;$home/deps/lib/lua/5.1/?.so;;"
+  export LUA_PATH LUA_CPATH
+  m_APISIX_MUTATE_BASELINE=$baseline_file
+  m_APISIX_MUTATE_BODY=$body_file
+  m_APISIX_MUTATE_OUTPUT=$staged_file
+  m_APISIX_MUTATE_OPERATION=$operation
+  m_APISIX_MUTATE_RESOURCE=$resource
+  m_APISIX_MUTATE_RESOURCE_ID=$resource_id
+  export m_APISIX_MUTATE_BASELINE m_APISIX_MUTATE_BODY m_APISIX_MUTATE_OUTPUT
+  export m_APISIX_MUTATE_OPERATION m_APISIX_MUTATE_RESOURCE m_APISIX_MUTATE_RESOURCE_ID
+  "$interpreter" -e '
+local ok, json = pcall(require, "cjson.safe")
+if not ok or type(json.decode_array_with_array_mt) ~= "function" or type(json.array_mt) ~= "table" then
+  io.stderr:write("apisix.json-file-mutate.parser-unavailable\n")
+  os.exit(1)
+end
+json.decode_array_with_array_mt(true)
+local function read(path)
+  local file = io.open(path, "rb")
+  if not file then return nil end
+  local value = file:read("*a")
+  file:close()
+  return value
+end
+local document_source = read(os.getenv("m_APISIX_MUTATE_BASELINE"))
+local body_source = read(os.getenv("m_APISIX_MUTATE_BODY"))
+if not document_source or not body_source then
+  io.stderr:write("apisix.json-file-mutate.stage-unreadable\n")
+  os.exit(2)
+end
+local document, document_error = json.decode(document_source)
+if type(document) ~= "table" or getmetatable(document) == json.array_mt or document_error then
+  io.stderr:write("apisix.json-file-mutate.document-invalid\n")
+  os.exit(3)
+end
+local resource = os.getenv("m_APISIX_MUTATE_RESOURCE")
+local operation = os.getenv("m_APISIX_MUTATE_OPERATION")
+local wanted_id = os.getenv("m_APISIX_MUTATE_RESOURCE_ID") or ""
+local body
+if operation ~= "delete" then
+  local body_error
+  body, body_error = json.decode(body_source)
+  if type(body) ~= "table" or getmetatable(body) == json.array_mt or body_error then
+    io.stderr:write("apisix.json-file-mutate.body-not-object\n")
+    os.exit(4)
+  end
+  if type(body.id) ~= "string" and type(body.id) ~= "number" then
+    io.stderr:write("apisix.json-file-mutate.body-id-required\n")
+    os.exit(5)
+  end
+  local body_id = tostring(body.id)
+  if operation == "create" then
+    if not body_id:match("^[A-Za-z0-9._~%-]+$") or body_id == "." or body_id == ".." then
+      io.stderr:write("apisix.json-file-mutate.body-id-invalid\n")
+      os.exit(16)
+    end
+    wanted_id = body_id
+  elseif body_id ~= wanted_id then
+    io.stderr:write("apisix.json-file-mutate.body-id-mismatch\n")
+    os.exit(6)
+  end
+end
+local items = document[resource]
+if items == nil then
+  if operation == "create" then
+    items = setmetatable({}, json.array_mt)
+    document[resource] = items
+  else
+    io.stderr:write("apisix.json-file-mutate.resource-not-found\n")
+    os.exit(7)
+  end
+elseif type(items) ~= "table" or getmetatable(items) ~= json.array_mt then
+  io.stderr:write("apisix.json-file-mutate.resource-not-array\n")
+  os.exit(8)
+end
+local found, found_index, matches = nil, nil, 0
+for index, item in ipairs(items) do
+  if type(item) ~= "table" or (type(item.id) ~= "string" and type(item.id) ~= "number") then
+    io.stderr:write("apisix.json-file-mutate.resource-record-invalid\n")
+    os.exit(17)
+  end
+  local item_id = tostring(item.id)
+  if not item_id:match("^[A-Za-z0-9._~%-]+$") or item_id == "." or item_id == ".." then
+    io.stderr:write("apisix.json-file-mutate.resource-record-id-invalid\n")
+    os.exit(18)
+  end
+  if item_id == wanted_id then
+    matches = matches + 1
+    found, found_index = item, index
+  end
+end
+if matches > 1 then
+  io.stderr:write("apisix.json-file-mutate.resource-id-ambiguous\n")
+  os.exit(9)
+end
+if operation == "create" then
+  if found then
+    io.stderr:write("apisix.json-file-mutate.resource-id-exists\n")
+    os.exit(10)
+  end
+  items[#items + 1] = body
+elseif not found then
+  io.stderr:write("apisix.json-file-mutate.resource-id-not-found\n")
+  os.exit(11)
+elseif operation == "update" then
+  items[found_index] = body
+elseif operation == "delete" then
+  table.remove(items, found_index)
+end
+local encoded, encode_error = json.encode(document)
+if not encoded then
+  io.stderr:write("apisix.json-file-mutate.document-encode-failed\n")
+  os.exit(12)
+end
+local verify, verify_error = json.decode(encoded)
+if type(verify) ~= "table" or getmetatable(verify) == json.array_mt or verify_error
+   or type(verify[resource]) ~= "table" or getmetatable(verify[resource]) ~= json.array_mt then
+  io.stderr:write("apisix.json-file-mutate.document-roundtrip-failed\n")
+  os.exit(13)
+end
+local output = io.open(os.getenv("m_APISIX_MUTATE_OUTPUT"), "wb")
+if not output then
+  io.stderr:write("apisix.json-file-mutate.output-unavailable\n")
+  os.exit(14)
+end
+local wrote, write_error = output:write(encoded, "\n")
+output:close()
+if not wrote then
+  io.stderr:write("apisix.json-file-mutate.output-write-failed\n")
+  os.exit(15)
+end
+'
+lua_status=$?
+case "$lua_status" in
+  0) : ;;
+  1|2|3|4|5|6|7|8|9|10|11|12|13|14|15|16|17|18)
+    exit $((102 + lua_status))
+  ;;
+  126) printf '%s\n' apisix.json-file-mutate.interpreter-execution-failed >&2; exit 123 ;;
+  127) printf '%s\n' apisix.json-file-mutate.interpreter-unavailable >&2; exit 124 ;;
+  *) printf '%s\n' apisix.json-file-mutate.unexpected-interpreter-status >&2; exit 125 ;;
+esac
+else
+  printf '%s\n' apisix.yaml-file-mutate-not-implemented >&2
+  exit 121
+fi
 current_metadata=$(LC_ALL=C ls -ld "$data_file" 2>/dev/null) || {
-  printf '%s\n' apisix.json-file-apply.metadata-unavailable >&2
+  printf '%s\n' apisix.file-publish.metadata-unavailable >&2
   exit 84
 }
 cmp -s "$baseline_file" "$data_file"
@@ -2186,20 +2357,20 @@ current_cmp_status=$?
 case "$current_cmp_status" in
   0) : ;;
   1)
-    printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+    printf '%s\n' apisix.file-publish.concurrent-change >&2
     exit 88
   ;;
   *)
-    printf '%s\n' apisix.json-file-apply.comparison-unavailable >&2
+    printf '%s\n' apisix.file-publish.comparison-unavailable >&2
     exit 90
   ;;
 esac
 [ "$current_metadata" = "$initial_metadata" ] || {
-  printf '%s\n' apisix.json-file-apply.concurrent-change >&2
+  printf '%s\n' apisix.file-publish.concurrent-change >&2
   exit 88
 }
 mv -f "$staged_file" "$data_file" || {
-  printf '%s\n' apisix.json-file-apply.publish-failed >&2
+  printf '%s\n' apisix.file-publish.publish-failed >&2
   exit 91
 }
 RSUDO_APISIX_FILE_APPLY_REMOTE
@@ -2242,16 +2413,83 @@ _rsudo_mod_apisix_json_file_apply()
   trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
   cat > "$document" || { log error apisix json-file-apply-input-read-failed; exit 8; }
   json --check "$document" >/dev/null 2>&1 || { log error apisix json-file-apply-invalid-json; exit 9; }
-  remote_source=$(_rsudo_mod_apisix_file_apply_remote_source) || {
+  remote_source=$(_rsudo_mod_apisix_file_publish_remote_source) || {
     log error apisix json-file-apply-remote-source-failed
     exit 10
   }
   RSUDO_INTERACTIVE=
   if [ "$scope" = host ]
   then
-    rsudo sh -c "$remote_source" apisix "$data_file" json '' < "$document"
+    rsudo sh -c "$remote_source" apisix "$data_file" json '' apply '' '' '' < "$document"
   else
-    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" json '' < "$document"
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" json '' apply '' '' '' < "$document"
+  fi
+)
+
+_rsudo_mod_apisix_json_file_mutate()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    create:1) resource=$1; resource_id= ;;
+    update:2) resource=$1; resource_id=$2 ;;
+    delete:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix json-file-mutate-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix json-file-mutate-unsupported-resource resource "$resource"; exit 2 ;; esac
+  if [ -n "$resource_id" ]; then
+    case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) log error apisix json-file-mutate-invalid-resource-id; exit 3 ;; esac
+  fi
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix json-file-mutate-invalid-context status "$context_status"
+    exit 4
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = file-json ] || { log error apisix json-file-mutate-adapter-unsupported adapter "$adapter"; exit 5; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  data_file=${RSUDO_APISIX_DATA_FILE-}
+  home=${RSUDO_APISIX_HOME-}
+  case "$data_file" in /*) : ;; *) log error apisix json-file-mutate-invalid-data-path; exit 6 ;; esac
+  case "$home" in /*) : ;; *) log error apisix json-file-mutate-invalid-home; exit 7 ;; esac
+  case "$scope" in host|docker|podman) : ;; *) log error apisix json-file-mutate-unsupported-scope scope "$scope"; exit 8 ;; esac
+  container=${RSUDO_APISIX_CONTAINER_ID-}
+  if [ "$operation" != delete ]; then
+    command -v json >/dev/null 2>&1 || { log error apisix json-file-mutate-json-unavailable; exit 9; }
+    umask 077
+    temp_base=${TMPDIR:-/tmp}
+    case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+    attempt=0
+    temp_dir=
+    while [ "$attempt" -lt 10 ]
+    do
+      candidate=$temp_base/rsudo-apisix-mutate-$$-$attempt
+      if (umask 077; mkdir "$candidate") 2>/dev/null
+      then temp_dir=$candidate; break
+      fi
+      attempt=$((attempt + 1))
+    done
+    [ -n "$temp_dir" ] || { log error apisix json-file-mutate-temp-unavailable; exit 10; }
+    document=$temp_dir/resource.json
+    trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
+    cat > "$document" || { log error apisix json-file-mutate-input-read-failed; exit 11; }
+    json --check "$document" >/dev/null 2>&1 || { log error apisix json-file-mutate-invalid-json; exit 12; }
+  fi
+  remote_source=$(_rsudo_mod_apisix_file_publish_remote_source) || {
+    log error apisix json-file-mutate-remote-source-failed
+    exit 13
+  }
+  RSUDO_INTERACTIVE=
+  if [ "$operation" = delete ]; then
+    if [ "$scope" = host ]; then
+      rsudo sh -c "$remote_source" apisix "$data_file" json "$home" mutate "$operation" "$resource" "$resource_id"
+    else
+      rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" json "$home" mutate "$operation" "$resource" "$resource_id"
+    fi
+  elif [ "$scope" = host ]; then
+    rsudo sh -c "$remote_source" apisix "$data_file" json "$home" mutate "$operation" "$resource" "$resource_id" < "$document"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" json "$home" mutate "$operation" "$resource" "$resource_id" < "$document"
   fi
 )
 
@@ -2272,15 +2510,15 @@ _rsudo_mod_apisix_yaml_file_apply()
   case "$data_file" in /*) : ;; *) log error apisix yaml-file-apply-invalid-data-path; exit 5 ;; esac
   case "$scope" in host|docker|podman) : ;; *) log error apisix yaml-file-apply-unsupported-scope scope "$scope"; exit 6 ;; esac
   container=${RSUDO_APISIX_CONTAINER_ID-}
-  remote_source=$(_rsudo_mod_apisix_file_apply_remote_source) || {
+  remote_source=$(_rsudo_mod_apisix_file_publish_remote_source) || {
     log error apisix yaml-file-apply-remote-source-failed
     exit 7
   }
   RSUDO_INTERACTIVE=
   if [ "$scope" = host ]; then
-    rsudo sh -c "$remote_source" apisix "$data_file" yaml "$home"
+    rsudo sh -c "$remote_source" apisix "$data_file" yaml "$home" apply '' '' ''
   else
-    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" yaml "$home"
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix "$data_file" yaml "$home" apply '' '' ''
   fi
 )
 
@@ -2637,11 +2875,27 @@ _rsudo_mod_apisix_unimplemented_operation()
 )
 
 # Resource CRUD currently uses only an explicitly selected host REST adapter.
-# Full-document apply supports explicit standalone JSON and YAML files;
-# unsupported operations fail explicitly and never fall through to legacy.
-rsudo_mod_apisix_create() { _rsudo_mod_apisix_rest_mutate create "$@"; }
-rsudo_mod_apisix_update() { _rsudo_mod_apisix_rest_mutate update "$@"; }
-rsudo_mod_apisix_delete() { _rsudo_mod_apisix_rest_mutate delete "$@"; }
+# JSON file mutations preserve unrelated parsed data and share the atomic
+# publisher; YAML file mutations remain unsupported pending round-trip safety.
+_rsudo_mod_apisix_mutate_router()
+(
+  operation=$1
+  shift
+  context=$(rsudo_mod_apisix_context) || {
+    context_status=$?
+    log error apisix mutate-invalid-context status "$context_status"
+    exit 2
+  }
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  case "$adapter" in
+    rest) _rsudo_mod_apisix_rest_mutate "$operation" "$@" ;;
+    file-json) _rsudo_mod_apisix_json_file_mutate "$operation" "$@" ;;
+    *) log error apisix mutate-adapter-not-implemented adapter "$adapter"; exit 3 ;;
+  esac
+)
+rsudo_mod_apisix_create() { _rsudo_mod_apisix_mutate_router create "$@"; }
+rsudo_mod_apisix_update() { _rsudo_mod_apisix_mutate_router update "$@"; }
+rsudo_mod_apisix_delete() { _rsudo_mod_apisix_mutate_router delete "$@"; }
 rsudo_mod_apisix_apply()
 (
   context=$(rsudo_mod_apisix_context) || {
