@@ -314,8 +314,9 @@ PUBLIC FUNCTIONS
         qualified by that ID. Failed manager listings and incomplete probes
         produce uncertainty rows. This is best-effort: a stopped container
         whose image and name do not identify APISIX cannot be classified from
-        its filesystem. Service correlation is limited to systemd MainPID/process evidence. JSON output and guaranteed exhaustive
-        detection are NOT implemented. Discovery
+        its filesystem. Service correlation is limited to systemd MainPID/
+        process evidence. JSON output and guaranteed exhaustive detection
+        are NOT implemented. Discovery
         never chooses an instance or modifies the user's environment.
         Local argument count 1, relative root 2; in the remote scan,
         invalid root 1, unavailable root 2, missing find 3. Remote rsudo
