@@ -9,7 +9,6 @@ const {spawnSync} = require('node:child_process');
 
 const MAX_HTML_BYTES = 32 * 1024 * 1024;
 const MAX_ASSET_BYTES = 512 * 1024 * 1024;
-const MAX_HELPER_OUTPUT = 256 * 1024 * 1024;
 
 function fail(status, identity, message)
 {
@@ -65,6 +64,9 @@ function mimeExtension(mime, kind, body)
   const value = String(mime || '').split(';', 1)[0].trim().toLowerCase();
   const known = {
     'text/css':'.css', 'image/png':'.png', 'image/jpeg':'.jpg',
+    'text/javascript':'.js', 'application/javascript':'.js',
+    'application/x-javascript':'.js', 'text/ecmascript':'.js',
+    'application/ecmascript':'.js', 'application/wasm':'.wasm',
     'image/gif':'.gif', 'image/webp':'.webp', 'image/avif':'.avif',
     'image/svg+xml':'.svg', 'image/x-icon':'.ico', 'image/vnd.microsoft.icon':'.ico',
     'font/woff':'.woff', 'font/woff2':'.woff2', 'application/font-woff':'.woff',
@@ -97,6 +99,9 @@ function assetKind(row)
 {
   const mime = String(row.mimeType || '').split(';', 1)[0].trim().toLowerCase();
   if (mime === 'text/css' || row.resourceType === 'Stylesheet') return 'stylesheet';
+  if (mime === 'text/javascript' || mime === 'application/javascript' ||
+      mime === 'application/x-javascript' || mime === 'text/ecmascript' ||
+      mime === 'application/ecmascript' || row.resourceType === 'Script') return 'script';
   if (mime.startsWith('image/')) return 'image';
   if (mime.startsWith('font/') || /font|woff|opentype|truetype/.test(mime)) return 'font';
   if (mime === 'text/vtt' || row.resourceType === 'TextTrack') return 'media';
@@ -145,7 +150,7 @@ function collectAssets(runDirectory, targetDirectory)
       '-' + crypto.createHash('sha256').update(url.href).digest('hex').slice(0,12) + '.css' :
       extension);
     const previous = candidates.get(url.href) || [];
-    previous.push({filename, hash, mimeType, kind, origin, body});
+    previous.push({filename, hash, mimeType, kind, origin, body,sourceUrl:url.href});
     candidates.set(url.href, previous);
   };
 
@@ -158,25 +163,6 @@ function collectAssets(runDirectory, targetDirectory)
       'http-body', row.httpStatus);
   }
 
-  const stylesheetIndex = path.join(runDirectory, 'rest/stylesheets/index.json');
-  if (fs.existsSync(stylesheetIndex))
-  {
-    let sheets;
-    try {sheets = JSON.parse(fs.readFileSync(stylesheetIndex, 'utf8'));}
-    catch (_) {sheets = [];}
-    for (const sheet of sheets)
-    {
-      if (sheet.status !== 'saved' || !sheet.sourceURL || !sheet.file) continue;
-      const url = new URL(sheet.sourceURL);
-      url.hash = '';
-      const existing = candidates.get(url.href) || [];
-      if (existing.some(item => item.origin === 'http-body' && item.hash === sheet.sha256))
-        continue;
-      add(sheet.sourceURL, 'text/css', 'Stylesheet', 'rest/' + sheet.file,
-        sheet.sha256, sheet.bytes, 'cssom-source', sheet.httpStatus);
-    }
-  }
-
   const output = new Map();
   let ambiguous = 0;
   for (const [url, versions] of candidates)
@@ -184,12 +170,10 @@ function collectAssets(runDirectory, targetDirectory)
     const hashes = new Set(versions.map(item => item.hash));
     if (hashes.size > 1)
     {
-      const cssom = versions.filter(item => item.origin === 'cssom-source');
-      const cssomHashes = new Set(cssom.map(item => item.hash));
-      if (cssomHashes.size === 1) output.set(url, cssom[0]);
-      else ambiguous++;
+      ambiguous++;
+      continue;
     }
-    else output.set(url, versions.at(-1));
+    output.set(url, versions.at(-1));
   }
 
   const uniqueItems = new Map([...output.values()].map(item => [item.filename,item]));
@@ -202,546 +186,509 @@ function collectAssets(runDirectory, targetDirectory)
   return {map:Object.fromEntries([...output].map(([url,item]) => [url,item.filename])),
     assets:[...uniqueItems.values()].map(item => ({file:'assets/' + item.filename,
       sha256:item.hash,bytes:item.body.length,kind:item.kind,source:item.origin})),
+    selectedAssets:[...uniqueItems.values()],
     ambiguous,rejectedBodies,sourceRows:rows.length};
 }
 
-function offlineInteractionSource(positions)
+function resolveAssetReference(value, base, map, assetDirectory)
 {
-  const encodedPositions = JSON.stringify(positions);
-  const consentHandler = `const dismissConsent = (button, event) => {
-    for (let current = button, depth = 0; current && depth < 7;
-      current = current.parentElement, depth++) {
-      const text = (current.innerText || current.textContent || '').toLowerCase();
-      const buttonCount = current.querySelectorAll('button,[role="button"]').length;
-      if (current !== document.body && current !== document.documentElement &&
-          text.length <= 2000 && /cookie|cookies|consent|privacy/.test(text) &&
-          buttonCount > 0 && buttonCount <= 8) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        current.remove();
-        return true;
-      }
-    }
-    return false;
-  };`;
-  return String.raw`(() => {
-  const copyText = async text => {
-    try {
-      await navigator.clipboard.writeText(text);
-      return true;
-    }
-    catch (_) {
-      const field = document.createElement('textarea');
-      field.value = text;
-      field.setAttribute('readonly', '');
-      field.style.position = 'fixed';
-      field.style.left = '-10000px';
-      document.body.append(field);
-      field.select();
-      let copied = false;
-      try {copied = document.execCommand('copy');} catch (_) {}
-      field.remove();
-      return copied;
-    }
+  const raw = decodeHtmlAttribute(String(value || '').trim());
+  if (!raw || raw[0] === '#' || /^data:/i.test(raw)) return null;
+
+  let url;
+  try {url = new URL(raw, base);}
+  catch (_) {return null;}
+  if (!['http:', 'https:'].includes(url.protocol)) return null;
+  const fragment = url.hash;
+  url.hash = '';
+  const filename = map[url.href];
+  if (!filename) return null;
+  return {
+    filename,
+    local:require('node:url').pathToFileURL(path.join(assetDirectory, filename)).href + fragment
   };
-  const labelFor = node => [node.getAttribute('aria-label'), node.getAttribute('title'),
-    node.innerText, node.textContent].filter(Boolean).join(' ').trim();
-  const nearestText = node => {
-    for (let current = node; current; current = current.parentElement) {
-      if (current.matches('section[data-testid^="conversation-turn-"],article,[role="article"],pre,table')) return current;
-      if (current === node.parentElement) break;
-    }
-    return node.parentElement;
-  };
-  const controlText = node => {
-    const clone = node.cloneNode(true);
-    clone.querySelectorAll('button,[role="button"],input,textarea,select,script,style').forEach(item => item.remove());
-    if (clone.querySelector('table')) {
-      return [...clone.querySelectorAll('tr')].map(row =>
-        [...row.querySelectorAll('th,td')].map(cell => cell.innerText || cell.textContent || '').join('\t')
-      ).join('\n');
-    }
-    return clone.innerText || clone.textContent || '';
-  };
-  const disclosureHasContent = panel => Boolean((panel.innerText || panel.textContent || '').trim() ||
-    panel.querySelector('img,video,audio,svg,canvas,table,pre,math'));
-  const localDisclosure = control => {
-    const expanded = control.getAttribute('aria-expanded') === 'true';
-    const id = control.getAttribute('aria-controls');
-    let panel = id ? document.getElementById(id) : null;
-    if (!panel && !id) {
-      const sibling = control.parentElement && control.parentElement.nextElementSibling;
-      if (sibling && (sibling.matches('[data-web-export-disclosure-panel], [role="region"]') ||
-          sibling.hasAttribute('hidden'))) panel = sibling;
-    }
-    if (panel) {
-      if (!disclosureHasContent(panel)) control.setAttribute('data-web-export-content-unavailable', 'true');
-      panel.hidden = expanded;
-      panel.setAttribute('aria-hidden', String(expanded));
-      if ('inert' in panel) panel.inert = expanded;
-    }
-    else control.setAttribute('data-web-export-content-unavailable', 'true');
-    control.setAttribute('aria-expanded', String(!expanded));
-  };
-  ${consentHandler}
-  const handleLocalClick = event => {
-    const origin = event.target instanceof Element ? event.target : null;
-    const button = origin && origin.closest('button,[role="button"],[aria-expanded],input[type="button"],input[type="submit"]');
-    if (!button) return;
-    const label = labelFor(button).toLowerCase();
-    if (/\bcopy\b|clipboard/.test(label)) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      let source = button.closest('pre');
-      if (!source && /table/.test(label)) source = button.closest('table') || button.parentElement;
-      if (!source) source = button.closest('section[data-testid^="conversation-turn-"],article,[role="article"]');
-      if (!source) source = nearestText(button);
-      const copied = source ? controlText(source).trim() : '';
-      if (copied) button.setAttribute('data-web-export-copy-state', 'pending');
-      if (copied) copyText(copied).then(ok => {
-        button.setAttribute('data-web-export-copy-state', ok ? 'copied' : 'unavailable');
-      });
-      else button.setAttribute('data-web-export-copy-state', 'unavailable');
-      return;
-    }
-    if (button.hasAttribute('aria-expanded')) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      localDisclosure(button);
-      return;
-    }
-    if (/\b(?:accept|reject|dismiss|close)\b/.test(label)) dismissConsent(button,event);
-  };
-  window.addEventListener('click', handleLocalClick, true);
-  const unavailable = [...document.querySelectorAll('[aria-expanded="false"]')].filter(button => {
-    const id = button.getAttribute('aria-controls');
-    if (id) {
-      const panel = document.getElementById(id);
-      return !panel || !disclosureHasContent(panel);
-    }
-    const panel = button.parentElement?.nextElementSibling;
-    return !panel || !disclosureHasContent(panel);
-  }).length;
-  document.documentElement.setAttribute('data-web-export-disclosures-unavailable', String(unavailable));
-  const positions = JSON.parse('${encodedPositions.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}');
-  const restore = () => {
-    let restored = 0;
-    for (const position of positions) {
-      let node;
-      try {node = document.querySelector(position.selector);}
-      catch (_) {continue;}
-      if (!node) continue;
-      if (node === document.scrollingElement) window.scrollTo(position.left,position.top);
-      else {
-        node.scrollLeft = position.left;
-        node.scrollTop = position.top;
-      }
-      restored++;
-    }
-    document.documentElement.setAttribute('data-web-export-scroll-restored',String(restored));
-  };
-  const schedule = () => {
-    restore();
-    requestAnimationFrame(restore);
-  };
-  if (document.readyState === 'loading')
-    document.addEventListener('DOMContentLoaded',schedule,{once:true});
-  else schedule();
-  document.documentElement.setAttribute('data-web-export-interactions','ready');
-})();`;
 }
 
-function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collected,
-  scrollScript, scrollScriptPolicy)
+function decodeHtmlAttribute(value)
 {
-  if (Buffer.byteLength(html) > MAX_HTML_BYTES)
-    throw fail(15, 'rendered-html-size-limit', 'rendered HTML exceeds the 32 MiB export limit');
-  const css = collected.assets.filter(item => item.kind === 'stylesheet').map(item => ({
-    file:item.file.slice('assets/'.length), source:item.source, sourceUrl:Object.entries(collected.map)
-      .find(([,filename]) => filename === item.file.slice('assets/'.length))?.[0] || sourceUrl,
-    data:fs.readFileSync(item._stagePath).toString('base64')
-  }));
-  const helperScript = String.raw`(() => {
-    const html = decodeURIComponent(escape(atob('__HTML__')));
-    const source = __SOURCE__;
-    const scrollScript = __SCROLL_SCRIPT__;
-    const scrollScriptPolicy = __SCROLL_SCRIPT_POLICY__;
-    const map = JSON.parse(decodeURIComponent(escape(atob('__MAP__'))));
-    const sheets = JSON.parse(decodeURIComponent(escape(atob('__SHEETS__'))));
-    const counts = {
-      scriptsRemoved:0, framesRemoved:0, unavailableReferences:0,
-      unavailableCssReferences:0, cssomSourceSheets:0, nonvisualLinksRemoved:0,
-      offlineCopyControls:0, offlineDisclosureControls:0, consentDismissControls:0,
-      disclosureContentUnavailable:0
-    };
+  const decodeOnce = text => text.replace(/&(?:amp|quot|apos|lt|gt|#(?:x[0-9a-f]+|[0-9]+));/gi, entity => {
+    const key = entity.toLowerCase();
+    const named=({'&amp;':'&','&quot;':'"','&apos;':"'",'&lt;':'<','&gt;':'>'})[key];
+    if(named!==undefined)return named;
+    const hexadecimal=/^&#x/i.test(entity);
+    const digits=entity.slice(hexadecimal?3:2,-1);
+    const codepoint=Number.parseInt(digits,hexadecimal?16:10);
+    if(!Number.isInteger(codepoint)||codepoint<=0||codepoint>0x10ffff||
+        (codepoint>=0xd800&&codepoint<=0xdfff))return entity;
+    return String.fromCodePoint(codepoint);
+  });
+  return decodeOnce(value);
+}
 
-    function normalizedUrl(value, base)
+function rewriteCssReferences(input, base, map, assetDirectory)
+{
+  const text=String(input||'');
+  const edits=[];
+  let rewritten=0;
+  let unmapped=0;
+  const parentheses=[];
+  let imageSetPending=false;
+  let importPending=false;
+  const applyReference=(start,end,value)=>{
+    const reference=resolveAssetReference(value,base,map,assetDirectory);
+    if(reference)
     {
-      const url = new URL(value, base);
-      url.hash = '';
-      return ['http:', 'https:'].includes(url.protocol) ? url.href : null;
+      edits.push({start,end,value:reference.local});
+      rewritten++;
     }
-
-    function localReference(value, base, cssFile)
+    else
     {
-      const raw = String(value || '').trim();
-      if (!raw || raw[0] === '#' || /^data:/i.test(raw)) return raw;
-      if (cssFile && /^\.\/[a-f0-9]{64}(?:-[a-f0-9]{12})?\.[a-z0-9]+$/i.test(raw))
-        return raw;
-
-      let url;
-      try {url = new URL(raw, base);}
-      catch (_) {return null;}
-      const fragment = url.hash;
-      let key;
-      try {key = normalizedUrl(url.href, source);}
-      catch (_) {return null;}
-      if (!key) return null;
-      const filename = map[key];
-      if (!filename) return null;
-      return (cssFile ? './' : 'assets/') + filename + fragment;
+      try {if(['http:','https:'].includes(new URL(value,base).protocol)) unmapped++;}
+      catch (_) {}
     }
-
-    function rewriteSrcset(value, base)
+  };
+  const quotedEnd=start=>{
+    const quote=text[start];
+    let index=start+1;
+    while(index<text.length)
     {
-      const output = [];
-      let index = 0;
-      while (index < value.length)
+      if(text[index]==='\\'){index+=2;continue;}
+      if(text[index]===quote)return index;
+      index++;
+    }
+    return -1;
+  };
+  let index=0;
+  while(index<text.length)
+  {
+    if(text.startsWith('/*',index))
+    {
+      const end=text.indexOf('*/',index+2);
+      index=end<0?text.length:end+2;
+      continue;
+    }
+    const ch=text[index];
+    if(ch==='"'||ch==="'")
+    {
+      const end=quotedEnd(index);
+      if(end<0)break;
+      if(importPending||parentheses.includes(true))applyReference(index+1,end,text.slice(index+1,end));
+      importPending=false;
+      index=end+1;
+      continue;
+    }
+    if(ch==='@'&&/^@import\b/i.test(text.slice(index)))
+    {
+      importPending=true;
+      index+=7;
+      continue;
+    }
+    if(/[a-z_-]/i.test(ch))
+    {
+      const start=index;
+      while(index<text.length&&/[a-z0-9_-]/i.test(text[index]))index++;
+      const name=text.slice(start,index).toLowerCase();
+      let next=index;
+      while(next<text.length&&/\s/.test(text[next]))next++;
+      if(name==='url'&&text[next]==='(')
       {
-        while (index < value.length && /[\s,]/.test(value[index])) index++;
-        if (index >= value.length) break;
-        const start = index;
-        while (index < value.length && !/\s/.test(value[index])) index++;
-        let reference = value.slice(start,index);
-        let trailingCommas = 0;
-        while (reference.endsWith(','))
+        let valueStart=next+1;
+        while(valueStart<text.length&&/\s/.test(text[valueStart]))valueStart++;
+        if(text[valueStart]==='"'||text[valueStart]==="'")
         {
-          reference = reference.slice(0,-1);
-          trailingCommas++;
-        }
-        let descriptor = '';
-        if (!trailingCommas)
-        {
-          while (index < value.length && /\s/.test(value[index])) index++;
-          const descriptorStart = index;
-          while (index < value.length && value[index] !== ',') index++;
-          descriptor = value.slice(descriptorStart,index).trim();
-        }
-        if (value[index] === ',') index++;
-        if (!reference) continue;
-        const local = localReference(reference,base,false);
-        if (local === null)
-        {
-          counts.unavailableReferences++;
-          continue;
-        }
-        output.push(local + (descriptor ? ' ' + descriptor : ''));
-      }
-      return output.join(', ');
-    }
-
-    const cssUrlPattern = /url\(\s*(?:(['"])(.*?)\1|([^)]*?))\s*\)/gi;
-    const cssImportPattern = /@import\s+(?:url\(\s*)?(?:(['"])(.*?)\1|([^\s;)]+))\s*\)?\s*([^;]*);/gi;
-    const cssImageSetPattern = /((?:-webkit-)?image-set\s*\(((?:[^()]|\([^()]*\))*)\))/gi;
-
-    function rewriteCss(text, base, cssFile)
-    {
-      let output = String(text || '').replace(cssImportPattern,
-        (all, quote, quoted, bare, media) => {
-          const reference = quoted === undefined ? bare : quoted;
-          const local = localReference(reference, base, cssFile);
-          if (!local)
+          const end=quotedEnd(valueStart);
+          if(end<0)break;
+          let close=end+1;
+          while(close<text.length&&/\s/.test(text[close]))close++;
+          if(text[close]===')')
           {
-            counts.unavailableCssReferences++;
-            return '';
+            applyReference(valueStart+1,end,text.slice(valueStart+1,end));
+            index=close+1;
+            importPending=false;
+            continue;
           }
-          return '@import url("' + local.replace(/"/g, '%22') + '") ' +
-            (media || '') + ';';
-        });
-      output = output.replace(cssUrlPattern, (all, quote, quoted, bare) => {
-        const reference = (quoted === undefined ? bare : quoted).trim();
-        const local = localReference(reference, base, cssFile);
-        if (local === null)
-        {
-          counts.unavailableCssReferences++;
-          return 'url("")';
         }
-        return 'url("' + local.replace(/"/g, '%22') + '")';
-      });
-      output = output.replace(cssImageSetPattern, (all, whole, content) => {
-        const rewritten = content.replace(/(^|,)(\s*)(['"])(.*?)\3/g,
-          (candidate, separator, whitespace, quote, reference) => {
-            const local = localReference(reference,base,cssFile);
-            if (local === null)
-            {
-              counts.unavailableCssReferences++;
-              return separator + whitespace + 'url("")';
-            }
-            return separator + whitespace + quote + local.replace(/"/g,'%22') + quote;
-          });
-        return whole.slice(0,whole.indexOf('(') + 1) + rewritten + ')';
-      });
-      return output;
-    }
-
-    const sheetOutput = sheets.map(sheet => ({
-      file:sheet.file,
-      source:sheet.source,
-      sourceUrl:sheet.sourceUrl,
-      text:rewriteCss(decodeURIComponent(escape(atob(sheet.data))), sheet.sourceUrl, true)
-    }));
-    const doc = new DOMParser().parseFromString(html, 'text/html');
-
-    for (const node of [...doc.querySelectorAll('script')])
-    {
-      node.remove();
-      counts.scriptsRemoved++;
-    }
-    for (const node of [...doc.querySelectorAll('iframe,frame,object,embed')])
-    {
-      node.remove();
-      counts.framesRemoved++;
-    }
-    for (const node of [...doc.querySelectorAll('base')]) node.remove();
-    for (const node of [...doc.querySelectorAll('meta[http-equiv]')])
-    {
-      const directive = (node.getAttribute('http-equiv') || '').toLowerCase();
-      if (['refresh','content-security-policy','content-security-policy-report-only']
-        .includes(directive)) node.remove();
-    }
-    for (const node of [...doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i],meta[http-equiv="Content-Security-Policy-Report-Only" i],meta[http-equiv="Permissions-Policy" i]')])
-      node.remove();
-
-    const localLinkTypes = [
-      'stylesheet','icon','apple-touch-icon','mask-icon','preload','modulepreload'
-    ];
-    for (const link of [...doc.querySelectorAll('link')])
-    {
-      const rel = (link.getAttribute('rel') || '').toLowerCase().split(/\s+/);
-      if (rel.some(item => ['preconnect','dns-prefetch','prefetch','prerender'].includes(item)))
-      {
-        link.remove();
-        continue;
-      }
-      const isResource = rel.some(item => localLinkTypes.includes(item));
-      if (!isResource && !rel.includes('canonical'))
-      {
-        link.remove();
-        counts.nonvisualLinksRemoved++;
-        continue;
-      }
-      if (!link.hasAttribute('href')) continue;
-      if (isResource)
-      {
-        const replacement = localReference(link.getAttribute('href'), source, false);
-        if (replacement === null)
+        else
         {
-          link.remove();
-          counts.unavailableReferences++;
-          continue;
+          let close=valueStart;
+          while(close<text.length&&text[close]!==')')close++;
+          if(close<text.length)
+          {
+            let valueEnd=close;
+            while(valueEnd>valueStart&&/\s/.test(text[valueEnd-1]))valueEnd--;
+            applyReference(valueStart,valueEnd,text.slice(valueStart,valueEnd));
+            index=close+1;
+            importPending=false;
+            continue;
+          }
         }
-        link.setAttribute('href', replacement);
+      }
+      if(name==='image-set'||name==='-webkit-image-set')imageSetPending=true;
+      importPending=false;
+      index=start+(index-start);
+      continue;
+    }
+    if(ch==='(')
+    {
+      parentheses.push(imageSetPending);
+      imageSetPending=false;
+      importPending=false;
+    }
+    else if(ch===')')
+    {
+      parentheses.pop();
+      importPending=false;
+    }
+    else if(ch===';')importPending=false;
+    else if(!/\s/.test(ch))importPending=false;
+    index++;
+  }
+  edits.sort((left,right)=>right.start-left.start);
+  let output=text;
+  for(const edit of edits)output=output.slice(0,edit.start)+edit.value+output.slice(edit.end);
+  return {text:output,rewritten,unmapped};
+}
+
+function updateIntegrity(value, hashes)
+{
+  return String(value).replace(/\b(sha256|sha384|sha512)-([A-Za-z0-9+/=]+)(\?[^\s]+)?/g,
+    (token,algorithm,oldHash,options)=>algorithm+'-'+hashes[algorithm]+(options||''));
+}
+
+function parseHtmlStartTag(html, start)
+{
+  if (html.startsWith('<!--', start))
+  {
+    const close = html.indexOf('-->', start + 4);
+    return {comment:true, end:close < 0 ? html.length : close + 3};
+  }
+  if (html[start + 1] === '!' || html[start + 1] === '?')
+  {
+    const end = html.indexOf('>', start + 2);
+    return {declaration:true, end:end < 0 ? html.length : end + 1};
+  }
+
+  let quote = '';
+  let end = start + 1;
+  for (; end < html.length; end++)
+  {
+    const ch = html[end];
+    if (quote)
+    {
+      if (ch === quote) quote = '';
+    }
+    else if (ch === '"' || ch === "'") quote = ch;
+    else if (ch === '>') break;
+  }
+  if (end >= html.length) return {declaration:true, end:html.length};
+
+  const tagText = html.slice(start, end + 1);
+  const nameMatch = /^<\s*([^\s/>]+)/.exec(tagText);
+  if (!nameMatch) return {declaration:true, end:end + 1};
+  const closing = /^<\s*\//.test(tagText);
+  const name = nameMatch[1].toLowerCase();
+  const attributes = [];
+  if (!closing)
+  {
+    let cursor = nameMatch[0].length;
+    while (cursor < tagText.length - 1)
+    {
+      while (cursor < tagText.length - 1 && /[\s/]/.test(tagText[cursor])) cursor++;
+      const nameStart = cursor;
+      while (cursor < tagText.length - 1 && !/[\s=/>]/.test(tagText[cursor])) cursor++;
+      if (cursor === nameStart) {cursor++; continue;}
+      const attributeName = tagText.slice(nameStart, cursor).toLowerCase();
+      while (cursor < tagText.length - 1 && /\s/.test(tagText[cursor])) cursor++;
+      if (tagText[cursor] !== '=') continue;
+      cursor++;
+      while (cursor < tagText.length - 1 && /\s/.test(tagText[cursor])) cursor++;
+      const delimiter = tagText[cursor];
+      let valueStart;
+      let valueEnd;
+      if (delimiter === '"' || delimiter === "'")
+      {
+        cursor++;
+        valueStart = cursor;
+        while (cursor < tagText.length - 1 && tagText[cursor] !== delimiter) cursor++;
+        valueEnd = cursor;
+        if (tagText[cursor] === delimiter) cursor++;
       }
       else
       {
-        try
-        {
-          const canonical = new URL(link.getAttribute('href'), source);
-          canonical.username = '';
-          canonical.password = '';
-          link.setAttribute('href', canonical.href);
-        }
-        catch (_) {link.remove();}
+        valueStart = cursor;
+        while (cursor < tagText.length - 1 && !/[\s>]/.test(tagText[cursor])) cursor++;
+        valueEnd = cursor;
       }
+      attributes.push({name:attributeName, value:tagText.slice(valueStart,valueEnd),
+        start:start + valueStart, end:start + valueEnd});
     }
-
-    for (const node of [...doc.querySelectorAll('*')])
-    {
-      for (const attribute of [...node.attributes])
-      {
-        const name = attribute.name.toLowerCase();
-        if (name.startsWith('on'))
-        {
-          node.removeAttribute(attribute.name);
-          continue;
-        }
-        if (['crossorigin','integrity','referrerpolicy'].includes(name))
-        {
-          node.removeAttribute(attribute.name);
-          continue;
-        }
-        if (['ping','formaction'].includes(name))
-        {
-          node.removeAttribute(attribute.name);
-          continue;
-        }
-        if (name === 'style')
-        {
-          node.setAttribute(attribute.name, rewriteCss(attribute.value, source, false));
-          continue;
-        }
-        if (name === 'srcset')
-        {
-          const candidates = rewriteSrcset(attribute.value,source);
-          if (candidates) node.setAttribute(attribute.name, candidates);
-          else
-          {
-            node.removeAttribute(attribute.name);
-          }
-          continue;
-        }
-        if (['src','poster','data','background','xlink:href'].includes(name))
-        {
-          const replacement = localReference(attribute.value, source, false);
-          if (replacement === null)
-          {
-            node.removeAttribute(attribute.name);
-            counts.unavailableReferences++;
-          }
-          else node.setAttribute(attribute.name, replacement);
-          continue;
-        }
-        if (name !== 'href') continue;
-        if (node.localName === 'link') continue;
-        if (/^\s*javascript:/i.test(attribute.value))
-        {
-          node.removeAttribute(attribute.name);
-          continue;
-        }
-        if (node.localName === 'a' || node.localName === 'area')
-        {
-          if (attribute.value && !attribute.value.startsWith('#'))
-          {
-            try
-            {
-              const destination = new URL(attribute.value, source);
-              destination.username = '';
-              destination.password = '';
-              node.setAttribute(attribute.name, destination.href);
-            }
-            catch (_) {node.removeAttribute(attribute.name);}
-          }
-        }
-        else if (!attribute.value.startsWith('#'))
-        {
-          const replacement = localReference(attribute.value, source, false);
-          if (replacement === null)
-          {
-            node.removeAttribute(attribute.name);
-            counts.unavailableReferences++;
-          }
-          else node.setAttribute(attribute.name, replacement);
-        }
-      }
-
-      if (node.localName === 'style')
-        node.textContent = rewriteCss(node.textContent, source, false);
-      if (node.localName === 'input' &&
-          String(node.getAttribute('type')).toLowerCase() === 'password')
-        node.removeAttribute('value');
-      if (node.localName === 'form')
-      {
-        node.removeAttribute('action');
-        node.removeAttribute('target');
-      }
-    }
-
-    counts.offlineCopyControls = [...doc.querySelectorAll('button,[role="button"],input[type="button"]')]
-      .filter(node => /\bcopy\b|clipboard/i.test([node.getAttribute('aria-label'),
-        node.getAttribute('title'),node.textContent].filter(Boolean).join(' '))).length;
-    counts.offlineDisclosureControls = doc.querySelectorAll('[aria-expanded]').length;
-    counts.consentDismissControls = [...doc.querySelectorAll('button,[role="button"]')]
-      .filter(node => {
-        if (!/\b(?:accept|reject|dismiss|close)\b/i.test([node.getAttribute('aria-label'),
-          node.getAttribute('title'),node.textContent].filter(Boolean).join(' '))) return false;
-        for (let current = node, depth = 0; current && depth < 7;
-          current = current.parentElement, depth++) {
-          const text = (current.innerText || current.textContent || '').toLowerCase();
-          const buttonCount = current.querySelectorAll('button,[role="button"]').length;
-          if (current !== doc.body && current !== doc.documentElement && text.length <= 2000 &&
-              /cookie|cookies|consent|privacy/.test(text) && buttonCount > 0 && buttonCount <= 8)
-            return true;
-        }
-        return false;
-      }).length;
-    counts.disclosureContentUnavailable = [...doc.querySelectorAll('[aria-expanded="false"]')]
-      .filter(button => {
-        const id = button.getAttribute('aria-controls');
-        const panel = id ? doc.getElementById(id) : button.parentElement?.nextElementSibling;
-        return !panel || (!(panel.textContent || '').trim() &&
-          !panel.querySelector('img,video,audio,svg,canvas,table,pre,math'));
-      }).length;
-
-    for (const sheet of sheetOutput)
-      if (sheet.source === 'cssom-source' && map[normalizedUrl(sheet.sourceUrl, source)])
-        counts.cssomSourceSheets++;
-
-    const localScript = doc.createElement('script');
-    localScript.textContent = scrollScript;
-    doc.head.append(localScript);
-
-    const policy = doc.createElement('meta');
-    policy.httpEquiv = 'Content-Security-Policy';
-    policy.content = "default-src 'none'; img-src file: data:; " +
-      "style-src file: data: 'unsafe-inline'; font-src file: data:; " +
-      "media-src file: data:; script-src " + scrollScriptPolicy + "; " +
-      "connect-src 'none'; clipboard-read 'self'; clipboard-write 'self'; " +
-      "frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
-    doc.head.prepend(policy);
-
-    const helperMarker = doc.createElement('meta');
-    helperMarker.name = 'web-export-local-interactions';
-    helperMarker.content = 'enabled';
-    doc.head.append(helperMarker);
-
-    const resultData = {
-      html:'<!doctype html>\n' + doc.documentElement.outerHTML,
-      counts,
-      sheets:sheetOutput
-    };
-    const bytes = new TextEncoder().encode(JSON.stringify(resultData));
-    let binary = '';
-    for (let offset = 0; offset < bytes.length; offset += 0x8000)
-      binary += String.fromCharCode(...bytes.subarray(offset, offset + 0x8000));
-    const encoded = btoa(binary);
-    document.open();
-    document.write('<!doctype html><html><head><title>web-export-result</title></head><body></body></html>');
-    const result = document.createElement('script');
-    result.id = 'web-export-result';
-    result.type = 'application/octet-stream';
-    result.textContent = encoded;
-    document.body.append(result);
-  })();`;
-  const helper = '<!doctype html><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src \'none\'; script-src \'unsafe-inline\'; style-src \'unsafe-inline\'; connect-src \'none\'; img-src \'none\'; font-src \'none\'; object-src \'none\'"><script>' +
-    helperScript.replace('__MAP__', Buffer.from(JSON.stringify(collected.map)).toString('base64'))
-      .replace('__SHEETS__', Buffer.from(JSON.stringify(css)).toString('base64'))
-      .replace('__HTML__', Buffer.from(html).toString('base64'))
-      .replace('__SOURCE__', JSON.stringify(sourceUrl).replace(/</g,'\\u003c'))
-      .replace('__SCROLL_SCRIPT__', JSON.stringify(scrollScript))
-      .replace('__SCROLL_SCRIPT_POLICY__', JSON.stringify(scrollScriptPolicy)) + '</script>';
-  const helperFile = path.join(tempDirectory, 'transform.html');
-  writePrivate(helperFile, helper);
-  const profile = path.join(tempDirectory, 'transform-profile');
-  mkdirPrivate(profile);
-  const run = spawnSync(chromium, ['--headless=new','--disable-gpu','--disable-background-networking',
-    '--disable-extensions','--disable-sync','--no-first-run','--no-default-browser-check',
-    '--virtual-time-budget=10000','--dump-dom','--user-data-dir=' + profile,
-    'file://' + helperFile], {encoding:'utf8',timeout:120000,maxBuffer:MAX_HELPER_OUTPUT,
-      env:{...process.env}});
-  if (run.error || run.status !== 0)
-    throw fail(16, 'offline-transform-failed', 'Chromium could not transform the captured document' +
-      (run.error ? ': ' + run.error.message : ' (exit ' + run.status + ')'));
-  const match = run.stdout.match(/<script id="web-export-result" type="application\/octet-stream">([A-Za-z0-9+/=]+)<\/script>/);
-  if (!match)
-  {
-    throw fail(17, 'offline-transform-result-missing',
-      'Chromium did not return the transformed document');
   }
-  let result;
-  try {result = JSON.parse(Buffer.from(match[1], 'base64').toString('utf8'));}
-  catch (_) {throw fail(18, 'offline-transform-result-invalid',
-    'Chromium returned an invalid transformed document');}
-  return result;
+  return {name, closing, end:end + 1, tagEnd:end, attributes};
+}
+
+function findRawTextEnd(html, name, start)
+{
+  const matcher = new RegExp('</\\s*' + name + '\\s*>', 'ig');
+  matcher.lastIndex = start;
+  const match = matcher.exec(html);
+  return match ? {start:match.index, end:matcher.lastIndex} : null;
+}
+
+function isRelinkableHref(tag, attributes)
+{
+  if(tag.name!=='link')return !['a','area','base'].includes(tag.name);
+  const rel=String(attributes.get('rel')?.value||'').toLowerCase().split(/\s+/);
+  return rel.some(value=>['stylesheet','icon','mask-icon','apple-touch-icon',
+    'apple-touch-icon-precomposed','manifest','preload','modulepreload','prefetch',
+    'prerender','shortcut'].includes(value));
+}
+
+function rewriteHtmlReferences(html, sourceUrl, map, assetDirectory, stylesheetIntegrity)
+{
+  const edits = [];
+  const counts = {htmlReferences:0,cssReferences:0,scriptElements:0,
+    inlineHandlers:0,unmappedReferences:0,unmappedCssReferences:0};
+  const source = new URL(sourceUrl).href;
+  let base = source;
+  let baseSeen = false;
+  let cursor = 0;
+
+  const addEdit = (start, end, value) => {
+    if (value !== null && value !== html.slice(start, end))
+      edits.push({start,end,value});
+  };
+
+  while (cursor < html.length)
+  {
+    const start = html.indexOf('<', cursor);
+    if (start < 0) break;
+    const tag = parseHtmlStartTag(html, start);
+    if (!tag) {cursor = start + 1; continue;}
+    cursor = tag.end;
+    if (tag.comment || tag.declaration || tag.closing) continue;
+
+    if (tag.name === 'script') counts.scriptElements++;
+    const attributeByName = new Map(tag.attributes.map(attribute => [attribute.name,attribute]));
+    const baseAttribute = tag.name === 'base' ? attributeByName.get('href') : null;
+    if (baseAttribute && !baseSeen)
+    {
+      try {base = new URL(decodeHtmlAttribute(baseAttribute.value), base).href; baseSeen = true;}
+      catch (_) {}
+    }
+
+    let linkedStylesheet = null;
+    for (const attribute of tag.attributes)
+    {
+      const name = attribute.name;
+      if (name.startsWith('on')) counts.inlineHandlers++;
+
+      if (name === 'style')
+      {
+        const encoded = attribute.value;
+        const decoded = decodeHtmlAttribute(encoded);
+        const transformed = rewriteCssReferences(decoded,base,map,assetDirectory);
+        counts.cssReferences += transformed.rewritten;
+        counts.unmappedCssReferences += transformed.unmapped;
+        if (transformed.text !== decoded)
+        {
+          const escaped = transformed.text.replace(/&/g,'&amp;').replace(/"/g,'&quot;')
+            .replace(/'/g,'&#39;');
+          addEdit(attribute.start,attribute.end,escaped);
+        }
+        continue;
+      }
+
+      if (name === 'srcset')
+      {
+        const result = rewriteSrcsetReferences(attribute.value, base, map, assetDirectory);
+        counts.htmlReferences += result.rewritten;
+        addEdit(attribute.start, attribute.end, result.text);
+        counts.unmappedReferences += result.unmapped;
+        continue;
+      }
+
+      if (tag.name==='link' && name==='integrity') continue;
+
+      const resourceAttribute = ['src','poster','data','background','xlink:href','manifest'].includes(name) ||
+        (name === 'href' && isRelinkableHref(tag,attributeByName));
+      if (!resourceAttribute) continue;
+      const reference = resolveAssetReference(attribute.value, base, map, assetDirectory);
+      if (reference)
+      {
+        counts.htmlReferences++;
+        addEdit(attribute.start, attribute.end, reference.local);
+        if(tag.name==='link' && name==='href')
+          linkedStylesheet=reference.filename;
+      }
+      else if (/^https?:/i.test(attribute.value) ||
+          /^[./][^#]/.test(attribute.value))
+        counts.unmappedReferences++;
+    }
+
+    if(linkedStylesheet && attributeByName.has('integrity'))
+    {
+      const hashes=stylesheetIntegrity.get(linkedStylesheet);
+      if(hashes)
+      {
+        const integrity=attributeByName.get('integrity');
+        addEdit(integrity.start,integrity.end,updateIntegrity(integrity.value,hashes));
+      }
+    }
+
+    if (tag.name === 'style')
+    {
+      const close = findRawTextEnd(html, 'style', tag.end);
+      if (close)
+      {
+        const original=html.slice(tag.end,close.start);
+        const result=rewriteCssReferences(original,base,map,assetDirectory);
+        counts.cssReferences+=result.rewritten;
+        counts.unmappedCssReferences+=result.unmapped;
+        addEdit(tag.end,close.start,result.text);
+        cursor = close.end;
+      }
+      else cursor = html.length;
+    }
+    else if (tag.name === 'plaintext')
+    {
+      cursor = html.length;
+    }
+    else if (['script','textarea','title','xmp','noembed','noframes']
+      .includes(tag.name))
+    {
+      const close = findRawTextEnd(html, tag.name, tag.end);
+      cursor = close ? close.end : html.length;
+    }
+  }
+
+  edits.sort((left,right) => right.start - left.start);
+  let output = html;
+  for (const edit of edits)
+    output = output.slice(0,edit.start) + edit.value + output.slice(edit.end);
+  return {html:output,counts};
+}
+
+function rewriteSrcsetReferences(value, base, map, assetDirectory)
+{
+  const edits = [];
+  let rewritten = 0;
+  let unmapped = 0;
+  let index = 0;
+  while (index < value.length)
+  {
+    while (index < value.length && /[\s,]/.test(value[index])) index++;
+    if (index >= value.length) break;
+    const start = index;
+    while (index < value.length && !/\s/.test(value[index])) index++;
+    const tokenEnd = index;
+    let referenceEnd = tokenEnd;
+    let reference = value.slice(start, tokenEnd);
+    while (reference.endsWith(','))
+    {
+      reference = reference.slice(0,-1);
+      referenceEnd--;
+    }
+    if (referenceEnd === tokenEnd)
+    {
+      while (index < value.length && /\s/.test(value[index])) index++;
+      while (index < value.length && value[index] !== ',') index++;
+      if (value[index] === ',') index++;
+    }
+    else index = tokenEnd;
+    if (!reference) continue;
+
+    const asset = resolveAssetReference(reference, base, map, assetDirectory);
+    if (asset)
+    {
+      edits.push({start,end:referenceEnd,value:asset.local});
+      rewritten++;
+    }
+    else if (/^https?:/i.test(reference)) unmapped++;
+  }
+  edits.sort((left,right) => right.start - left.start);
+  let output = value;
+  for (const edit of edits)
+    output = output.slice(0,edit.start) + edit.value + output.slice(edit.end);
+  return {text:output,rewritten,unmapped};
+}
+
+function writeTransformedAssets(assets, map, assetDirectory)
+{
+  const integrity = new Map();
+  let rewrittenCssReferences = 0;
+  let unmappedCssReferences = 0;
+  for (const asset of assets)
+  {
+    if (asset.kind === 'stylesheet')
+    {
+      const original=asset.body.toString('utf8');
+      const result=rewriteCssReferences(original,asset.sourceUrl,map,assetDirectory);
+      rewrittenCssReferences+=result.rewritten;
+      unmappedCssReferences+=result.unmapped;
+      if(result.text!==original)
+      {
+        asset.sourceSha256=asset.hash;
+        asset.body=Buffer.from(result.text,'utf8');
+        asset.hash=crypto.createHash('sha256').update(asset.body).digest('hex');
+        integrity.set(asset.filename,{
+          sha256:crypto.createHash('sha256').update(asset.body).digest('base64'),
+          sha384:crypto.createHash('sha384').update(asset.body).digest('base64'),
+          sha512:crypto.createHash('sha512').update(asset.body).digest('base64')
+        });
+      }
+    }
+    const destination=path.join(assetDirectory,asset.filename);
+    fs.writeFileSync(destination,asset.body,{mode:0o600});
+    fs.chmodSync(destination,0o600);
+  }
+  return {integrity,rewrittenCssReferences,unmappedCssReferences};
+}
+
+function transformCapturedDocument(html, sourceUrl, collected, outputDirectory)
+{
+  const assetDirectory = path.join(outputDirectory, 'assets');
+  const assets=writeTransformedAssets(collected.selectedAssets,collected.map,assetDirectory);
+  const transformed = rewriteHtmlReferences(html, sourceUrl, collected.map,
+    assetDirectory,assets.integrity);
+  transformed.counts.cssReferences+=assets.rewrittenCssReferences;
+  transformed.counts.unmappedCssReferences+=assets.unmappedCssReferences;
+  return {html:transformed.html,counts:transformed.counts,
+    cssIntegrity:assets.integrity};
+}
+
+function writeCapturedExport(captured, sourceUrl, outputDirectory)
+{
+  if (Buffer.byteLength(captured.html) > MAX_HTML_BYTES)
+    throw fail(15, 'rendered-html-size-limit', 'rendered HTML exceeds the 32 MiB export limit');
+  const collected = collectAssets(captured.runDirectory, outputDirectory);
+  const transformed = transformCapturedDocument(captured.html, sourceUrl, collected, outputDirectory);
+  writePrivate(path.join(outputDirectory,'index.html'), transformed.html);
+
+  const assets = collected.selectedAssets.map(item=>({file:'assets/'+item.filename,
+    sha256:item.hash,bytes:item.body.length,kind:item.kind,source:item.origin,
+    ...(item.sourceSha256?{sourceSha256:item.sourceSha256}:{})}));
+  const htmlBytes = Buffer.byteLength(transformed.html);
+  const scriptCount = transformed.counts.scriptElements;
+  const manifest = {
+    format:'web-export/2',mode:'standalone-file',scripts:'preserved',generatedScripts:[],
+    source:{origin:new URL(sourceUrl).origin,path:new URL(sourceUrl).pathname},
+    document:{file:'index.html',sha256:crypto.createHash('sha256')
+      .update(transformed.html).digest('hex'),bytes:htmlBytes},
+    assets,
+    coverage:{resourceRows:collected.sourceRows,assets:assets.length,
+      capturedAssets:collected.assets.length,ambiguousAssetUrls:collected.ambiguous,
+      unverifiedBodies:collected.rejectedBodies,scriptElementsPreserved:scriptCount,
+      inlineHandlersPreserved:transformed.counts.inlineHandlers,
+      htmlReferencesRelinked:transformed.counts.htmlReferences,
+      cssReferencesRelinked:transformed.counts.cssReferences,
+      htmlReferencesUnmapped:transformed.counts.unmappedReferences,
+      cssReferencesUnmapped:transformed.counts.unmappedCssReferences},
+    limitations:['Source scripts and their behavior are preserved unchanged.',
+      'Network resources without a verified captured response body retain their original URL.',
+      'Interactions that need remote APIs or authenticated server state still need that service.']
+  };
+  writePrivate(path.join(outputDirectory,'manifest.json'),JSON.stringify(manifest,null,2) + '\n');
+  return manifest;
 }
 
 function capture(url, temporary)
@@ -817,68 +764,11 @@ function main(args)
     progress('capture-started', 'starting the bounded rendered-page capture');
     const captured = capture(url, path.join(temporary, 'capture'));
     progress('capture-finished', 'captured rendered HTML and indexed responses');
-    const collected = collectAssets(captured.runDirectory, output);
-    progress('assets-verified', `${collected.assets.length} local assets passed digest and size checks`);
-    const chromium = 'chromium';
-    const scrollScript = offlineInteractionSource(captured.scrollPositions);
-    const scrollScriptHash = scrollScript ?
-      crypto.createHash('sha256').update(scrollScript).digest('base64') : null;
-    const scrollScriptPolicy = scrollScriptHash ? "'sha256-" + scrollScriptHash + "'" : "'none'";
-    const transformed = transformWithChromium(chromium, temporary,
-      captured.html, url.href, {...collected,assets:collected.assets.map(item => ({...item,
-        _stagePath:path.join(output,item.file)}))},scrollScript,scrollScriptPolicy);
-    writePrivate(path.join(output, 'index.html'), transformed.html);
-    for (const sheet of transformed.sheets)
-    {
-      const file = path.join(output, 'assets', sheet.file);
-      fs.writeFileSync(file, sheet.text, {mode:0o600});
-      fs.chmodSync(file,0o600);
-    }
-    const transformedAssets = new Map(transformed.sheets.map(sheet => [sheet.file,sheet.text]));
-    const assets = collected.assets.map(item => {
-      const cssText = transformedAssets.get(item.file.slice('assets/'.length));
-      const bytes = cssText === undefined ? item.bytes : Buffer.byteLength(cssText);
-      const sha256 = cssText === undefined ? item.sha256 :
-        crypto.createHash('sha256').update(cssText).digest('hex');
-      return {file:item.file,sha256,bytes,kind:item.kind,source:item.source,
-        ...(cssText === undefined || sha256 === item.sha256 ? {} : {sourceSha256:item.sha256})};
-    });
-    const htmlBytes = Buffer.byteLength(transformed.html);
-    const manifest = {
-      format:'web-export/1', mode:'standalone-file', scripts:'site-scripts-removed',
-      generatedScripts:captured.scrollPositions.length ?
-        ['offline-local-interactions','scroll-restoration'] : ['offline-local-interactions'],
-      source:{origin:url.origin,path:url.pathname},
-      document:{file:'index.html',sha256:crypto.createHash('sha256').update(transformed.html).digest('hex'),
-        bytes:htmlBytes},
-      assets,
-      coverage:{resourceRows:collected.sourceRows,assets:assets.length,
-        capturedAssets:collected.assets.length,
-        ambiguousAssetUrls:collected.ambiguous,unverifiedBodies:collected.rejectedBodies,
-        scriptsRemoved:transformed.counts.scriptsRemoved,
-        framesRemoved:transformed.counts.framesRemoved,
-        unavailableHtmlReferences:transformed.counts.unavailableReferences,
-        unavailableCssReferences:transformed.counts.unavailableCssReferences,
-        nonvisualLinksRemoved:transformed.counts.nonvisualLinksRemoved,
-        stylesheetSourcesFromCssom:transformed.counts.cssomSourceSheets,
-        offlineCopyControls:transformed.counts.offlineCopyControls,
-        offlineDisclosureControls:transformed.counts.offlineDisclosureControls,
-        consentDismissControls:transformed.counts.consentDismissControls,
-        disclosureContentUnavailable:transformed.counts.disclosureContentUnavailable,
-        scrollMetadataAvailable:captured.scrollMetadataAvailable,
-        scrollPositionsCaptured:captured.scrollPositions.length,
-        scrollPositionsTruncated:captured.scrollPositionsTruncated,
-        scrollRestorationScript:captured.scrollPositions.length > 0,
-        offlineInteractionScript:!!scrollScript},
-      limitations:['Page scripts are not executed in the export.',
-        'Interactions requiring a remote API, backend or removed frame are unavailable offline.',
-        'Resources without a verified archived body are omitted.']
-    };
-    writePrivate(path.join(output, 'manifest.json'), JSON.stringify(manifest,null,2) + '\n');
+    const manifest = writeCapturedExport(captured,url.href,output);
     fs.rmSync(temporary,{recursive:true,force:true});
     completed = true;
-    progress('export-written', `${output}: ${assets.length} assets, ` +
-      `${transformed.counts.unavailableReferences + transformed.counts.unavailableCssReferences} unavailable references`);
+    progress('export-written', `${output}: ${manifest.assets.length} assets, ` +
+      `${manifest.coverage.htmlReferencesUnmapped + manifest.coverage.cssReferencesUnmapped} uncaptured references left unchanged`);
     process.stdout.write(path.join(output,'index.html') + '\n');
     return 0;
   }
@@ -897,9 +787,13 @@ function main(args)
   }
 }
 
-try {process.exitCode = main(process.argv.slice(2));}
-catch (error)
+if (require.main === module)
 {
-  process.stderr.write(`web-export.${error.identity || 'unexpected-failure'}: ${error.message}\n`);
-  process.exitCode = error.status || 20;
+  try {process.exitCode = main(process.argv.slice(2));}
+  catch (error)
+  {
+    process.stderr.write(`web-export.${error.identity || 'unexpected-failure'}: ${error.message}\n`);
+    process.exitCode = error.status || 20;
+  }
 }
+else module.exports = {transformCapturedDocument,writeCapturedExport};

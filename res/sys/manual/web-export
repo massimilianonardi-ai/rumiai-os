@@ -1,59 +1,52 @@
 NAME
-    web-export - create a standalone offline HTML snapshot of a web page
+    web-export - export a rendered HTML page while preserving its source behavior
 
 SYNOPSIS
     web-export <http(s)-url> <export-directory>
 
 DESCRIPTION
-    Captures the rendered page with the web-analyze Chromium/CDP recorder,
-    including its bounded passive scroll sweep, and writes a local export.
-    The export directory must not already exist. Its parent is created when
-    needed. The result can be opened directly as index.html; it does not need
-    a local HTTP server or network access.
+    Captures a rendered page with the web-analyze Chromium/CDP recorder and
+    writes index.html, manifest.json and verified resources under assets/.
+    The destination must not already exist. The command prints the absolute
+    path to index.html on stdout and sends diagnostics to stderr.
 
-    The exporter uses only resource bodies whose archived size and SHA-256
-    match the recorder index. It rewrites captured visual resources to local
-    files under assets/. A stylesheet body unavailable from HTTP may use a
-    saved CSSOM stylesheet source, identified as cssom-source in manifest.json;
-    this is not represented as the original HTTP response body. Non-success
-    HTTP errors/redirects, empty non-stylesheet bodies and digest/size
-    mismatches are rejected. References without a verified local source are
-    removed and counted. Non-HTTP(S) subresource schemes are removed, except
-    for embedded data values and document fragments.
+    The captured HTML is retained as the source document. Scripts, inline
+    handlers, forms, frames, links, controls, SVG icons and page interactions
+    are preserved. The exporter does not add replacement interactions, strip
+    scripts, inject a Content-Security-Policy or block network access.
 
-    Page scripts, frames, embedded objects, external form submission and
-    browser event handlers and hyperlink ping notifications are removed or
-    disabled. One generated inline helper restores captured scroll offsets
-    and preserves local interactions. Copy controls copy nearby code, table
-    or conversation text. Controls with aria-expanded toggle locally and show
-    a captured panel when available. Accept/reject/dismiss/close controls
-    remove nearby cookie or consent notices. The helper does not call source
-    handlers or remote services.
-    Its SHA-256 content hash is the only script source allowed by the policy.
-    Disclosure content absent from the capture cannot be recreated and is
-    counted in manifest.json. Backend/API/login-dependent actions remain
-    unavailable. Normal hyperlinks remain links to their original
-    destinations when clicked.
+    A reference is changed to a local file only when its exact HTTP(S) URL has
+    one unambiguous captured body whose byte size and SHA-256 match recorder
+    metadata. HTML src/srcset and resource links (stylesheet, icons, preload
+    and related rels) are relinked. Canonical/ordinary links, form actions and
+    frame URLs remain source references. CSS url(), @import and image-set()
+    references in style attributes, style blocks and captured stylesheet bodies
+    are relinked when verified; comments and ordinary string content are kept.
+    Changed stylesheets get updated SHA-256 and supported SRI metadata. Script
+    source is never modified. Missing, ambiguous, rejected or unverifiable
+    resources keep their original URLs and are counted in manifest.json.
 
-    The source page and captured assets can contain private content. The
-    output directory and temporary capture use restrictive permissions.
-    Temporary raw capture data is removed after conversion.
+    Since source scripts and uncaptured URLs remain active, a page can contact
+    its original services and may need a network, authentication or server
+    state. The command does not promise that every page is fully offline or
+    pixel-identical. It reports what was captured without inventing content
+    or interaction behavior.
+
+    Temporary capture data is stored privately and removed after conversion.
+    The source capture is not modified.
 
 OPERANDS
-    http(s)-url       Required absolute HTTP or HTTPS URL.
-    export-directory  New destination directory. Existing paths are refused
-                      to avoid replacing user data.
+    http(s)-url       Absolute HTTP or HTTPS URL to capture.
+    export-directory  New destination directory; existing paths are refused.
 
 OUTPUT
-    Prints the absolute path to index.html on stdout. Diagnostics go to stderr.
-
     export-directory/
-      index.html       Rendered offline page with a no-network content policy
-      manifest.json    Asset digests, coverage counts and explicit limitations
-      assets/          Verified local images, fonts, media and rewritten CSS
+      index.html       Captured HTML with verified resources relinked
+      manifest.json    Digests, provenance and coverage/limitation counts
+      assets/          Verified captured resource bodies
 
 EXIT STATUS
-    0   Export completed. Check manifest.json for omitted resources.
+    0   Export completed. Review manifest.json for resources left remote.
     1   m_ROOT is missing.
     2   m_LIB_DIR is missing.
     3   Invalid operands.
@@ -67,20 +60,11 @@ EXIT STATUS
     11  Resource index is invalid.
     12  Rendered DOM is unavailable.
     13  Rendered DOM is empty.
-    14  Verified visual assets exceed the 512 MiB limit.
+    14  Verified captured assets exceed the 512 MiB limit.
     15  Rendered HTML exceeds the 32 MiB limit.
-    16  Chromium could not perform the offline transformation.
-    17  Chromium returned no transformed page.
-    18  Chromium returned an invalid transformed result.
     19  Private temporary capture data could not be removed.
     20  An unexpected export failure occurred.
 
-ENVIRONMENT AND FILES
-    Requires an initialized m environment with Node.js, Chromium and the
-    web-analyze command/library installed. Run as `m web-export ...` from a
-    clean shell.
-
-    Uses a temporary private web-analyze capture and a temporary isolated
-    Chromium profile. Only the export directory is retained. This command
-    does not modify the source page, authenticate, click controls, submit
-    forms or bypass access challenges.
+ENVIRONMENT
+    Requires an initialized m environment with Node.js, Chromium and
+    web-analyze installed. Invoke as `m web-export <url> <directory>`.
