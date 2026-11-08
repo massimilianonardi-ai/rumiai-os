@@ -3077,7 +3077,7 @@ _rsudo_mod_apisix_snapshot_read()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = snapshot ] || { log error apisix snapshot-read-adapter-unsupported adapter "$adapter"; exit 4; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix snapshot-read-scope-unsupported scope "$scope"; exit 5; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
   admin_url=${RSUDO_APISIX_ADMIN_URL-}
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   case "$admin_url" in
@@ -3106,8 +3106,13 @@ _rsudo_mod_apisix_snapshot_read()
   done
   [ -n "$temp_dir" ] || { log error apisix snapshot-read-temp-unavailable; exit 9; }
   trap 'rm -f "$temp_dir/snapshot.json" "$temp_dir/items.jsonl" "$temp_dir/matches.jsonl"; rmdir "$temp_dir" 2>/dev/null' 0
-  _rsudo_mod_apisix_rest_transport_remote_source |
-    rsudo sh -s -- "$admin_url" "$header_file" configs '' > "$temp_dir/snapshot.json"
+  if [ "$scope" = host ]; then
+    _rsudo_mod_apisix_rest_transport_remote_source |
+      rsudo sh -s -- "$admin_url" "$header_file" configs '' > "$temp_dir/snapshot.json"
+  else
+    _rsudo_mod_apisix_rest_transport_remote_source |
+      rsudo "$scope" exec -i "$container" sh -s -- "$admin_url" "$header_file" configs '' > "$temp_dir/snapshot.json"
+  fi
   remote_status=$?
   [ "$remote_status" -eq 0 ] || { log error apisix snapshot-read-remote-failed status "$remote_status"; exit 10; }
   json --check "$temp_dir/snapshot.json" >/dev/null 2>&1 || { log error apisix snapshot-read-invalid-json; exit 11; }

@@ -57,9 +57,9 @@ PUBLIC FUNCTIONS
         resolved inside the selected full-ID container. For standalone-api,
         select
         RSUDO_APISIX_DEPLOYMENT=standalone-api and the same Admin URL/header
-        variables; snapshot list/get currently require host scope. Snapshot
-        apply accepts host or an explicit Docker/Podman full-ID target, with
-        the URL and header path resolved inside that target. The adapter performs the protected GET on
+        variables; standalone API list/get and apply accept host or an explicit
+        Docker/Podman full-ID target, with URL and header path resolved inside
+        that target. The adapter performs the protected GET on
         `/apisix/admin/configs`, stages the full response under a private
         local temporary directory (umask 077), validates it with RumiAI json
         and returns only the requested top-level resource array. `get` returns
@@ -112,13 +112,14 @@ PUBLIC FUNCTIONS
         malformed JSON 11, resource query failure 12, temporary result write
         failure 13, missing resource 14 and duplicate matching IDs 15. No
         implicit adapter or legacy fallback is attempted.
-        The snapshot adapter requires scope=host. Its local statuses are
-        invalid arguments 1, unsupported resource 2, invalid ID 3, unsupported
-        adapter 4, unsupported scope 5, invalid Admin URL/authority 6, missing
-        json command 8, temp storage failure 9 and remote HTTP/read failure 10;
-        malformed snapshot JSON is 11, query/result staging failure 12,
-        missing ID 13 and duplicate matching IDs 14. Remote curl preserves its
-        HTTP/transport status.
+        The snapshot adapter accepts explicitly selected host/container scope.
+        Its local statuses are invalid arguments 1, unsupported resource 2,
+        invalid ID 3, unsupported adapter 4, invalid Admin URL/authority 6,
+        missing json command 8, temp storage failure 9 and remote HTTP/read
+        failure 10; malformed snapshot JSON is 11, query/result staging
+        failure 12, missing ID 13 and duplicate matching IDs 14. Common
+        context validation checks scope and full container ID. Remote curl
+        preserves its HTTP/transport status.
         The YAML-file adapter requires RSUDO_APISIX_HOME and uses statuses
         1-9 for arguments, resource, ID, adapter, installation home, data
         path, container, scope and private temporary storage; 10 is remote
