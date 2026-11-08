@@ -23,15 +23,17 @@ DESCRIPTION
 
     Page scripts, frames, embedded objects, external form submission and
     browser event handlers and hyperlink ping notifications are removed or
-    disabled. If the capture contains non-zero document or nested scroll
-    offsets, a generated inline helper restores those offsets after load. Its
-    SHA-256 content hash is the only script source allowed by the restrictive
-    policy; site scripts remain removed. Helper presence is listed in
-    manifest.json. The result preserves the rendered DOM, captured scroll position and local visual
-    resources; it is an offline snapshot, not a running copy of the site's
-    application. Actions that depend on a backend, API, login session, script
-    or removed frame do not work offline. Normal hyperlinks remain links to
-    their original destinations when clicked.
+    disabled. One generated inline helper restores captured scroll offsets
+    and preserves local interactions. Copy controls copy nearby code, table
+    or conversation text. Controls with aria-expanded toggle locally and show
+    a captured panel when available. Accept/reject/dismiss/close controls
+    remove nearby cookie or consent notices. The helper does not call source
+    handlers or remote services.
+    Its SHA-256 content hash is the only script source allowed by the policy.
+    Disclosure content absent from the capture cannot be recreated and is
+    counted in manifest.json. Backend/API/login-dependent actions remain
+    unavailable. Normal hyperlinks remain links to their original
+    destinations when clicked.
 
     The source page and captured assets can contain private content. The
     output directory and temporary capture use restrictive permissions.

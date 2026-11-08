@@ -205,10 +205,125 @@ function collectAssets(runDirectory, targetDirectory)
     ambiguous,rejectedBodies,sourceRows:rows.length};
 }
 
-function scrollRestoreSource(positions)
+function offlineInteractionSource(positions)
 {
-  return `(() => {
-  const positions = ${JSON.stringify(positions)};
+  const encodedPositions = JSON.stringify(positions);
+  const consentHandler = `const dismissConsent = (button, event) => {
+    for (let current = button, depth = 0; current && depth < 7;
+      current = current.parentElement, depth++) {
+      const text = (current.innerText || current.textContent || '').toLowerCase();
+      const buttonCount = current.querySelectorAll('button,[role="button"]').length;
+      if (current !== document.body && current !== document.documentElement &&
+          text.length <= 2000 && /cookie|cookies|consent|privacy/.test(text) &&
+          buttonCount > 0 && buttonCount <= 8) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        current.remove();
+        return true;
+      }
+    }
+    return false;
+  };`;
+  return String.raw`(() => {
+  const copyText = async text => {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    }
+    catch (_) {
+      const field = document.createElement('textarea');
+      field.value = text;
+      field.setAttribute('readonly', '');
+      field.style.position = 'fixed';
+      field.style.left = '-10000px';
+      document.body.append(field);
+      field.select();
+      let copied = false;
+      try {copied = document.execCommand('copy');} catch (_) {}
+      field.remove();
+      return copied;
+    }
+  };
+  const labelFor = node => [node.getAttribute('aria-label'), node.getAttribute('title'),
+    node.innerText, node.textContent].filter(Boolean).join(' ').trim();
+  const nearestText = node => {
+    for (let current = node; current; current = current.parentElement) {
+      if (current.matches('section[data-testid^="conversation-turn-"],article,[role="article"],pre,table')) return current;
+      if (current === node.parentElement) break;
+    }
+    return node.parentElement;
+  };
+  const controlText = node => {
+    const clone = node.cloneNode(true);
+    clone.querySelectorAll('button,[role="button"],input,textarea,select,script,style').forEach(item => item.remove());
+    if (clone.querySelector('table')) {
+      return [...clone.querySelectorAll('tr')].map(row =>
+        [...row.querySelectorAll('th,td')].map(cell => cell.innerText || cell.textContent || '').join('\t')
+      ).join('\n');
+    }
+    return clone.innerText || clone.textContent || '';
+  };
+  const disclosureHasContent = panel => Boolean((panel.innerText || panel.textContent || '').trim() ||
+    panel.querySelector('img,video,audio,svg,canvas,table,pre,math'));
+  const localDisclosure = control => {
+    const expanded = control.getAttribute('aria-expanded') === 'true';
+    const id = control.getAttribute('aria-controls');
+    let panel = id ? document.getElementById(id) : null;
+    if (!panel && !id) {
+      const sibling = control.parentElement && control.parentElement.nextElementSibling;
+      if (sibling && (sibling.matches('[data-web-export-disclosure-panel], [role="region"]') ||
+          sibling.hasAttribute('hidden'))) panel = sibling;
+    }
+    if (panel) {
+      if (!disclosureHasContent(panel)) control.setAttribute('data-web-export-content-unavailable', 'true');
+      panel.hidden = expanded;
+      panel.setAttribute('aria-hidden', String(expanded));
+      if ('inert' in panel) panel.inert = expanded;
+    }
+    else control.setAttribute('data-web-export-content-unavailable', 'true');
+    control.setAttribute('aria-expanded', String(!expanded));
+  };
+  ${consentHandler}
+  const handleLocalClick = event => {
+    const origin = event.target instanceof Element ? event.target : null;
+    const button = origin && origin.closest('button,[role="button"],[aria-expanded],input[type="button"],input[type="submit"]');
+    if (!button) return;
+    const label = labelFor(button).toLowerCase();
+    if (/\bcopy\b|clipboard/.test(label)) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      let source = button.closest('pre');
+      if (!source && /table/.test(label)) source = button.closest('table') || button.parentElement;
+      if (!source) source = button.closest('section[data-testid^="conversation-turn-"],article,[role="article"]');
+      if (!source) source = nearestText(button);
+      const copied = source ? controlText(source).trim() : '';
+      if (copied) button.setAttribute('data-web-export-copy-state', 'pending');
+      if (copied) copyText(copied).then(ok => {
+        button.setAttribute('data-web-export-copy-state', ok ? 'copied' : 'unavailable');
+      });
+      else button.setAttribute('data-web-export-copy-state', 'unavailable');
+      return;
+    }
+    if (button.hasAttribute('aria-expanded')) {
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      localDisclosure(button);
+      return;
+    }
+    if (/\b(?:accept|reject|dismiss|close)\b/.test(label)) dismissConsent(button,event);
+  };
+  window.addEventListener('click', handleLocalClick, true);
+  const unavailable = [...document.querySelectorAll('[aria-expanded="false"]')].filter(button => {
+    const id = button.getAttribute('aria-controls');
+    if (id) {
+      const panel = document.getElementById(id);
+      return !panel || !disclosureHasContent(panel);
+    }
+    const panel = button.parentElement?.nextElementSibling;
+    return !panel || !disclosureHasContent(panel);
+  }).length;
+  document.documentElement.setAttribute('data-web-export-disclosures-unavailable', String(unavailable));
+  const positions = JSON.parse('${encodedPositions.replace(/\\/g,'\\\\').replace(/'/g,"\\'")}');
   const restore = () => {
     let restored = 0;
     for (const position of positions) {
@@ -225,11 +340,15 @@ function scrollRestoreSource(positions)
     }
     document.documentElement.setAttribute('data-web-export-scroll-restored',String(restored));
   };
-  const schedule = () => requestAnimationFrame(restore);
+  const schedule = () => {
+    restore();
+    requestAnimationFrame(restore);
+  };
   if (document.readyState === 'loading')
     document.addEventListener('DOMContentLoaded',schedule,{once:true});
   else schedule();
-})();\n`;
+  document.documentElement.setAttribute('data-web-export-interactions','ready');
+})();`;
 }
 
 function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collected,
@@ -251,7 +370,9 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
     const sheets = JSON.parse(decodeURIComponent(escape(atob('__SHEETS__'))));
     const counts = {
       scriptsRemoved:0, framesRemoved:0, unavailableReferences:0,
-      unavailableCssReferences:0, cssomSourceSheets:0, nonvisualLinksRemoved:0
+      unavailableCssReferences:0, cssomSourceSheets:0, nonvisualLinksRemoved:0,
+      offlineCopyControls:0, offlineDisclosureControls:0, consentDismissControls:0,
+      disclosureContentUnavailable:0
     };
 
     function normalizedUrl(value, base)
@@ -388,6 +509,8 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
       if (['refresh','content-security-policy','content-security-policy-report-only']
         .includes(directive)) node.remove();
     }
+    for (const node of [...doc.querySelectorAll('meta[http-equiv="Content-Security-Policy" i],meta[http-equiv="Content-Security-Policy-Report-Only" i],meta[http-equiv="Permissions-Policy" i]')])
+      node.remove();
 
     const localLinkTypes = [
       'stylesheet','icon','apple-touch-icon','mask-icon','preload','modulepreload'
@@ -523,24 +646,53 @@ function transformWithChromium(chromium, tempDirectory, html, sourceUrl, collect
       }
     }
 
+    counts.offlineCopyControls = [...doc.querySelectorAll('button,[role="button"],input[type="button"]')]
+      .filter(node => /\bcopy\b|clipboard/i.test([node.getAttribute('aria-label'),
+        node.getAttribute('title'),node.textContent].filter(Boolean).join(' '))).length;
+    counts.offlineDisclosureControls = doc.querySelectorAll('[aria-expanded]').length;
+    counts.consentDismissControls = [...doc.querySelectorAll('button,[role="button"]')]
+      .filter(node => {
+        if (!/\b(?:accept|reject|dismiss|close)\b/i.test([node.getAttribute('aria-label'),
+          node.getAttribute('title'),node.textContent].filter(Boolean).join(' '))) return false;
+        for (let current = node, depth = 0; current && depth < 7;
+          current = current.parentElement, depth++) {
+          const text = (current.innerText || current.textContent || '').toLowerCase();
+          const buttonCount = current.querySelectorAll('button,[role="button"]').length;
+          if (current !== doc.body && current !== doc.documentElement && text.length <= 2000 &&
+              /cookie|cookies|consent|privacy/.test(text) && buttonCount > 0 && buttonCount <= 8)
+            return true;
+        }
+        return false;
+      }).length;
+    counts.disclosureContentUnavailable = [...doc.querySelectorAll('[aria-expanded="false"]')]
+      .filter(button => {
+        const id = button.getAttribute('aria-controls');
+        const panel = id ? doc.getElementById(id) : button.parentElement?.nextElementSibling;
+        return !panel || (!(panel.textContent || '').trim() &&
+          !panel.querySelector('img,video,audio,svg,canvas,table,pre,math'));
+      }).length;
+
     for (const sheet of sheetOutput)
       if (sheet.source === 'cssom-source' && map[normalizedUrl(sheet.sourceUrl, source)])
         counts.cssomSourceSheets++;
 
-    if (scrollScript)
-    {
-      const restore = doc.createElement('script');
-      restore.textContent = scrollScript;
-      doc.head.append(restore);
-    }
+    const localScript = doc.createElement('script');
+    localScript.textContent = scrollScript;
+    doc.head.append(localScript);
 
     const policy = doc.createElement('meta');
     policy.httpEquiv = 'Content-Security-Policy';
     policy.content = "default-src 'none'; img-src file: data:; " +
       "style-src file: data: 'unsafe-inline'; font-src file: data:; " +
-      "media-src file: data:; script-src " + scrollScriptPolicy + "; connect-src 'none'; " +
+      "media-src file: data:; script-src " + scrollScriptPolicy + "; " +
+      "connect-src 'none'; clipboard-read 'self'; clipboard-write 'self'; " +
       "frame-src 'none'; object-src 'none'; form-action 'none'; base-uri 'none'";
     doc.head.prepend(policy);
+
+    const helperMarker = doc.createElement('meta');
+    helperMarker.name = 'web-export-local-interactions';
+    helperMarker.content = 'enabled';
+    doc.head.append(helperMarker);
 
     const resultData = {
       html:'<!doctype html>\n' + doc.documentElement.outerHTML,
@@ -668,8 +820,7 @@ function main(args)
     const collected = collectAssets(captured.runDirectory, output);
     progress('assets-verified', `${collected.assets.length} local assets passed digest and size checks`);
     const chromium = 'chromium';
-    const scrollScript = captured.scrollPositions.length ?
-      scrollRestoreSource(captured.scrollPositions) : null;
+    const scrollScript = offlineInteractionSource(captured.scrollPositions);
     const scrollScriptHash = scrollScript ?
       crypto.createHash('sha256').update(scrollScript).digest('base64') : null;
     const scrollScriptPolicy = scrollScriptHash ? "'sha256-" + scrollScriptHash + "'" : "'none'";
@@ -695,7 +846,8 @@ function main(args)
     const htmlBytes = Buffer.byteLength(transformed.html);
     const manifest = {
       format:'web-export/1', mode:'standalone-file', scripts:'site-scripts-removed',
-      generatedScripts:scrollScript ? ['scroll-restoration'] : [],
+      generatedScripts:captured.scrollPositions.length ?
+        ['offline-local-interactions','scroll-restoration'] : ['offline-local-interactions'],
       source:{origin:url.origin,path:url.pathname},
       document:{file:'index.html',sha256:crypto.createHash('sha256').update(transformed.html).digest('hex'),
         bytes:htmlBytes},
@@ -709,10 +861,15 @@ function main(args)
         unavailableCssReferences:transformed.counts.unavailableCssReferences,
         nonvisualLinksRemoved:transformed.counts.nonvisualLinksRemoved,
         stylesheetSourcesFromCssom:transformed.counts.cssomSourceSheets,
+        offlineCopyControls:transformed.counts.offlineCopyControls,
+        offlineDisclosureControls:transformed.counts.offlineDisclosureControls,
+        consentDismissControls:transformed.counts.consentDismissControls,
+        disclosureContentUnavailable:transformed.counts.disclosureContentUnavailable,
         scrollMetadataAvailable:captured.scrollMetadataAvailable,
         scrollPositionsCaptured:captured.scrollPositions.length,
         scrollPositionsTruncated:captured.scrollPositionsTruncated,
-        scrollRestorationScript:!!scrollScript},
+        scrollRestorationScript:captured.scrollPositions.length > 0,
+        offlineInteractionScript:!!scrollScript},
       limitations:['Page scripts are not executed in the export.',
         'Interactions requiring a remote API, backend or removed frame are unavailable offline.',
         'Resources without a verified archived body are omitted.']
