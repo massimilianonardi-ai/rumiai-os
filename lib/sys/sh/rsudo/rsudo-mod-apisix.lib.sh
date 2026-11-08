@@ -2006,7 +2006,7 @@ _rsudo_mod_apisix_rest_read()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = rest ] || { log error apisix rest-read-adapter-unsupported adapter "$adapter"; exit 3; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix rest-read-scope-unsupported scope "$scope"; exit 4; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
   admin_url=${RSUDO_APISIX_ADMIN_URL-}
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   # rsudo may record command arguments. Validate the URL locally before it is
@@ -2022,8 +2022,13 @@ _rsudo_mod_apisix_rest_read()
     ;;
   esac
   RSUDO_INTERACTIVE=
-  _rsudo_mod_apisix_rest_transport_remote_source |
-    rsudo sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id"
+  if [ "$scope" = host ]; then
+    _rsudo_mod_apisix_rest_transport_remote_source |
+      rsudo sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id"
+  else
+    _rsudo_mod_apisix_rest_transport_remote_source |
+      rsudo "$scope" exec -i "$container" sh -s -- "$admin_url" "$header_file" "$resource" "$resource_id"
+  fi
 )
 
 _rsudo_mod_apisix_rest_mutate()
@@ -2044,7 +2049,7 @@ _rsudo_mod_apisix_rest_mutate()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = rest ] || { log error apisix rest-mutate-adapter-unsupported adapter "$adapter"; exit 4; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix rest-mutate-scope-unsupported scope "$scope"; exit 5; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
   admin_url=${RSUDO_APISIX_ADMIN_URL-}
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   case "$admin_url" in
@@ -2062,8 +2067,13 @@ _rsudo_mod_apisix_rest_mutate()
     log error apisix rest-mutate-remote-source-failed
     exit 9
   }
-  rsudo sh -c "$remote_source" apisix \
-    "$admin_url" "$header_file" "$resource" "$resource_id" "$method"
+  if [ "$scope" = host ]; then
+    rsudo sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" "$resource" "$resource_id" "$method"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" "$resource" "$resource_id" "$method"
+  fi
 )
 
 # Advanced Admin API request. The caller chooses a path beneath the fixed
@@ -2097,7 +2107,7 @@ _rsudo_mod_apisix_rest_request()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = rest ] || { log error apisix rest-request-adapter-unsupported adapter "$adapter"; exit 4; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix rest-request-scope-unsupported scope "$scope"; exit 5; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
   admin_url=${RSUDO_APISIX_ADMIN_URL-}
   header_file=${RSUDO_APISIX_HEADER_FILE-}
   case "$admin_url" in
@@ -2115,8 +2125,13 @@ _rsudo_mod_apisix_rest_request()
     log error apisix rest-request-remote-source-failed
     exit 9
   }
-  rsudo sh -c "$remote_source" apisix \
-    "$admin_url" "$header_file" "$resource_path" '' "$method"
+  if [ "$scope" = host ]; then
+    rsudo sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" "$resource_path" '' "$method"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" "$resource_path" '' "$method"
+  fi
 )
 
 # Publish a complete API-driven standalone snapshot. The caller owns resource

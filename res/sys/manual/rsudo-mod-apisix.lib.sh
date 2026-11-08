@@ -5,14 +5,15 @@ DESCRIPTION
     This module retains compatibility forwarding for old operation-specific
     function names. The generic list/get entrypoints route internally to the
     explicit traditional REST, standalone API snapshot, standalone JSON-file
-    or standalone YAML-file adapter. REST and standalone API snapshot
-    create/update/delete mutations are host-scoped; standalone-file-json also
-    supports these mutations for routes, services and upstreams. YAML resource
+    or standalone YAML-file adapter. Traditional REST and standalone API
+    snapshot create/update/delete support explicit host/container targets;
+    standalone-file-json also supports these mutations for routes, services
+    and upstreams. YAML resource
     mutations and other unsupported backends fail without legacy fallback.
     apply publishes a complete JSON/YAML document to an explicitly selected
     standalone file target, or a complete JSON snapshot to an explicitly selected
-    standalone API endpoint. Generic request is implemented only for the
-    explicit host traditional REST adapter. Host discovery and operator
+    standalone API endpoint. Generic request routes through explicitly
+    selected traditional REST host/container targets. Host discovery and operator
     context inspection are read-only.
     Existing legacy operations use their original input formats and behavior,
     including known limitations in JSON construction, credentials and HTTP errors.
@@ -44,16 +45,20 @@ PUBLIC FUNCTIONS
         traditional-admin REST, standalone API snapshot, standalone-file-json
         or standalone-file-yaml
         adapter. REST requires
-        RSUDO_APISIX_SCOPE=host, RSUDO_APISIX_DEPLOYMENT=traditional-admin,
+        RSUDO_APISIX_SCOPE=host|docker|podman,
+        RSUDO_APISIX_DEPLOYMENT=traditional-admin,
         RSUDO_APISIX_ADMIN_URL (an http(s) origin without a path) and
         RSUDO_APISIX_HEADER_FILE (an absolute path on the remote target).
         The remote header file must be a regular, readable, non-symlink file
         with mode 0600 and exactly one newline-terminated X-API-KEY header.
         Curl verifies HTTPS using its configured trust and does not follow
         redirects or use proxy settings. The raw successful JSON response is
-        written to stdout. For standalone-api, select
+        written to stdout. In container scope the REST URL and header path are
+        resolved inside the selected full-ID container. For standalone-api,
+        select
         RSUDO_APISIX_DEPLOYMENT=standalone-api and the same Admin URL/header
-        variables. This host-scoped adapter performs the protected GET on
+        variables; snapshot list/get/apply currently require host scope. The
+        adapter performs the protected GET on
         `/apisix/admin/configs`, stages the full response under a private
         local temporary directory (umask 077), validates it with RumiAI json
         and returns only the requested top-level resource array. `get` returns
@@ -96,8 +101,8 @@ PUBLIC FUNCTIONS
         server or selected file resource JSON; JSON-file get requires exactly
         one matching `id`, otherwise it returns not-found or ambiguous status.
         Invalid argument shape is 1, unsupported resource 2,
-        unsupported adapter 3, unsupported scope 4 and invalid Admin URL or
-        authority 5; remote validation
+        unsupported adapter 3 and invalid Admin URL or authority 5; the common
+        context parser validates scope and full container IDs. Remote validation
         has distinct statuses 84-92. Curl HTTP failures retain curl status 22.
         The JSON-file adapter uses statuses 1-15: invalid arguments 1,
         unsupported resource 2, invalid ID 3, unsupported adapter 4, invalid
@@ -123,11 +128,12 @@ PUBLIC FUNCTIONS
     rsudo_mod_apisix_create resource   (reads JSON request body from stdin)
     rsudo_mod_apisix_update resource id (reads JSON request body from stdin)
     rsudo_mod_apisix_delete resource id
-        For traditional REST, mutate routes, services or upstreams only when
-        RSUDO_APISIX_SCOPE=host and RSUDO_APISIX_DEPLOYMENT=traditional-admin
-        are explicitly selected. REST also requires RSUDO_APISIX_ADMIN_URL
-        (an http(s) origin) and RSUDO_APISIX_HEADER_FILE (an absolute remote
-        pathname containing exactly one newline-terminated X-API-KEY header
+        For traditional REST, mutate routes, services or upstreams when
+        RSUDO_APISIX_DEPLOYMENT=traditional-admin and either host scope or an
+        explicit Docker/Podman scope with full container ID are selected.
+        REST also requires RSUDO_APISIX_ADMIN_URL (an http(s) origin) and
+        RSUDO_APISIX_HEADER_FILE (an absolute path on the selected target
+        containing exactly one newline-terminated X-API-KEY header
         in a readable, ordinary non-symlink file with mode 0600). create uses
         POST on the collection; update uses PUT on the resource ID; delete
         uses DELETE on the resource ID. APISIX may assign an ID for POST.
@@ -137,12 +143,14 @@ PUBLIC FUNCTIONS
         and schema. Supply the complete intended resource to update; partial
         PATCH is not implemented. Successful response
         bodies are written to stdout. Delete is not forced: APISIX may reject
-        a resource still in use. HTTPS verification remains enabled; proxy
+        a resource still in use. In container scope, the Admin URL and header
+        path resolve inside the selected container. HTTPS verification remains enabled; proxy
         and redirect use are disabled. HTTP failures retain curl's non-zero
-        status, normally 22. Local REST statuses 1-9 cover invalid arguments,
-        resource, ID, adapter, scope, Admin URL, authority, invalid operator
-        context and static remote-source creation. Remote precondition failures
-        use 84-94.
+        status, normally 22. Local REST statuses identify invalid arguments
+        (1), resource (2), ID (3), adapter (4), Admin URL (6), authority (7),
+        operator context (8) and static remote-source creation (9). Common
+        context validation checks scope and full container ID. Remote
+        precondition failures use 84-94.
         For standalone JSON files, select
         RSUDO_APISIX_DEPLOYMENT=standalone-file-json and set absolute
         RSUDO_APISIX_HOME and RSUDO_APISIX_DATA_FILE. Host, Docker and Podman
@@ -252,7 +260,7 @@ PUBLIC FUNCTIONS
         response-file or unexpected HTTP status failure.
 
     rsudo_mod_apisix_request relative-admin-path [method]
-        Advanced request through the selected host-scoped traditional Admin
+        Advanced request through the selected host or container traditional Admin
         REST adapter. The path is relative to /apisix/admin, uses nonempty
         slash-separated ASCII alphanumeric/dot/underscore/tilde/hyphen
         segments, and cannot contain dot or dot-dot segments, query strings,
@@ -260,11 +268,13 @@ PUBLIC FUNCTIONS
         GET, POST, PUT and DELETE are accepted. POST/PUT read a JSON request
         body from stdin; DELETE and GET send no body. It uses the same
         protected header file and curl TLS/proxy/redirect controls as typed
-        REST operations. This intentionally exposes other Admin API endpoints
+        REST operations and routes through the explicit host or Docker/Podman
+        target. This intentionally exposes other Admin API endpoints
         selected by the operator; APISIX enforces endpoint permissions and
-        schema. Local statuses 1-9 identify invalid arguments, path, method,
-        adapter, scope, Admin URL, authority, operator context and remote
-        source creation. No non-REST or legacy fallback is attempted.
+        schema. Local statuses identify invalid arguments (1), path (2),
+        method (3), adapter (4), Admin URL (6), authority (7), operator
+        context (8) and remote source creation (9). No non-REST or legacy
+        fallback is attempted.
 
     rsudo_mod_apisix_context
         Read-only, local inspection of the caller's EXPLICIT environment
