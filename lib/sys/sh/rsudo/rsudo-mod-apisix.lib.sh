@@ -1650,6 +1650,18 @@ RSUDO_APISIX_CONTAINER_FIND
     then
       printf 'container\t%s\trunning\t%s\tcontainer-config-candidate\n' \
         "$manager_scope" "$container_id"
+      # A manager mount is path provenance only; it cannot prove that APISIX
+      # loaded those bytes or that the container is serving this config.
+      container_mounts=$("$manager" inspect --format \
+        '{{range .Mounts}}{{printf "%s|%s\n" .Source .Destination}}{{end}}' \
+        "$container_id" 2>/dev/null)
+      mount_status=$?
+      if [ "$mount_status" -ne 0 ]
+      then
+        manager_incomplete=1
+        printf 'mount\t%s\tunavailable\t%s\tmanager-inspect-failed\n' \
+          "$manager_scope" "$container_id"
+      fi
       while IFS= read -r container_file
       do
         case "$container_file" in
@@ -1657,6 +1669,32 @@ RSUDO_APISIX_CONTAINER_FIND
         esac
         printf 'config\t%s\tconfigured-only\t%s:%s\t%s-exec-find\n' \
           "$manager_scope" "$container_id" "$container_file" "$manager_scope"
+        if [ "$mount_status" -eq 0 ]
+        then
+          while IFS='|' read -r mount_source mount_destination
+          do
+            [ -n "$mount_source" ] && [ -n "$mount_destination" ] || continue
+            case "$mount_source:$mount_destination:$container_file" in
+              *[[:space:]\|]*) manager_incomplete=1; continue ;;
+            esac
+            case "$container_file" in
+              "$mount_destination") host_file=$mount_source ;;
+              "$mount_destination"/*) host_file=$mount_source${container_file#"$mount_destination"} ;;
+              /*)
+                if [ "$mount_destination" = / ]
+                then host_file=$mount_source$container_file
+                else continue
+                fi
+              ;;
+              *) continue ;;
+            esac
+            printf 'mount\t%s\tmatched\t%s:%s\tcontainer-bind-source:%s\n' \
+              "$manager_scope" "$container_id" "$container_file" "$host_file"
+            break
+          done <<RSUDO_APISIX_RUNNING_MOUNTS
+$container_mounts
+RSUDO_APISIX_RUNNING_MOUNTS
+        fi
         case "$container_file" in *.yaml|*.json)
           listener_results=$(probe_container_admin_listeners \
             "$manager" "$container_id" "$container_file")

@@ -301,7 +301,11 @@ PUBLIC FUNCTIONS
         runtime identity, loaded source or write readiness.
         An unreadable subtree may be omitted. When Docker or Podman is
         available, discovery lists all containers and probes each running
-        container through a static read-only sh/find program. Stopped
+        container through a static read-only sh/find program. For each
+        discovered running-container config path, manager mount metadata is
+        matched by path prefix and may report the corresponding host-side bind
+        source. This establishes only declared path mapping, not loaded or
+        served configuration. Stopped
         containers are reported from manager image/name evidence or inspected
         config-mount source/destination paths; environment data is never
         inspected. Matching
@@ -310,8 +314,7 @@ PUBLIC FUNCTIONS
         qualified by that ID. Failed manager listings and incomplete probes
         produce uncertainty rows. This is best-effort: a stopped container
         whose image and name do not identify APISIX cannot be classified from
-        its filesystem. Mount sources are not emitted, and service correlation
-        is limited to systemd MainPID/process evidence. JSON output and guaranteed exhaustive
+        its filesystem. Service correlation is limited to systemd MainPID/process evidence. JSON output and guaranteed exhaustive
         detection are NOT implemented. Discovery
         never chooses an instance or modifies the user's environment.
         Local argument count 1, relative root 2; in the remote scan,
