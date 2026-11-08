@@ -2186,6 +2186,191 @@ _rsudo_mod_apisix_snapshot_apply()
 # transport only into a private local staging directory, where the standalone
 # RumiAI json utility selects resource records. No remote m/json installation
 # is required, and no file is modified.
+# Standalone API collection writes use the selected APISIX installation's
+# cjson.safe parser for a full GET/modify/PUT/read-back cycle. The endpoint has
+# no compare-and-swap, so this operation assumes one writer.
+_rsudo_mod_apisix_snapshot_mutate_remote_source()
+{
+  cat <<'RSUDO_APISIX_SNAPSHOT_MUTATE_REMOTE'
+admin_url=$1 header_file=$2 home=$3 operation=$4 resource=$5 resource_id=$6 wait_ms=$7
+case "$admin_url" in http://*|https://*) authority=${admin_url#*://} ;; *) exit 84 ;; esac
+case "$authority" in ''|*/*|*\?*|*\#*|*@*|*[!a-zA-Z0-9:._-]*) exit 84 ;; esac
+case "$header_file:$home" in /*:/*) : ;; *) exit 85 ;; esac
+case "$operation:$resource" in
+ create:routes|create:services|create:upstreams|update:routes|update:services|update:upstreams|delete:routes|delete:services|delete:upstreams) : ;;
+ *) exit 86 ;;
+esac
+case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) [ "$operation" = create ] && [ -z "$resource_id" ] || exit 87 ;; esac
+case "$wait_ms" in ''|*[!0-9]*) exit 88 ;; esac
+case "$wait_ms" in 0|[1-9]*) : ;; *) exit 88 ;; esac
+[ "$wait_ms" -le 60000 ] 2>/dev/null || exit 88
+[ -f "$header_file" ] && [ -r "$header_file" ] && [ ! -L "$header_file" ] || exit 89
+header_mode=$(LC_ALL=C ls -ld "$header_file" 2>/dev/null) || exit 89
+[ "${header_mode%% *}" = -rw------- ] || exit 89
+[ "$(wc -l < "$header_file")" -eq 1 ] 2>/dev/null || exit 90
+IFS= read -r header < "$header_file" || exit 90
+case "$header" in 'X-API-KEY: '?*) : ;; *) exit 90 ;; esac
+expected=$(printf '%s\n' "$header" | wc -c) || exit 90
+actual=$(wc -c < "$header_file") || exit 90
+[ "$expected" -eq "$actual" ] 2>/dev/null || exit 90
+key=${header#X-API-KEY: }
+case "$key" in ''|*[![:graph:]]*) exit 90 ;; esac
+unset header key header_mode
+command -v curl >/dev/null 2>&1 && command -v openssl >/dev/null 2>&1 || exit 91
+if [ -x "$home/deps/bin/luajit" ]; then interpreter=$home/deps/bin/luajit
+elif [ -x /usr/local/openresty/luajit/bin/luajit ]; then interpreter=/usr/local/openresty/luajit/bin/luajit
+elif command -v luajit >/dev/null 2>&1; then interpreter=$(command -v luajit)
+else exit 92
+fi
+LUA_PATH="$home/?.lua;$home/deps/share/lua/5.1/?.lua;$home/deps/share/lua/5.1/?/init.lua;;"
+LUA_CPATH="$home/deps/lib64/lua/5.1/?.so;$home/deps/lib/lua/5.1/?.so;;"
+export LUA_PATH LUA_CPATH
+umask 077
+base=${TMPDIR:-/tmp}; case "$base" in /*) : ;; *) base=/tmp ;; esac
+n=0; dir=
+while [ "$n" -lt 10 ]; do candidate=$base/rsudo-apisix-snapshot-$$-$n; if (umask 077; mkdir "$candidate") 2>/dev/null; then dir=$candidate; break; fi; n=$((n+1)); done
+[ -n "$dir" ] || exit 93
+trap 'rm -f "$dir/body" "$dir/current" "$dir/next" "$dir/expected" "$dir/response" "$dir/readback" "$dir/version"; rmdir "$dir" 2>/dev/null' 0
+trap 'exit 129' 1
+trap 'exit 130' 2
+trap 'exit 131' 3
+trap 'exit 143' 15
+if [ "$operation" = delete ]; then : > "$dir/body" || exit 94; else cat > "$dir/body" || exit 94; [ -s "$dir/body" ] || exit 94; fi
+url=$admin_url/apisix/admin/configs
+status=$(curl -q --silent --show-error --noproxy '*' --proxy '' --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 --header "@$header_file" --header 'Accept: application/json' --output "$dir/current" --write-out '%{http_code}' --url "$url") || exit $?
+[ "$status" = 200 ] || exit 95
+export m_SNAP_CURRENT=$dir/current m_SNAP_BODY=$dir/body m_SNAP_NEXT=$dir/next m_SNAP_EXPECTED=$dir/expected
+export m_SNAP_OP=$operation m_SNAP_RESOURCE=$resource m_SNAP_ID=$resource_id
+"$interpreter" -e '
+local ok,j=pcall(require,"cjson.safe")
+if not ok or type(j.decode_array_with_array_mt)~="function" or type(j.array_mt)~="table" then io.stderr:write("apisix.snapshot-mutate.parser-unavailable\n"); os.exit(1) end
+j.decode_array_with_array_mt(true)
+local function read(p) local f=io.open(p,"rb"); if not f then return nil end; local s=f:read("*a"); f:close(); return s end
+local d,e=j.decode(read(os.getenv("m_SNAP_CURRENT")) or "")
+if type(d)~="table" or getmetatable(d)==j.array_mt or e then io.stderr:write("apisix.snapshot-mutate.snapshot-invalid\n"); os.exit(2) end
+local op=os.getenv("m_SNAP_OP"); local r=os.getenv("m_SNAP_RESOURCE"); local wanted=os.getenv("m_SNAP_ID") or ""; local body
+if op~="delete" then
+ local be; body,be=j.decode(read(os.getenv("m_SNAP_BODY")) or "")
+ if type(body)~="table" or getmetatable(body)==j.array_mt or be then io.stderr:write("apisix.snapshot-mutate.body-invalid\n"); os.exit(3) end
+ if type(body.id)~="string" and type(body.id)~="number" then io.stderr:write("apisix.snapshot-mutate.body-id-required\n"); os.exit(4) end
+ local bid=tostring(body.id); if not bid:match("^[A-Za-z0-9._~%-]+$") or bid=="." or bid==".." then io.stderr:write("apisix.snapshot-mutate.body-id-invalid\n"); os.exit(5) end
+ if op=="create" then wanted=bid elseif bid~=wanted then io.stderr:write("apisix.snapshot-mutate.body-id-mismatch\n"); os.exit(6) end
+end
+local vk=r.."_conf_version"; local v=d[vk]
+if type(v)~="number" or v<0 or v%1~=0 or v>=9007199254740991 then io.stderr:write("apisix.snapshot-mutate.version-invalid\n"); os.exit(7) end
+local items=d[r]; if items==nil and op=="create" then items=setmetatable({},j.array_mt); d[r]=items elseif type(items)~="table" or getmetatable(items)~=j.array_mt then io.stderr:write("apisix.snapshot-mutate.array-invalid\n"); os.exit(8) end
+local idx,count=nil,0
+for i,item in ipairs(items) do
+ if type(item)~="table" or (type(item.id)~="string" and type(item.id)~="number") then io.stderr:write("apisix.snapshot-mutate.record-invalid\n"); os.exit(9) end
+ local id=tostring(item.id); if not id:match("^[A-Za-z0-9._~%-]+$") or id=="." or id==".." then io.stderr:write("apisix.snapshot-mutate.record-id-invalid\n"); os.exit(10) end
+ if id==wanted then idx=i; count=count+1 end
+end
+if count>1 then io.stderr:write("apisix.snapshot-mutate.id-ambiguous\n"); os.exit(11) end
+if op=="create" then if idx then io.stderr:write("apisix.snapshot-mutate.id-exists\n"); os.exit(12) end; body.modifiedIndex=v+1; items[#items+1]=body
+elseif not idx then io.stderr:write("apisix.snapshot-mutate.id-not-found\n"); os.exit(13)
+elseif op=="update" then body.modifiedIndex=v+1; items[idx]=body
+else table.remove(items,idx) end
+d[vk]=v+1
+local out,oe=j.encode(d); local eb=body and j.encode(body) or ""
+if not out or (body and not eb) then io.stderr:write("apisix.snapshot-mutate.encode-failed\n"); os.exit(14) end
+local check,ce=j.decode(out); if type(check)~="table" or getmetatable(check)==j.array_mt or ce or type(check[r])~="table" or getmetatable(check[r])~=j.array_mt then io.stderr:write("apisix.snapshot-mutate.roundtrip-failed\n"); os.exit(15) end
+local function write(p,s) local f=io.open(p,"wb"); if not f then return false end; local ok=f:write(s,"\n"); f:close(); return ok end
+if not write(os.getenv("m_SNAP_NEXT"),out) or (body and not write(os.getenv("m_SNAP_EXPECTED"),eb)) then io.stderr:write("apisix.snapshot-mutate.stage-failed\n"); os.exit(16) end
+print(v+1)
+print(wanted)
+' > "$dir/version" || exit 96
+new_version=$(sed -n '1p' "$dir/version"); [ -n "$new_version" ] || exit 96
+if [ "$operation" = create ]; then
+  resource_id=$(sed -n '2p' "$dir/version")
+  [ -n "$resource_id" ] || exit 96
+  export m_SNAP_ID=$resource_id
+fi
+digest=$(openssl dgst -sha256 "$dir/next" 2>/dev/null | awk '{print $NF}') || exit 101
+case "$digest" in *[!0123456789abcdef]*|'') exit 101 ;; esac
+[ "${#digest}" -eq 64 ] || exit 101
+timeout=$((wait_ms/1000+15))
+status=$(curl -q --silent --show-error --noproxy '*' --proxy '' --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time "$timeout" --header "@$header_file" --header 'Accept: application/json' --header 'Content-Type: application/json' --header "X-Digest: $digest" --data-binary "@$dir/next" --request PUT --output "$dir/response" --write-out '%{http_code}' --url "$url?wait=$wait_ms") || exit $?
+case "$status" in 200|204) : ;; 202) cat "$dir/response"; exit 97 ;; *) exit 98 ;; esac
+status=$(curl -q --silent --show-error --noproxy '*' --proxy '' --proto '=http,https' --max-redirs 0 --connect-timeout 3 --max-time 15 --header "@$header_file" --header 'Accept: application/json' --output "$dir/readback" --write-out '%{http_code}' --url "$url") || exit $?
+[ "$status" = 200 ] || exit 99
+export m_SNAP_READBACK=$dir/readback m_SNAP_NEW_VERSION=$new_version
+"$interpreter" -e '
+local j=require("cjson.safe"); j.decode_array_with_array_mt(true)
+local function read(p) local f=io.open(p,"rb"); if not f then return nil end; local s=f:read("*a"); f:close(); return s end
+local d,e=j.decode(read(os.getenv("m_SNAP_READBACK")) or ""); local expected_src=read(os.getenv("m_SNAP_EXPECTED")); local expected=expected_src and j.decode(expected_src) or nil
+local r=os.getenv("m_SNAP_RESOURCE"); local id=os.getenv("m_SNAP_ID") or ""; local op=os.getenv("m_SNAP_OP")
+if type(d)~="table" or getmetatable(d)==j.array_mt or e or type(d[r])~="table" or getmetatable(d[r])~=j.array_mt then io.stderr:write("apisix.snapshot-mutate.readback-invalid\n"); os.exit(1) end
+local observed_version=d[r.."_conf_version"]; local wanted_version=tonumber(os.getenv("m_SNAP_NEW_VERSION"))
+if type(observed_version)~="number" or not wanted_version or observed_version<wanted_version then io.stderr:write("apisix.snapshot-mutate.readback-version-conflict\n"); os.exit(2) end
+local function equal(a,b)
+ if type(a)~=type(b) then return false end
+ if a==j.null or b==j.null then return a==b end
+ if type(a)~="table" then return a==b end
+ if (getmetatable(a)==j.array_mt)~=(getmetatable(b)==j.array_mt) then return false end
+ for k,v in pairs(a) do if not equal(v,b[k]) then return false end end
+ for k in pairs(b) do if a[k]==nil then return false end end
+ return true
+end
+local n,found=0,nil; for _,item in ipairs(d[r]) do if tostring(item.id)==id then n=n+1; found=item end end
+if op=="delete" then if n~=0 then io.stderr:write("apisix.snapshot-mutate.readback-conflict\n"); os.exit(2) end
+elseif n~=1 or not equal(found,expected) then io.stderr:write("apisix.snapshot-mutate.readback-conflict\n"); os.exit(2)
+else io.write(j.encode(found),"\n") end
+' || exit 100
+RSUDO_APISIX_SNAPSHOT_MUTATE_REMOTE
+}
+
+_rsudo_mod_apisix_snapshot_mutate()
+(
+  operation=$1
+  shift
+  case "$operation:$#" in
+    create:1) resource=$1; resource_id= ;;
+    update:2|delete:2) resource=$1; resource_id=$2 ;;
+    *) log error apisix snapshot-mutate-invalid-arguments operation "$operation" count "$#"; exit 1 ;;
+  esac
+  case "$resource" in routes|services|upstreams) : ;; *) log error apisix snapshot-mutate-unsupported-resource resource "$resource"; exit 2 ;; esac
+  if [ -n "$resource_id" ]; then
+    case "$resource_id" in *[!a-zA-Z0-9._~-]*|.|..) log error apisix snapshot-mutate-invalid-resource-id; exit 3 ;; esac
+  fi
+  context=$(rsudo_mod_apisix_context) || exit "$?"
+  adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
+  [ "$adapter" = snapshot ] || { log error apisix snapshot-mutate-adapter-unsupported adapter "$adapter"; exit 4; }
+  scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
+  [ "$scope" = host ] || { log error apisix snapshot-mutate-scope-unsupported scope "$scope"; exit 5; }
+  home=${RSUDO_APISIX_HOME-}
+  case "$home" in /*) : ;; *) log error apisix snapshot-mutate-home-required; exit 6 ;; esac
+  wait_ms=${RSUDO_APISIX_WAIT_MS-0}
+  case "$wait_ms" in ''|*[!0-9]*) log error apisix snapshot-mutate-invalid-wait; exit 7 ;; esac
+  case "$wait_ms" in 0|[1-9]*) : ;; *) log error apisix snapshot-mutate-invalid-wait; exit 7 ;; esac
+  [ "$wait_ms" -le 60000 ] 2>/dev/null || { log error apisix snapshot-mutate-invalid-wait; exit 7; }
+  if [ "$operation" != delete ]; then
+    command -v json >/dev/null 2>&1 || { log error apisix snapshot-mutate-json-unavailable; exit 8; }
+    umask 077
+    temp_base=${TMPDIR:-/tmp}
+    case "$temp_base" in /*) : ;; *) temp_base=/tmp ;; esac
+    attempt=0; temp_dir=
+    while [ "$attempt" -lt 10 ]; do
+      candidate=$temp_base/rsudo-apisix-snapshot-input-$$-$attempt
+      if (umask 077; mkdir "$candidate") 2>/dev/null; then temp_dir=$candidate; break; fi
+      attempt=$((attempt + 1))
+    done
+    [ -n "$temp_dir" ] || { log error apisix snapshot-mutate-temp-unavailable; exit 9; }
+    document=$temp_dir/resource.json
+    trap 'rm -f "$document"; rmdir "$temp_dir" 2>/dev/null' 0
+    cat > "$document" || { log error apisix snapshot-mutate-input-read-failed; exit 10; }
+    json --check "$document" >/dev/null 2>&1 || { log error apisix snapshot-mutate-invalid-json; exit 11; }
+  fi
+  remote_source=$(_rsudo_mod_apisix_snapshot_mutate_remote_source) || exit 12
+  RSUDO_INTERACTIVE=
+  if [ "$operation" = delete ]; then
+    rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+      "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms"
+  else
+    rsudo sh -c "$remote_source" apisix "${RSUDO_APISIX_ADMIN_URL-}" \
+      "${RSUDO_APISIX_HEADER_FILE-}" "$home" "$operation" "$resource" "$resource_id" "$wait_ms" < "$document"
+  fi
+)
+
 _rsudo_mod_apisix_json_file_read_remote_source()
 {
   cat <<'RSUDO_APISIX_JSON_FILE_READ_REMOTE'
@@ -3021,9 +3206,8 @@ _rsudo_mod_apisix_unimplemented_operation()
   exit 1
 )
 
-# Resource CRUD currently uses only an explicitly selected host REST adapter.
-# JSON file mutations preserve unrelated parsed data and share the atomic
-# publisher; YAML file mutations remain unsupported pending round-trip safety.
+# Resource CRUD routes only to explicit REST, API snapshot and JSON-file
+# adapters. YAML file mutations remain unsupported pending round-trip safety.
 _rsudo_mod_apisix_mutate_router()
 (
   operation=$1
@@ -3036,6 +3220,7 @@ _rsudo_mod_apisix_mutate_router()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   case "$adapter" in
     rest) _rsudo_mod_apisix_rest_mutate "$operation" "$@" ;;
+    snapshot) _rsudo_mod_apisix_snapshot_mutate "$operation" "$@" ;;
     file-json) _rsudo_mod_apisix_json_file_mutate "$operation" "$@" ;;
     *) log error apisix mutate-adapter-not-implemented adapter "$adapter"; exit 3 ;;
   esac

@@ -5,10 +5,10 @@ DESCRIPTION
     This module retains compatibility forwarding for old operation-specific
     function names. The generic list/get entrypoints route internally to the
     explicit traditional REST, standalone API snapshot, standalone JSON-file
-    or standalone YAML-file adapter. REST create/update/delete mutations are
-    host-scoped; standalone-file-json supports these mutations for routes,
-    services and upstreams. Other unsupported backends fail without legacy
-    fallback.
+    or standalone YAML-file adapter. REST and standalone API snapshot
+    create/update/delete mutations are host-scoped; standalone-file-json also
+    supports these mutations for routes, services and upstreams. YAML resource
+    mutations and other unsupported backends fail without legacy fallback.
     apply publishes a complete JSON/YAML document to an explicitly selected
     standalone file target, or a complete JSON snapshot to an explicitly selected
     standalone API endpoint. Generic request is implemented only for the
@@ -157,9 +157,32 @@ PUBLIC FUNCTIONS
         numeric values round-trip through APISIX cjson's Lua number model, so
         original number lexemes are not byte-preserved. It does not validate
         APISIX resource schema or prove reload; APISIX may reject the new file
-        while retaining its previous configuration. YAML-file and snapshot
-        resource-level mutations remain unsupported and never
-        fall back to legacy.
+        while retaining its previous configuration. YAML-file resource-level
+        mutations remain unsupported and never fall back to legacy.
+        For standalone API snapshots, the same CRUD verbs are host-only and
+        require absolute RSUDO_APISIX_HOME in addition to the Admin URL and
+        protected header file. The selected installation must provide LuaJIT,
+        cjson.safe with array metatables, curl and OpenSSL. The adapter GETs
+        the complete `/apisix/admin/configs` snapshot, edits only the selected
+        routes/services/upstreams array, increments that collection's
+        `*_conf_version`, sets the changed record's `modifiedIndex`, computes
+        a SHA-256 X-Digest and PUTs the full document. It then GETs the snapshot
+        again and verifies the new version and resource state. Set
+        RSUDO_APISIX_WAIT_MS from 0 through 60000 (default 0); HTTP 202 returns
+        status 97 to mean accepted but not confirmed. This API has no
+        compare-and-swap against the prior digest: use one writer for the
+        endpoint. A detected read-back mismatch fails without retry; a
+        concurrent writer can still race between GET and PUT. cjson may
+        normalize JSON number lexemes and object ordering in the snapshot.
+        APISIX remains responsible for schema validation. Create/update need
+        one complete JSON object with a string or numeric id; update requires
+        that id to match the selected operand. Snapshot local statuses 1-12
+        cover arguments, resource, ID, context, adapter, scope, home, wait,
+        json, temporary storage, input and JSON validation. Remote statuses
+        84-101 distinguish URL/path/operation/ID/wait/credential/runtime and
+        staging failures, non-success GET/PUT, accepted HTTP 202 (97), and
+        digest staging and read-back verification failures; curl transport
+        statuses are preserved.
         Router status 2 wraps invalid context and status 3 reports an adapter
         without CRUD support; adapter-specific functions then return their
         documented local statuses. File-JSON local statuses 1-13 identify
