@@ -2156,7 +2156,7 @@ _rsudo_mod_apisix_snapshot_apply()
   adapter=$(printf '%s\n' "$context" | sed -n 's/^adapter=//p')
   [ "$adapter" = snapshot ] || { log error apisix snapshot-apply-adapter-unsupported adapter "$adapter"; exit 5; }
   scope=$(printf '%s\n' "$context" | sed -n 's/^scope=//p')
-  [ "$scope" = host ] || { log error apisix snapshot-apply-scope-unsupported scope "$scope"; exit 6; }
+  container=${RSUDO_APISIX_CONTAINER_ID-}
   command -v json >/dev/null 2>&1 || { log error apisix snapshot-apply-json-unavailable; exit 7; }
   umask 077
   temp_base=${TMPDIR:-/tmp}
@@ -2193,8 +2193,13 @@ _rsudo_mod_apisix_snapshot_apply()
     exit 12
   }
   RSUDO_INTERACTIVE=
-  rsudo sh -c "$remote_source" apisix \
-    "$admin_url" "$header_file" configs '' PUT "$digest" "$wait_ms" < "$document"
+  if [ "$scope" = host ]; then
+    rsudo sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" configs '' PUT "$digest" "$wait_ms" < "$document"
+  else
+    rsudo "$scope" exec -i "$container" sh -c "$remote_source" apisix \
+      "$admin_url" "$header_file" configs '' PUT "$digest" "$wait_ms" < "$document"
+  fi
 )
 
 # The operator selects a JSON data file explicitly. Its bytes cross the remote

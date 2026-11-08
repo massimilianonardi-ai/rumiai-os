@@ -57,8 +57,9 @@ PUBLIC FUNCTIONS
         resolved inside the selected full-ID container. For standalone-api,
         select
         RSUDO_APISIX_DEPLOYMENT=standalone-api and the same Admin URL/header
-        variables; snapshot list/get/apply currently require host scope. The
-        adapter performs the protected GET on
+        variables; snapshot list/get currently require host scope. Snapshot
+        apply accepts host or an explicit Docker/Podman full-ID target, with
+        the URL and header path resolved inside that target. The adapter performs the protected GET on
         `/apisix/admin/configs`, stages the full response under a private
         local temporary directory (umask 077), validates it with RumiAI json
         and returns only the requested top-level resource array. `get` returns
@@ -243,7 +244,9 @@ PUBLIC FUNCTIONS
         an uncatchable interruption is not removed automatically; inspect it
         and confirm no writer is active before removing it.
         For standalone API mode, select RSUDO_APISIX_DEPLOYMENT=standalone-api,
-        host scope, Admin URL and protected header file. Supply a digest token
+        host scope or an explicit Docker/Podman scope with full container ID,
+        Admin URL and protected header file. In container scope the Admin URL
+        and header path resolve inside the selected container. Supply a digest token
         operand and the complete JSON snapshot on stdin. The caller controls
         all *_conf_version fields; no automatic version calculation occurs.
         RSUDO_APISIX_WAIT_MS defaults to 0 and is limited to 60000. HTTP 202
@@ -252,9 +255,10 @@ PUBLIC FUNCTIONS
         response body and returns distinct status 97 (accepted, not confirmed);
         HTTP 200/204 return zero. Remote status 96 means the private response
         staging file could not be created; 98 reports response-file or
-        unexpected HTTP status failure. Snapshot statuses
-        1-12 cover arguments, digest, wait, context, adapter, scope, json,
-        temp storage, input, JSON validity, Admin URL and static-source setup;
+        unexpected HTTP status failure. Snapshot statuses 1-5 cover
+        arguments, digest, wait, context and adapter; 7-12 cover json,
+        temporary storage, input, JSON validity, Admin URL and static-source
+        setup. The common context validates scope and container ID;
         remote transport/precondition statuses are 84-95; 96 is private
         response staging failure, 97 is accepted but not confirmed, and 98 is
         response-file or unexpected HTTP status failure.
